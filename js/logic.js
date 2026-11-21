@@ -233,9 +233,24 @@ const b64u = {
     return Uint8Array.from(s, c => c.charCodeAt(0));
   },
 };
-async function pipe(bytes, stream) {
-  const res = new Response(new Blob([bytes]).stream().pipeThrough(stream));
-  return new Uint8Array(await res.arrayBuffer());
+// Посилання приходить від будь-кого, тож розпаковуємо з межею: кілька
+// кілобайтів «бомби» не мають роздутися в гігабайти пам'яті.
+const MAX_LINK = 200_000, MAX_RAW = 512_000;
+async function pipe(bytes, stream, limit = MAX_RAW) {
+  const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > limit) { await reader.cancel(); throw new Error('список завеликий'); }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
 }
 
 // Список-знімок, зашитий просто в посилання: сервер для цього не потрібен.
@@ -245,6 +260,7 @@ export async function encodeRecs(name, items) {
   return b64u.enc(await pipe(raw, new CompressionStream('deflate-raw')));
 }
 export async function decodeRecs(text) {
+  if (typeof text !== 'string' || text.length > MAX_LINK) throw new Error('посилання завелике');
   const raw = await pipe(b64u.dec(text), new DecompressionStream('deflate-raw'));
   const c = JSON.parse(new TextDecoder().decode(raw));
   return cleanRecs({

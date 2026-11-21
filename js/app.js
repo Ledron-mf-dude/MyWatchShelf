@@ -183,7 +183,7 @@ function toggleMenu(force) {
     const themeLabel = { auto: 'як у системі', light: 'світла', dark: 'темна' }[S.theme];
     menu.innerHTML = `
       <button data-act="share">Поділитись рекомендаціями <small>${nRec}</small></button>
-      <button data-act="name">Ім’я в рекомендаціях… <small>${esc(S.name || cloud.user?.name || 'не вказано')}</small></button>
+      <button data-act="name">Ім’я в рекомендаціях… <small>${esc(S.name || 'не вказано')}</small></button>
       <hr>
       ${cloud.available ? (cloud.user
         ? `<button data-act="signout">Вийти <small>${esc(cloud.user.email)}</small></button>`

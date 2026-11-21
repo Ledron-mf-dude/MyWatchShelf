@@ -9,7 +9,7 @@ import { store } from './store.js';
 import { recItem, cleanRecs } from './logic.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
-const FLAG = 'mws.signedIn';
+const FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published';
 
 let sdkPromise = null, unsub = null, pubTimer = null, lastPub = '';
 const subs = new Set();
@@ -78,7 +78,14 @@ function onUser(c, u) {
     return set('off');
   }
   cloud.user = { uid: u.uid, name: u.displayName || '', email: u.email || '' };
-  try { localStorage.setItem(FLAG, '1'); } catch { /* нічого */ }
+  // Чий список лежить на пристрої. Накопичене без входу віддаємо першому,
+  // хто ввійде; а от список іншого акаунта чужому не дістається — його
+  // прибираємо (він і так цілий у хмарі власника).
+  let owner = '';
+  try { owner = localStorage.getItem(OWNER) || ''; } catch { /* нічого */ }
+  if (owner && owner !== u.uid) store.clear();
+  lastPub = '';
+  try { localStorage.setItem(OWNER, u.uid); localStorage.setItem(FLAG, '1'); } catch { /* нічого */ }
   set('connecting');
   let first = true;
   unsub = c.fs.onSnapshot(c.fs.collection(c.db, 'users', u.uid, 'entries'), snap => {
@@ -114,8 +121,11 @@ function recsPayload() {
   const items = store.list().filter(e => e.rec)
     .sort((a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, 'uk'))
     .map(recItem);
-  return { name: store.settings.name || cloud.user?.name || '', items };
+  // Підпис — лише той, що людина вписала сама; ім'я з Google-акаунта
+  // без її волі в публічний документ не потрапляє.
+  return { name: store.settings.name || '', items };
 }
+const wasPublished = () => { try { return localStorage.getItem(PUBLISHED) === cloud.user?.uid; } catch { return false; } };
 function schedulePublish() {
   clearTimeout(pubTimer);
   pubTimer = setTimeout(() => publishNow().catch(() => {}), 1500);
@@ -127,9 +137,13 @@ async function publishNow() {
   clearTimeout(pubTimer);
   const payload = recsPayload(), sig = JSON.stringify(payload);
   if (sig === lastPub) return true;
+  // Публічний документ з'являється лише тоді, коли людина сама щось
+  // порадила; далі оновлюємо його, щоб прибране зникало й у гостей.
+  if (!payload.items.length && !wasPublished()) return false;
   const c = await sdk();
   await c.fs.setDoc(c.fs.doc(c.db, 'public', cloud.user.uid), { ...payload, updated: Date.now() });
   lastPub = sig;
+  try { localStorage.setItem(PUBLISHED, cloud.user.uid); } catch { /* нічого */ }
   return true;
 }
 async function loadPublic(uid) {

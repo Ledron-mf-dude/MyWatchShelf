@@ -34,6 +34,29 @@ export function safeUrl(u) {
 
 export const poster = (id, size = 'small') =>
   isId(id) ? `https://images.metahub.space/poster/${size}/${id}/img` : '';
+export const backdrop = (id, size = 'medium') =>
+  isId(id) ? `https://images.metahub.space/background/${size}/${id}/img` : '';
+
+// Каталог віддає жанри англійською; показуємо своїми словами.
+const GENRES_UK = {
+  'Action': 'бойовик', 'Adventure': 'пригоди', 'Animation': 'анімація', 'Biography': 'біографія',
+  'Comedy': 'комедія', 'Crime': 'кримінал', 'Documentary': 'документальний', 'Drama': 'драма',
+  'Family': 'сімейний', 'Fantasy': 'фентезі', 'History': 'історичний', 'Horror': 'жахи',
+  'Mystery': 'детектив', 'Romance': 'романтика', 'Sci-Fi': 'фантастика', 'Sport': 'спорт',
+  'Thriller': 'трилер', 'War': 'воєнний', 'Western': 'вестерн', 'Music': 'музика', 'Musical': 'мюзикл',
+  'Sci-Fi & Fantasy': 'фантастика', 'Action & Adventure': 'бойовик', 'Reality-TV': 'реаліті',
+  'Talk-Show': 'ток-шоу', 'Game-Show': 'ігрове шоу', 'Short': 'короткий метр', 'News': 'новини',
+  'Kids': 'дитячий', 'Film-Noir': 'нуар',
+};
+export const CATALOG_GENRES = ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama',
+  'Family', 'Fantasy', 'History', 'Horror', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western'];
+export const genreUk = g => GENRES_UK[g] || String(g || '').toLowerCase();
+export function fmtRuntime(r) {
+  const n = parseInt(r, 10);
+  if (!n) return '';
+  if (n < 60) return `${n} хв`;
+  return `${Math.floor(n / 60)} год${n % 60 ? ' ' + (n % 60) + ' хв' : ''}`;
+}
 
 export function plural(n, one, few, many) {
   const a = Math.abs(n) % 100, b = a % 10;
@@ -112,6 +135,7 @@ export function sanitize(e) {
       runtime: str(m.runtime, 40),
       state: str(m.state, 40),
       cast: (Array.isArray(m.cast) ? m.cast : []).slice(0, 5).map(g => str(g, 80)).filter(Boolean),
+      trailer: /^[\w-]{6,20}$/.test(m.trailer || '') ? m.trailer : '',
       seasons,
     };
     out.metaAt = Number(e.metaAt) || 0;
@@ -169,10 +193,11 @@ export function filterSort(list, f, sort, dir) {
   const q = (f.q || '').trim().toLowerCase();
   const out = list.filter(e => {
     if (f.kind && f.kind !== 'all' && e.kind !== f.kind) return false;
+    if (f.genres?.length && !f.genres.some(g => (e.meta?.genres || []).includes(g))) return false;
     if (f.status === 'rec') { if (!e.rec) return false; }
     else if (f.status && f.status !== 'all' && e.status !== f.status) return false;
     if (q) {
-      const hay = [e.title, e.year, e.note, KIND_LABEL[e.kind], ...(e.meta?.genres || [])]
+      const hay = [e.title, e.year, e.note, KIND_LABEL[e.kind], ...(e.meta?.genres || []), ...(e.meta?.genres || []).map(genreUk)]
         .join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
@@ -183,6 +208,8 @@ export function filterSort(list, f, sort, dir) {
     score: e => e.score || 0,
     imdb: e => e.meta?.imdb || 0,
     year: e => parseInt(e.year, 10) || 0,
+    added: e => e.added || 0,
+    progress: e => progressPct(e),
   }[sort];
   if (sort === 'title') out.sort((a, b) => a.title.localeCompare(b.title, 'uk') * dir);
   else if (key) out.sort((a, b) => (key(a) - key(b)) * dir || a.title.localeCompare(b.title, 'uk'));
@@ -200,6 +227,47 @@ export function stats(list) {
     rated: rated.length,
     avg: rated.length ? rated.reduce((s, e) => s + e.score, 0) / rated.length : 0,
     rec: list.filter(e => e.rec).length,
+  };
+}
+
+// ── прогрес і статистика ──────────────────────────────────────────
+export const runtimeMin = e => parseInt(e.meta?.runtime, 10) || 0;
+export function episodesWatched(e) {
+  if (e.type !== 'series') return 0;
+  let n = 0;
+  for (const [k, v] of Object.entries(e.meta?.seasons || {})) if (+k < (e.season || 1)) n += v;
+  return n + (e.episode || 0);
+}
+export const episodesTotal = e => Object.values(e.meta?.seasons || {}).reduce((a, b) => a + b, 0);
+export function progressPct(e) {
+  if (e.status === 'done') return 100;
+  if (e.type !== 'series') return 0;
+  const t = episodesTotal(e);
+  return t ? Math.min(100, Math.round(episodesWatched(e) / t * 100)) : 0;
+}
+// Скільки хвилин уже переглянуто. Коли тривалість невідома, беремо типові
+// 24 хв для аніме, 45 хв для серіалу, 100 хв для фільму: це оцінка, не облік.
+export function minutesWatched(e) {
+  const r = runtimeMin(e);
+  if (e.type === 'series') return episodesWatched(e) * (r || (e.kind === 'anime' ? 24 : 45));
+  return e.status === 'done' ? (r || 100) : 0;
+}
+export function insights(list) {
+  const rated = list.filter(e => e.score > 0);
+  const count = fn => { const m = {}; for (const e of list) for (const k of [].concat(fn(e))) m[k] = (m[k] || 0) + 1; return m; };
+  const genres = Object.entries(count(e => e.meta?.genres || [])).sort((a, b) => b[1] - a[1]);
+  const scores = Array.from({ length: 10 }, (_, i) => rated.filter(e => e.score === i + 1).length);
+  const gaps = rated.filter(e => e.meta?.imdb).map(e => ({ e, d: e.score - e.meta.imdb }))
+    .sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 5);
+  return {
+    total: list.length,
+    minutes: list.reduce((s, e) => s + minutesWatched(e), 0),
+    episodes: list.reduce((s, e) => s + episodesWatched(e), 0),
+    rated: rated.length,
+    avg: rated.length ? rated.reduce((s, e) => s + e.score, 0) / rated.length : 0,
+    rec: list.filter(e => e.rec).length,
+    byStatus: count(e => e.status), byKind: count(e => e.kind),
+    genres, scores, gaps,
   };
 }
 

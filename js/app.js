@@ -1,491 +1,106 @@
-import {
-  STATUSES, KINDS, STATUS_LABEL, KIND_LABEL, esc, safeUrl, poster, plural, fmtRating,
-  parseInput, nextEpisode, progressText, seasonTotal, filterSort, stats,
-  recItem, encodeRecs, decodeRecs,
-} from './logic.js';
-import * as catalog from './meta.js';
+// Каркас застосунку: шапка, навігація, маршрути, глобальні події.
+import { esc, plural, decodeRecs } from './logic.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
+import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox } from './ui.js';
+import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
+import {
+  openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl,
+  cardActions, loadDemo,
+} from './panel.js';
 
-const $ = (s, r = document) => r.querySelector(s);
-const app = $('#app'), layer = $('#layer');
 const S = store.settings;
+const NAV = [['home', 'Головна', 'home'], ['library', 'Бібліотека', 'library'], ['discover', 'Каталог', 'compass'], ['stats', 'Статистика', 'chart']];
+const top = $('#top'), tabs = $('#tabs');
 
-const f = { q: '', kind: 'all', status: 'all' };
-let mode = 'shelf';      // shelf | recs
-let recs = null;         // чужі рекомендації, коли відкрито посилання
-let overlay = null;      // { type: 'card'|'add'|'share'|'info', ... }
-
-const SORTS = [['updated', 'за оновленням'], ['score', 'за моєю оцінкою'], ['imdb', 'за IMDb'], ['title', 'за назвою'], ['year', 'за роком']];
-const META_TTL = 14 * 24 * 3600 * 1000;
-
-// ── дрібниці ──────────────────────────────────────────────────────
-function toast(text, ms = 2600) {
-  const t = $('#toast');
-  t.textContent = text; t.classList.add('on');
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.remove('on'), ms);
-}
 function applyTheme() {
   if (S.theme === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = S.theme;
 }
-const initials = t => esc(String(t || '?').trim().slice(0, 2).toUpperCase());
-const ph = (id, title, size = 'small', cls = '') =>
-  `<span class="ph ${cls}"><em>${initials(title)}</em><img loading="lazy" alt="" src="${poster(id, size)}"></span>`;
-document.addEventListener('error', e => {
-  if (e.target.tagName === 'IMG') e.target.closest('.ph')?.classList.add('noimg');
-}, true);
-const chip = (act, v, label, on, cls = '') =>
-  `<button class="chip ${cls} ${on ? 'on' : ''}" data-act="${act}" data-v="${v}" aria-pressed="${on}">${esc(label)}</button>`;
 
-// ── полиця ────────────────────────────────────────────────────────
-function shell() {
-  app.innerHTML = `
-  <header class="top">
-    <div class="brand-row">
-      <div class="brand"><b>Полиця</b><span>переглядів</span></div>
-      <button class="pill" id="pill" data-act="pill"></button>
-    </div>
-    <dl class="stats" id="stats"></dl>
-  </header>
-  <div class="tools">
-    <label class="fld search"><input id="q" type="search" placeholder="Пошук у списку" autocomplete="off" aria-label="Пошук у списку"></label>
-    <div class="fld sort"><span class="cap">сортувати</span>
-      <select id="sort" aria-label="Сортування">${SORTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
-      <button class="mini" data-act="dir" id="dir" title="Напрям сортування"></button>
-    </div>
-    <span class="grow"></span>
-    <button class="btn primary" data-act="add">Додати</button>
-    <div class="menu-wrap">
-      <button class="btn" data-act="menu" aria-label="Меню" aria-haspopup="true">···</button>
-      <div class="menu" id="menu" hidden></div>
-    </div>
-  </div>
-  <div class="chips" id="kinds"></div>
-  <div class="chips" id="statuses"></div>
-  <div id="hint"></div>
-  <div class="count-row"><span class="cap" id="count"></span><span class="grow"></span>
-    <button class="sq" data-act="view" id="view" title="Список або плитка"></button></div>
-  <ul id="list"></ul>`;
-  $('#q').value = f.q;
-  $('#sort').value = S.sort;
-  $('#q').addEventListener('input', e => { f.q = e.target.value; renderList(); });
-  $('#sort').addEventListener('change', e => { store.setSetting('sort', e.target.value); renderList(); });
+// ── шапка й нижня навігація ───────────────────────────────────────
+function drawChrome() {
+  const recs = view.route === 'recs';
+  const here = r => (view.route === r ? 'on' : '');
+  const u = cloud.user;
+  const stateText = !cloud.available ? 'лише цей пристрій'
+    : { off: '', connecting: 'з’єднання…', synced: 'синхронізовано', offline: 'офлайн', error: 'помилка синхронізації' }[cloud.state];
+  top.innerHTML = `
+    <a class="logo" href="#/" aria-label="Полиця — на головну"><span class="mark"><i></i><i></i><i></i></span><b>Полиця</b></a>
+    ${recs ? '<span class="grow"></span>' : `<nav class="nav" aria-label="Розділи">${NAV.map(([r, l]) => `<a class="${here(r)}" href="#/${r === 'home' ? '' : r}">${l}</a>`).join('')}</nav>
+    <button class="searchbtn" data-act="add" aria-label="Пошук і додавання">${icon('search')}<span>Пошук і додавання</span><kbd>/</kbd></button>`}
+    ${recs ? `<a class="btn" href="./">${icon('library')}Моя полиця</a>` : `
+    <button class="btn primary addbtn" data-act="add">${icon('plus')}<span>Додати</span></button>
+    <div class="dd">
+      <button class="acct st-${cloud.available ? cloud.state : 'local'}" data-act="menu" aria-haspopup="true" aria-label="Акаунт і меню" title="${esc(stateText)}">
+        ${u ? `<span class="avatar">${esc((u.name || u.email || '?').trim()[0].toUpperCase())}</span>` : icon('user')}<i class="state"></i></button>
+      <div class="pop menu" id="menu" hidden></div>
+    </div>`}`;
+  tabs.hidden = recs;
+  tabs.innerHTML = recs ? '' : NAV.slice(0, 2).map(tab).join('')
+    + `<button class="tab add" data-act="add" aria-label="Додати">${icon('plus')}</button>` + NAV.slice(2).map(tab).join('');
+  function tab([r, l, ic]) { return `<a class="tab ${here(r)}" href="#/${r === 'home' ? '' : r}">${icon(ic)}<span>${l}</span></a>`; }
 }
 
-function renderPill() {
-  const el = $('#pill');
-  if (!el) return;
-  const text = !cloud.available ? 'лише цей пристрій'
-    : { off: 'увійти', connecting: 'з’єднання…', synced: 'синхронізовано', offline: 'офлайн', error: 'помилка синхронізації' }[cloud.state];
-  el.className = 'pill st-' + (cloud.available ? cloud.state : 'local');
-  el.innerHTML = `<i></i>${esc(text)}`;
-  el.title = cloud.user ? cloud.user.email : '';
-}
-
-function renderStats() {
-  const s = stats(store.list());
-  const parts = [s.anime && `${s.anime} аніме`, s.series && `${s.series} ${plural(s.series, 'серіал', 'серіали', 'серіалів')}`,
-    s.movie && `${s.movie} ${plural(s.movie, 'фільм', 'фільми', 'фільмів')}`].filter(Boolean).join(' · ');
-  $('#stats').innerHTML = `
-    <div><dt>На полиці</dt><dd>${s.total} <small>${esc(parts)}</small></dd></div>
-    <div><dt>Дивлюсь зараз</dt><dd>${s.watching}</dd></div>
-    <div><dt>Переглянуто</dt><dd>${s.done}</dd></div>
-    <div><dt>Оцінено</dt><dd>${s.rated} <small>${s.rated ? 'середня ' + fmtRating(s.avg) : ''}</small></dd></div>`;
-}
-
-function renderChips() {
-  const list = store.list();
-  const n = fn => list.filter(fn).length;
-  $('#kinds').innerHTML = `<span class="cap">тип</span>` +
-    chip('kind', 'all', 'усі', f.kind === 'all') +
-    KINDS.map(([v]) => chip('kind', v, { anime: 'аніме', series: 'серіали', movie: 'фільми' }[v], f.kind === v)).join('');
-  $('#statuses').innerHTML = `<span class="cap">статус</span>` +
-    chip('status', 'all', 'усі', f.status === 'all') +
-    STATUSES.map(([v, l]) => chip('status', v, l, f.status === v)).join('') +
-    chip('status', 'rec', `★ раджу${n(e => e.rec) ? ' ' + n(e => e.rec) : ''}`, f.status === 'rec');
-}
-
-function renderHint() {
-  const el = $('#hint');
-  if (!el) return;
-  const show = cloud.available && !cloud.user && cloud.state === 'off' && S.hint && store.list().length > 0;
-  el.innerHTML = show ? `
-    <div class="hint"><div><span class="cap">лише цей пристрій</span>
-      <p>Список зберігається в цьому браузері. Увійди через Google — і він сам з’явиться на телефоні та інших пристроях.</p></div>
-      <div class="hint-act"><button class="btn primary" data-act="signin">Увійти</button>
-      <button class="btn" data-act="hide-hint">Не зараз</button></div></div>` : '';
-}
-
-function rowHtml(e) {
-  const m = e.meta || {}, url = safeUrl(e.url);
-  const line = [STATUS_LABEL[e.status], progressText(e), ...(m.genres || []).slice(0, 3).map(g => g.toLowerCase()), m.runtime]
-    .filter(Boolean).join(' · ');
-  return `<li class="row" data-id="${e.id}" data-act="open" tabindex="0">
-    ${ph(e.id, e.title)}
-    <div class="row-main">
-      <div class="row-title"><i class="dot st-${e.status}"></i><b>${esc(e.title)}</b>${e.rec ? '<span class="tag">★ раджу</span>' : ''}</div>
-      <div class="row-sub">${esc([KIND_LABEL[e.kind], e.year].filter(Boolean).join(' · '))}</div>
-      <div class="row-meta">${esc(line)}</div>
-    </div>
-    <div class="row-act">
-      ${url ? `<a class="sq" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Дивитись" aria-label="Дивитись">▶</a>` : ''}
-      ${e.type === 'series' && e.status !== 'done' && e.status !== 'dropped' ? `<button class="sq" data-act="plus" title="Наступна серія">+1</button>` : ''}
-    </div>
-    <div class="score ${e.score ? '' : 'none'}"><b>${e.score || '—'}</b><i style="--w:${(e.score || 0) * 10}%"></i>
-      <small>IMDb ${fmtRating(m.imdb) || '—'}</small></div>
-  </li>`;
-}
-function tileHtml(e) {
-  const m = e.meta || {};
-  return `<li class="tile" data-id="${e.id}" data-act="open" tabindex="0">
-    <div class="tile-img">${ph(e.id, e.title, 'medium', 'fill')}
-      ${e.score ? `<span class="badge">${e.score}</span>` : ''}
-      ${m.imdb ? `<span class="badge imdb">IMDb ${fmtRating(m.imdb)}</span>` : ''}</div>
-    <div class="tile-cap"><div class="row-title"><i class="dot st-${e.status}"></i><b>${esc(e.title)}</b></div>
-      <div class="row-meta">${esc(progressText(e) || STATUS_LABEL[e.status])}</div></div>
-  </li>`;
-}
-
-function renderList() {
-  const all = store.list();
-  const list = filterSort(all, f, S.sort, S.dir);
-  const ul = $('#list');
-  $('#dir').textContent = S.dir < 0 ? '↓' : '↑';
-  $('#view').textContent = S.view === 'grid' ? '☰' : '▦';
-  $('#count').textContent = `${list.length} ${plural(list.length, 'запис', 'записи', 'записів')}` +
-    (list.length !== all.length ? ` з ${all.length}` : '');
-  ul.className = S.view === 'grid' ? 'grid' : 'list';
-  if (!all.length) {
-    ul.innerHTML = `<li class="empty"><b>Полиця поки порожня</b>
-      <p>Додай перше аніме, фільм чи серіал — за назвою, посиланням IMDb або посиланням сайту, де дивишся.</p>
-      <button class="btn primary" data-act="add">Додати перший запис</button></li>`;
-  } else if (!list.length) {
-    ul.innerHTML = `<li class="empty"><b>Нічого не знайшлось</b><p>Спробуй інший фільтр або пошук.</p></li>`;
-  } else {
-    ul.innerHTML = list.map(S.view === 'grid' ? tileHtml : rowHtml).join('');
-  }
-}
-
-function renderShelf() {
-  if (mode !== 'shelf') return;
-  renderPill(); renderStats(); renderChips(); renderHint(); renderList();
-}
-
-// ── меню ──────────────────────────────────────────────────────────
 function toggleMenu(force) {
   const menu = $('#menu');
   if (!menu) return;
   const open = force ?? menu.hidden;
   if (open) {
-    const nRec = store.list().filter(e => e.rec).length;
-    const themeLabel = { auto: 'як у системі', light: 'світла', dark: 'темна' }[S.theme];
+    const u = cloud.user, nRec = store.list().filter(e => e.rec).length;
+    const state = { off: 'не ввійшов', connecting: 'з’єднання…', synced: 'синхронізовано', offline: 'офлайн — зміни збережено тут', error: 'помилка синхронізації' }[cloud.state];
     menu.innerHTML = `
-      <button data-act="share">Поділитись рекомендаціями <small>${nRec}</small></button>
-      <button data-act="name">Ім’я в рекомендаціях… <small>${esc(S.name || 'не вказано')}</small></button>
+      ${cloud.available ? (u
+        ? `<div class="who"><span class="avatar lg">${esc((u.name || u.email || '?').trim()[0].toUpperCase())}</span><div><b>${esc(u.name || 'Акаунт Google')}</b><small>${esc(u.email)}</small><em class="st-${cloud.state}"><i class="state"></i>${state}</em></div></div>`
+        : `<div class="who signin"><p>Увійди, щоб полиця синхронізувалась між телефоном і компʼютером.</p><button class="btn primary" data-act="signin">${icon('user')}Увійти через Google</button></div>`)
+        : '<div class="who"><p>Список зберігається в цьому браузері.</p></div>'}
       <hr>
-      ${cloud.available ? (cloud.user
-        ? `<button data-act="signout">Вийти <small>${esc(cloud.user.email)}</small></button>`
-        : `<button data-act="signin">Увійти через Google <small>синхронізація</small></button>`) : ''}
-      <button data-act="theme">Тема <small>${themeLabel}</small></button>
+      <button data-act="share">${icon('share')}Поділитись рекомендаціями<small>${nRec}</small></button>
+      <button data-act="name">${icon('user')}Підпис у рекомендаціях<small>${esc(S.name || 'не вказано')}</small></button>
       <hr>
-      <button data-act="export">Зберегти копію у файл</button>
-      <button data-act="import">Завантажити з файла…</button>`;
+      <button data-act="theme">${icon('sun')}Тема<small>${{ auto: 'як у системі', light: 'світла', dark: 'темна' }[S.theme]}</small></button>
+      <button data-act="demo">${icon('sparkle')}Показати на прикладі</button>
+      <button data-act="export">${icon('download')}Зберегти копію у файл</button>
+      <button data-act="import">${icon('upload')}Завантажити з файла…</button>
+      ${u ? `<hr><button data-act="signout">${icon('logout')}Вийти</button>` : ''}`;
   }
   menu.hidden = !open;
 }
 
-// ── шар поверх: картка, додавання, поширення ──────────────────────
-function closeOverlay() {
-  flushCard();
-  overlay?.abort?.abort();
-  overlay = null;
-  layer.innerHTML = '';
-  document.documentElement.classList.remove('locked');
-}
-function showOverlay(o, html) {
-  overlay?.abort?.abort();
-  overlay = o;
-  layer.innerHTML = `<div class="scrim" data-act="close"></div>${html}`;
-  document.documentElement.classList.add('locked');
-}
-
-// картка власного запису
-let pending = {}, pendingTimer = null;
-function flushCard() {
-  clearTimeout(pendingTimer);
-  if (overlay?.type === 'card' && Object.keys(pending).length) {
-    const p = pending; pending = {};
-    store.save(overlay.id, p);
-  }
-  pending = {};
-}
-
-function cardHtml(e) {
-  const m = e.meta || {}, total = seasonTotal(e), url = safeUrl(e.url);
-  const maxSeason = Math.max(0, ...Object.keys(m.seasons || {}).map(Number));
-  return `
-  <header class="card-head">
-    ${ph(e.id, e.title, 'medium', 'lg')}
-    <div class="card-ttl">
-      <h2>${esc(e.title)}</h2>
-      <p class="sub">${esc([KIND_LABEL[e.kind], e.year, m.runtime].filter(Boolean).join(' · '))}</p>
-      <p class="sub"><a class="imdb" href="https://www.imdb.com/title/${e.id}/" target="_blank" rel="noopener noreferrer">IMDb <b>${fmtRating(m.imdb) || '—'}</b> ↗</a></p>
-      ${m.genres?.length ? `<p class="genres">${m.genres.map(g => `<span>${esc(g)}</span>`).join('')}</p>` : ''}
-    </div>
-    <button class="sq" data-act="close" aria-label="Закрити">✕</button>
-  </header>
-  <div class="card-body">
-    ${m.plot ? `<p class="plot">${esc(m.plot)}</p>` : (e.metaAt ? '' : '<p class="plot faint">Тягну опис і оцінку…</p>')}
-    <section><h3>Статус</h3><div class="chipset">${STATUSES.map(([v, l]) => chip('set-status', v, l, e.status === v, 'st-' + v)).join('')}</div></section>
-    ${e.type === 'series' ? `<section><h3>Де я зупинився</h3>
-      <div class="progress">
-        <div class="stepper"><button data-act="step" data-v="season:-1" aria-label="Попередній сезон">−</button>
-          <label><span>сезон</span><input type="number" inputmode="numeric" min="1" data-num="season" value="${e.season || 1}"></label>
-          <button data-act="step" data-v="season:1" aria-label="Наступний сезон">+</button></div>
-        <div class="stepper"><button data-act="step" data-v="episode:-1" aria-label="Попередня серія">−</button>
-          <label><span>серія</span><input type="number" inputmode="numeric" min="0" data-num="episode" value="${e.episode || 0}"></label>
-          <button data-act="step" data-v="episode:1" aria-label="Наступна серія">+</button></div>
-        <button class="btn" data-act="plus">+1 серія</button>
-      </div>
-      <p class="faint small">${total ? `У сезоні ${e.season || 1} — ${total} ${plural(total, 'серія', 'серії', 'серій')}` : 'Кількість серій у цьому сезоні невідома'}${maxSeason ? ` · сезонів: ${maxSeason}` : ''}${m.state ? ` · ${/ended/i.test(m.state) ? 'завершено' : 'ще виходить'}` : ''}</p>
-    </section>` : ''}
-    <section><h3>Моя оцінка</h3><div class="scores">${Array.from({ length: 10 }, (_, i) =>
-      `<button data-act="score" data-v="${i + 1}" class="${e.score === i + 1 ? 'on' : ''}" aria-pressed="${e.score === i + 1}">${i + 1}</button>`).join('')}</div></section>
-    <section><h3>Де дивлюсь</h3>
-      <div class="linkrow"><input type="url" data-field="url" placeholder="Посилання на сайт чи плеєр" value="${esc(e.url)}">
-        ${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Відкрити ↗</a>` : ''}</div></section>
-    <section><h3>Нотатка</h3><textarea data-field="note" rows="3" placeholder="Для себе: враження, на чому зупинився, з ким дивитись">${esc(e.note)}</textarea></section>
-    <section><h3>Рекомендація</h3>
-      <div class="chipset">${chip('rec', '', e.rec ? '★ Раджу друзям' : '☆ Додати в рекомендації', e.rec, 'rec')}</div>
-      ${e.rec ? `<input type="text" data-field="recNote" maxlength="500" placeholder="Кілька слів, чому варто (побачать усі, кому даси посилання)" value="${esc(e.recNote)}">` : ''}
-    </section>
-    <section><h3>Тип</h3><div class="chipset">${KINDS.map(([v, l]) => chip('set-kind', v, l, e.kind === v)).join('')}</div></section>
-  </div>
-  <footer class="card-foot">
-    <button class="btn danger" data-act="del">Видалити</button>
-    <button class="btn" data-act="refresh">Оновити дані</button>
-    <span class="grow"></span>
-    <button class="btn primary" data-act="close">Готово</button>
-  </footer>`;
-}
-
-function drawCard() {
-  const e = store.get(overlay.id);
-  if (!e) return closeOverlay();
-  const card = $('.card', layer);
-  const scroll = $('.card-body', layer)?.scrollTop || 0;
-  card.innerHTML = cardHtml(e);
-  $('.card-body', layer).scrollTop = scroll;
-}
-function openCard(id) {
-  const e = store.get(id);
-  if (!e) return;
-  showOverlay({ type: 'card', id }, `<aside class="card" role="dialog" aria-label="Картка"></aside>`);
-  drawCard();
-  if (!e.metaAt || Date.now() - e.metaAt > META_TTL) refreshMeta(id);
-}
-
-async function refreshMeta(id, { first = false, detect = false, loud = false } = {}) {
-  const e = store.get(id);
-  if (!e) return;
-  try {
-    const x = await catalog.fetchMeta(id, detect ? undefined : e.type);
-    const cur = store.get(id);
-    if (!cur) return;
-    const patch = {};
-    if (first && cur.kind !== x.kind) patch.kind = x.kind;
-    if (cur.type !== x.type) patch.type = x.type;
-    if (x.title && cur.title !== x.title) patch.title = x.title;
-    if (x.year && cur.year !== x.year) patch.year = x.year;
-    if (Object.keys(patch).length) store.save(id, patch);
-    store.setMeta(id, x.meta);
-    if (loud) toast('Дані оновлено');
-  } catch (err) {
-    if (loud) toast('Не вдалося оновити: ' + err.message);
-  }
-}
-
-// додавання
-function openAdd() {
-  showOverlay({ type: 'add', results: [], url: '', abort: null }, `
-    <div class="dialog" role="dialog" aria-label="Додати на полицю">
-      <div class="dlg-head">
-        <input id="addq" type="search" placeholder="Назва, посилання IMDb або сайту, де дивишся" autocomplete="off" aria-label="Що додати">
-        <button class="sq" data-act="close" aria-label="Закрити">✕</button>
-      </div>
-      <div class="dlg-note" id="addnote"></div>
-      <ul class="results" id="results"><li class="faint pad">Почни вводити назву — будь-якою мовою. Можна вставити посилання.</li></ul>
-    </div>`);
-  const input = $('#addq');
-  input.focus();
-  let timer;
-  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => runSearch(input.value), 220); });
-  input.addEventListener('keydown', ev => { if (ev.key === 'Enter' && overlay.results[0]) pick(0); });
-}
-function addNote() {
-  const o = overlay, host = o.url ? new URL(o.url).host : '';
-  $('#addnote').innerHTML = host
-    ? `<span class="tag">посилання ${esc(host)} збережу як «де дивлюсь»</span> <button class="linkbtn" data-act="drop-url">не треба</button>` : '';
-}
-async function runSearch(raw) {
-  const o = overlay;
-  if (o?.type !== 'add') return;
-  o.abort?.abort();
-  const ac = o.abort = new AbortController();
-  const p = parseInput(raw), ul = $('#results');
-  if (p.url) { o.url = safeUrl(p.url); addNote(); }
-  if (!p.id && p.query.length < 2) {
-    o.results = [];
-    ul.innerHTML = `<li class="faint pad">${p.url ? 'З посилання не вдалося вгадати назву — допиши її вручну.' : 'Почни вводити назву — будь-якою мовою. Можна вставити посилання.'}</li>`;
-    if (p.url) { $('#addq').value = ''; }
+// ── маршрути ──────────────────────────────────────────────────────
+const RENDER = { home: renderHome, library: renderLibrary, discover: renderDiscover, stats: renderStats, recs: renderRecs };
+function draw() { RENDER[view.route](); }
+async function route() {
+  closeOverlay();
+  const raw = location.hash.slice(1);
+  if (raw.startsWith('u=') || raw.startsWith('r=')) {
+    view.route = 'recs';
+    drawChrome();
+    app.innerHTML = '<div class="empty"><b>Завантажую рекомендації…</b></div>';
+    try {
+      view.recs = raw.startsWith('u=') ? await cloud.loadPublic(raw.slice(2).replace(/[^\w-]/g, '')) : await decodeRecs(raw.slice(2));
+      if (!view.recs) throw new Error('такого списку немає');
+      document.title = `Рекомендації${view.recs.name ? ' від ' + view.recs.name : ''} · Полиця`;
+      renderRecs();
+    } catch (err) {
+      app.innerHTML = `<div class="empty">${icon('link')}<b>Список не відкрився</b><p>${esc(err.message || 'невідома помилка')}. Попроси автора надіслати посилання ще раз.</p><a class="btn primary" href="./">На мою полицю</a></div>`;
+    }
     return;
   }
-  ul.classList.add('busy');
-  try {
-    const res = p.id ? [await catalog.fetchMeta(p.id, undefined, ac.signal)] : await catalog.search(p.query, ac.signal);
-    if (ac.signal.aborted) return;
-    if (p.url && !p.id) $('#addq').value = p.query;
-    o.results = res;
-    ul.innerHTML = res.length ? res.map((r, i) => {
-      const have = store.get(r.id);
-      return `<li class="res" data-act="pick" data-v="${i}" tabindex="0">${ph(r.id, r.title)}
-        <div class="row-main"><div class="row-title"><b>${esc(r.title)}</b></div>
-          <div class="row-sub">${esc([r.year, KIND_LABEL[r.kind || r.type]].filter(Boolean).join(' · '))}</div></div>
-        ${have ? '<span class="tag">уже на полиці</span>' : '<span class="tag add">＋ додати</span>'}</li>`;
-    }).join('') : `<li class="faint pad">Нічого не знайшлось. Спробуй англійську або оригінальну назву, чи встав посилання з IMDb.</li>`;
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    ul.innerHTML = `<li class="faint pad">Пошук зараз недоступний (${esc(err.message)}). Перевір мережу й спробуй ще раз.</li>`;
-  } finally {
-    if (!ac.signal.aborted) ul.classList.remove('busy');
-  }
-}
-function pick(i) {
-  const o = overlay, r = o.results[i];
-  if (!r) return;
-  const have = store.get(r.id), url = o.url;
-  if (have) {
-    if (url && !have.url) store.save(r.id, { url });
-  } else {
-    store.save(r.id, { type: r.type, kind: r.kind || r.type, title: r.title, year: r.year,
-      status: 'planned', season: 1, episode: 0, url: url || '', added: Date.now() });
-    if (r.meta) store.setMeta(r.id, r.meta);
-  }
-  closeOverlay();
-  openCard(r.id);
-  if (!have && !r.meta) refreshMeta(r.id, { first: true });
-}
-
-// поширення рекомендацій
-async function openShare() {
-  const items = store.list().filter(e => e.rec)
-    .sort((a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, 'uk')).map(recItem);
-  if (!items.length) return toast('Спершу відкрий запис і натисни «Додати в рекомендації»', 4000);
-  const base = location.origin + location.pathname;
-  let link, live = false;
-  if (cloud.user) {
-    try { await cloud.publishNow(); link = `${base}#u=${cloud.user.uid}`; live = true; } catch { /* нижче — знімок */ }
-  }
-  link ??= `${base}#r=${await encodeRecs(S.name, items)}`;
-  showOverlay({ type: 'share', link }, `
-    <div class="dialog narrow" role="dialog" aria-label="Поділитись рекомендаціями">
-      <div class="dlg-head"><h2>Мої рекомендації · ${items.length}</h2><button class="sq" data-act="close" aria-label="Закрити">✕</button></div>
-      <div class="pad">
-        <p>${live
-          ? 'Це постійне посилання: воно саме показує свіжий список, коли ти додаєш чи прибираєш рекомендації.'
-          : 'Це знімок: список зашито просто в посилання. Зміниш рекомендації — надішли нове.' + (cloud.available ? ' Увійди через Google, і посилання стане постійним.' : '')}</p>
-        <input class="linkbox" readonly value="${esc(link)}" aria-label="Посилання">
-        <div class="hint-act">
-          <button class="btn primary" data-act="copy">Копіювати</button>
-          ${navigator.share ? '<button class="btn" data-act="native-share">Надіслати…</button>' : ''}
-          <a class="btn" href="${esc(link)}" target="_blank" rel="noopener">Подивитись</a>
-        </div>
-        <p class="faint small">Гість бачить назви, твої оцінки й коментарі до рекомендацій. Посилання «де дивлюсь» і нотатки не передаються.</p>
-      </div>
-    </div>`);
-}
-
-// ── чужі рекомендації ─────────────────────────────────────────────
-function renderRecs() {
-  const { name, items } = recs;
-  app.innerHTML = `
-  <header class="top">
-    <div class="brand-row">
-      <div class="brand"><b>Рекомендації</b><span>${name ? 'від ' + esc(name) : ''}</span></div>
-      <a class="pill" href="./"><i></i>моя полиця →</a>
-    </div>
-  </header>
-  <p class="lead">${items.length} ${plural(items.length, 'назва', 'назви', 'назв')}, які варто подивитись. «＋ собі» кладе запис на твою власну полицю — вона зберігається в цьому браузері.</p>
-  <ul class="list recs">${items.map((x, i) => {
-    const have = store.get(x.id);
-    return `<li class="row" data-act="info" data-v="${i}" tabindex="0">
-      ${ph(x.id, x.t, 'medium', 'md')}
-      <div class="row-main">
-        <div class="row-title"><b>${esc(x.t)}</b></div>
-        <div class="row-sub">${esc([KIND_LABEL[x.k], x.y].filter(Boolean).join(' · '))}</div>
-        ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
-      </div>
-      <div class="row-act"><button class="btn ${have ? '' : 'primary'}" data-act="take" data-v="${i}" ${have ? 'disabled' : ''}>${have ? '✓ у тебе' : '＋ собі'}</button></div>
-      <div class="score ${x.s ? '' : 'none'}"><b>${x.s || '—'}</b><i style="--w:${x.s * 10}%"></i><small>IMDb ${fmtRating(x.r) || '—'}</small></div>
-    </li>`;
-  }).join('') || '<li class="empty"><b>Тут поки порожньо</b><p>Автор ще нічого не порадив.</p></li>'}</ul>`;
-}
-function take(i) {
-  const x = recs.items[i];
-  if (!x || store.get(x.id)) return;
-  store.save(x.id, { type: x.k === 'movie' ? 'movie' : 'series', kind: x.k, title: x.t, year: x.y,
-    status: 'planned', season: 1, episode: 0, added: Date.now() });
-  refreshMeta(x.id, { detect: true });
-  toast('Додано на твою полицю');
-}
-async function openInfo(i) {
-  const x = recs.items[i];
-  if (!x) return;
-  const ac = new AbortController();
-  const html = (m, plot) => `
-    <header class="card-head">${ph(x.id, x.t, 'medium', 'lg')}
-      <div class="card-ttl"><h2>${esc(x.t)}</h2>
-        <p class="sub">${esc([KIND_LABEL[x.k], x.y, m?.runtime].filter(Boolean).join(' · '))}</p>
-        <p class="sub"><a class="imdb" href="https://www.imdb.com/title/${x.id}/" target="_blank" rel="noopener noreferrer">IMDb <b>${fmtRating(m?.imdb || x.r) || '—'}</b> ↗</a></p>
-        ${m?.genres?.length ? `<p class="genres">${m.genres.map(g => `<span>${esc(g)}</span>`).join('')}</p>` : ''}</div>
-      <button class="sq" data-act="close" aria-label="Закрити">✕</button></header>
-    <div class="card-body">
-      ${x.s ? `<section><h3>Оцінка автора</h3><p class="bigscore">${x.s}<small> з 10</small></p></section>` : ''}
-      ${x.n ? `<section><h3>Чому варто</h3><blockquote>${esc(x.n)}</blockquote></section>` : ''}
-      <section><h3>Про що</h3><p class="plot ${m ? '' : 'faint'}">${esc(plot)}</p></section>
-    </div>
-    <footer class="card-foot"><span class="grow"></span>
-      <button class="btn primary" data-act="take" data-v="${i}" ${store.get(x.id) ? 'disabled' : ''}>${store.get(x.id) ? '✓ у тебе' : '＋ собі на полицю'}</button></footer>`;
-  showOverlay({ type: 'info', i, abort: ac }, `<aside class="card" role="dialog" aria-label="Про запис">${html(null, 'Тягну опис…')}</aside>`);
-  try {
-    const r = await catalog.fetchMeta(x.id, x.k === 'movie' ? 'movie' : undefined, ac.signal);
-    if (overlay?.abort === ac) $('.card', layer).innerHTML = html(r.meta, r.meta.plot || 'Опису немає.');
-  } catch (err) {
-    if (err.name !== 'AbortError' && overlay?.abort === ac) $('.card', layer).innerHTML = html(null, 'Опис не завантажився.');
-  }
+  const r = raw.replace(/^\//, '');
+  view.route = RENDER[r] && r !== 'recs' ? r : 'home';
+  view.recs = null;
+  document.title = { home: 'Полиця переглядів', library: 'Бібліотека · Полиця', discover: 'Каталог · Полиця', stats: 'Статистика · Полиця' }[view.route];
+  drawChrome(); draw();
+  scrollTo(0, 0);
 }
 
 // ── дії ───────────────────────────────────────────────────────────
-function plus(id) {
-  const e = store.get(id);
-  if (!e) return;
-  const patch = nextEpisode(e);
-  if (patch.episode === undefined && patch.season === undefined && !patch.status) return toast('Це остання відома серія');
-  flushCard();
-  const n = store.save(id, patch);
-  if (overlay?.type === 'card') drawCard();
-  toast(patch.status === 'done' ? `«${n.title}» — переглянуто повністю` : `${n.title}: ${progressText(n)}`);
-}
-function signIn() {
-  // сторінка перейде до Google і повернеться вже з входом
-  try { cloud.signIn(); } catch (err) { toast('Не вдалося ввійти: ' + err.message, 5000); }
-}
 function exportFile() {
   const blob = new Blob([JSON.stringify({ app: 'MyWatchShelf', version: 1, entries: store.raw() }, null, 1)], { type: 'application/json' });
   const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `watchshelf-${new Date().toISOString().slice(0, 10)}.json` });
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast('Копію збережено у файл');
 }
 function importFile() {
   const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'application/json,.json' });
@@ -496,128 +111,121 @@ function importFile() {
       if (!Array.isArray(list)) throw new Error('у файлі немає списку');
       const n = store.importMany(list);
       toast(n ? `Завантажено: ${n} ${plural(n, 'запис', 'записи', 'записів')}` : 'Нового у файлі немає');
-    } catch (err) { toast('Файл не прочитався: ' + err.message, 4000); }
+    } catch (err) { toast('Файл не прочитався: ' + err.message, { ms: 4500 }); }
   };
   inp.click();
 }
+const idOf = el => el.closest('[data-id]')?.dataset.id || ui.overlay?.id;
 
-const actions = {
+on({
+  ...cardActions,
   close: closeOverlay,
-  add: openAdd,
+  add: openPalette,
   menu: () => toggleMenu(),
-  pill: () => (!cloud.available ? toast('Список зберігається в цьому браузері. Копію можна зберегти у файл через меню «···».', 4500)
-    : cloud.user ? toggleMenu(true) : cloud.state !== 'connecting' ? signIn() : null),
-  signin: signIn,
-  signout: async () => { if (confirm('Вийти з акаунта? Список лишиться на цьому пристрої, але перестане синхронізуватись.')) { await cloud.signOut(); toast('Ви вийшли'); } },
-  'hide-hint': () => { store.setSetting('hint', false); renderHint(); },
-  dir: () => { store.setSetting('dir', -S.dir); renderList(); },
-  view: () => { store.setSetting('view', S.view === 'grid' ? 'list' : 'grid'); renderList(); },
-  kind: v => { f.kind = v; renderChips(); renderList(); },
-  status: v => { f.status = v; renderChips(); renderList(); },
+  signin: () => { try { cloud.signIn(); } catch (err) { toast('Не вдалося ввійти: ' + err.message, { ms: 5000 }); } },
+  signout: async () => {
+    if (await confirmBox({ title: 'Вийти з акаунта?', text: 'Список лишиться на цьому пристрої, але перестане синхронізуватись.', ok: 'Вийти' })) {
+      await cloud.signOut(); toast('Ви вийшли з акаунта');
+    }
+  },
+  'hide-hint': () => { store.setSetting('hint', false); draw(); },
   theme: () => { store.setSetting('theme', { auto: 'light', light: 'dark', dark: 'auto' }[S.theme]); applyTheme(); toggleMenu(true); return 'keep'; },
-  name: () => { const v = prompt('Як підписати твої рекомендації?', S.name || cloud.user?.name || ''); if (v !== null) { store.setSetting('name', v.trim().slice(0, 80)); cloud.publishNow().catch(() => {}); } },
+  name: async () => {
+    const v = await promptBox({ title: 'Підпис у рекомендаціях', text: 'Його побачать усі, кому ти даси посилання на свої рекомендації.', value: S.name || cloud.user?.name || '', placeholder: 'Наприклад, Костя' });
+    if (v !== null) { store.setSetting('name', v.slice(0, 80)); cloud.publishNow().catch(() => {}); toast('Підпис збережено'); }
+  },
   share: openShare,
+  demo: loadDemo,
   export: exportFile,
   import: importFile,
-  open: (v, el) => openCard(el.closest('[data-id]').dataset.id),
-  plus: (v, el) => plus(el.closest('[data-id]')?.dataset.id || overlay?.id),
-  pick: v => pick(+v),
-  'drop-url': () => { overlay.url = ''; addNote(); },
-  info: v => openInfo(+v),
-  take: v => { take(+v); if (overlay) closeOverlay(); renderRecs(); },
-  copy: async () => { try { await navigator.clipboard.writeText(overlay.link); toast('Посилання скопійовано'); } catch { $('.linkbox', layer).select(); toast('Виділено — скопіюй вручну'); } },
-  'native-share': () => navigator.share({ title: 'Мої рекомендації', url: overlay.link }).catch(() => {}),
-  // картка
-  'set-status': v => {
-    const e = store.get(overlay.id), patch = { status: v };
-    if (v === 'done' && e.type === 'series') {
-      const last = Math.max(0, ...Object.keys(e.meta?.seasons || {}).map(Number));
-      if (last) { patch.season = last; patch.episode = e.meta.seasons[last]; }
-    }
-    cardSave(patch);
+  // списки
+  open: (v, el) => openCard(idOf(el)),
+  preview: (v, el) => openPreview(idOf(el)),
+  plus: (v, el) => plus(idOf(el)),
+  'quick-add': (v, el) => {
+    const x = recall(idOf(el));
+    if (!x || !addItem(x)) return;
+    toast(`«${x.title}» — у планах`, { label: 'Відкрити', action: () => openCard(x.id) });
   },
-  'set-kind': v => cardSave({ kind: v }),
-  score: v => cardSave({ score: store.get(overlay.id).score === +v ? 0 : +v }),
-  rec: () => cardSave({ rec: !store.get(overlay.id).rec }),
-  step: v => {
-    const [k, d] = v.split(':'), e = store.get(overlay.id);
-    const patch = { [k]: Math.max(k === 'season' ? 1 : 0, (e[k] || 0) + +d) };
-    if (k === 'season' && patch.season !== e.season) patch.episode = 0;
-    cardSave(patch);
+  take: (v, el) => {
+    const x = recall(idOf(el));
+    if (!x || !addItem(x)) return;
+    toast(`«${x.title}» — на твоїй полиці`);
+    if (ui.overlay) closeOverlay();
   },
-  del: () => { const e = store.get(overlay.id); if (e && confirm(`Прибрати «${e.title}» з полиці?`)) { const id = overlay.id; pending = {}; closeOverlay(); store.remove(id); } },
-  refresh: () => refreshMeta(overlay.id, { loud: true }),
-};
-function cardSave(patch) {
-  flushCard();
-  store.save(overlay.id, patch);
-  // Safari не переводить фокус на кнопку при дотику, тож покладатися на
-  // «фокус не в полі» не можна: після дії з картки малюємо її явно.
-  drawCard();
-}
+  'add-as': v => addFromPreview(v),
+  rail: (v, el) => { const t = $('.rail-track', el.closest('.rail')); t.scrollBy({ left: +v * t.clientWidth * 0.85, behavior: 'smooth' }); },
+  // бібліотека
+  kind: v => { view.f.kind = v; updateLibrary(); },
+  status: v => { view.f.status = v; updateLibrary(); },
+  genre: v => { const g = view.f.genres, i = g.indexOf(v); if (i < 0) g.push(v); else g.splice(i, 1); updateLibrary(); return 'keep'; },
+  'genres-toggle': () => { const p = $('#lib-genres'); p.hidden = !p.hidden; return 'keep'; },
+  'reset-filters': () => { Object.assign(view.f, { q: '', kind: 'all', status: 'all', genres: [] }); if ($('#lib-q')) $('#lib-q').value = ''; updateLibrary(); },
+  dir: () => { store.setSetting('dir', -S.dir); updateLibrary(); },
+  view: () => { store.setSetting('view', S.view === 'grid' ? 'list' : 'grid'); updateLibrary(); },
+  // каталог
+  'disc-type': v => { view.disc.type = v; renderDiscover(); },
+  'disc-more': () => loadDiscover(false),
+  // пошук і поширення
+  pick: v => pickResult(+v),
+  'drop-url': dropUrl,
+  copy: async () => {
+    try { await navigator.clipboard.writeText(ui.overlay.link); toast('Посилання скопійовано'); }
+    catch { $('.linkbox', layer).select(); toast('Виділено — скопіюй вручну'); }
+  },
+  'native-share': () => navigator.share({ title: 'Мої рекомендації', url: ui.overlay.link }).catch(() => {}),
+});
 
 document.addEventListener('click', ev => {
   const el = ev.target.closest('[data-act]');
-  const inMenu = ev.target.closest('.menu-wrap');
-  if (!el) { if (!inMenu) toggleMenu(false); return; }
-  // посилання й кнопки всередині рядка мають власну дію, а не «відкрити картку»
-  if (el.dataset.act === 'open' && ev.target.closest('a')) return;
-  const keep = actions[el.dataset.act]?.(el.dataset.v, el);
-  if (el.dataset.act !== 'menu' && keep !== 'keep') toggleMenu(false);
+  const inPop = ev.target.closest('.dd');
+  if (!el) { if (!inPop) closePops(); return; }
+  // посилання всередині картки мають власну дію, а не «відкрити»
+  if (['open', 'preview'].includes(el.dataset.act) && ev.target.closest('a')) return;
+  const keep = actions[el.dataset.act]?.(el.dataset.v, el, ev);
+  if (keep !== 'keep' && el.dataset.act !== 'menu') closePops();
 });
+function closePops() { $$('.pop').forEach(p => { p.hidden = true; }); }
 document.addEventListener('keydown', ev => {
-  if (ev.key === 'Escape') { if (overlay) closeOverlay(); else toggleMenu(false); }
-  if (ev.key === 'Enter' && ev.target.matches('li[data-act]')) ev.target.click();
-});
-// текстові поля картки зберігаються самі, за пів секунди після останньої літери
-layer.addEventListener('input', ev => {
-  if (overlay?.type !== 'card') return;
-  const t = ev.target;
-  if (t.dataset.field) pending[t.dataset.field] = t.value;
-  else if (t.dataset.num) pending[t.dataset.num] = Math.max(t.dataset.num === 'season' ? 1 : 0, parseInt(t.value, 10) || 0);
-  else return;
-  clearTimeout(pendingTimer);
-  pendingTimer = setTimeout(flushCard, 500);
+  const typing = ev.target.matches?.('input,textarea,select');
+  if (ev.key === 'Escape') { if (ui.overlay) closeOverlay(); else closePops(); }
+  else if ((ev.key === '/' && !typing) || (ev.key.toLowerCase() === 'k' && (ev.ctrlKey || ev.metaKey))) { ev.preventDefault(); if (view.route !== 'recs') openPalette(); }
+  else if (ev.key === 'Enter' && ev.target.matches?.('[data-act][tabindex]')) ev.target.click();
 });
 
 // ── зміни даних ───────────────────────────────────────────────────
+function refresh() {
+  if (view.route === 'library') updateLibrary();
+  else if (view.route === 'discover') drawDiscover();
+  else if (view.route === 'home') {
+    // ряди після перемальовування лишаються там, де їх прогорнули
+    const pos = new Map($$('.rail').map(r => [$('h2', r).textContent, $('.rail-track', r).scrollLeft]));
+    draw();
+    $$('.rail').forEach(r => { const x = pos.get($('h2', r).textContent); if (x) $('.rail-track', r).scrollLeft = x; });
+  } else draw();
+}
+// Поки відкрита картка, сторінку під нею не перемальовуємо (щоб не
+// смикались ряди й зображення) — зробимо це, коли картку закриють.
+ui.afterClose = () => { if (ui.dirty) { ui.dirty = false; refresh(); } };
 store.onChange(() => {
-  if (mode === 'recs') { if (!overlay) renderRecs(); return; }
-  renderStats(); renderChips(); renderHint(); renderList();
-  if (overlay?.type === 'card') {
-    const a = document.activeElement;
-    // поки людина друкує в картці, не перемальовуємо її під руками
-    if (!(a && layer.contains(a) && a.matches('input,textarea'))) drawCard();
-  }
-});
-let greeted = false;
-cloud.onChange(() => {
-  renderPill(); renderHint();
-  if (cloud.lastError) { toast('Не вдалося ввійти (' + cloud.lastError + '). Спробуй ще раз.', 5000); cloud.lastError = ''; }
-  if (cloud.justSignedIn && cloud.state === 'synced' && !greeted) { greeted = true; toast('Вхід виконано — список синхронізується'); }
-});
-
-// ── маршрути ──────────────────────────────────────────────────────
-async function route() {
-  closeOverlay();
-  const h = location.hash.slice(1);
-  if (h.startsWith('u=') || h.startsWith('r=')) {
-    mode = 'recs';
-    app.innerHTML = '<p class="lead">Завантажую рекомендації…</p>';
-    try {
-      recs = h.startsWith('u=') ? await cloud.loadPublic(h.slice(2).replace(/[^\w-]/g, '')) : await decodeRecs(h.slice(2));
-      if (!recs) throw new Error('такого списку немає');
-      document.title = `Рекомендації${recs.name ? ' від ' + recs.name : ''}`;
-      renderRecs();
-    } catch (err) {
-      app.innerHTML = `<div class="empty"><b>Список не відкрився</b><p>${esc(err.message || 'невідома помилка')}. Попроси автора надіслати посилання ще раз.</p><a class="btn primary" href="./">На мою полицю</a></div>`;
+  if (ui.overlay) {
+    ui.dirty = true;
+    if (ui.overlay.type === 'card') {
+      const a = document.activeElement;
+      if (!(a && layer.contains(a) && a.matches('input,textarea'))) drawCard();
     }
     return;
   }
-  mode = 'shelf'; recs = null;
-  document.title = 'Полиця переглядів';
-  shell(); renderShelf();
-}
+  refresh();
+});
+let greeted = false;
+cloud.onChange(() => {
+  drawChrome();
+  if (view.route === 'home' && !ui.overlay) draw();
+  if (cloud.lastError) { toast(`Не вдалося ввійти (${cloud.lastError}). Спробуй ще раз.`, { ms: 5000 }); cloud.lastError = ''; }
+  if (cloud.justSignedIn && cloud.state === 'synced' && !greeted) { greeted = true; toast('Вхід виконано — полиця синхронізується'); }
+});
+addEventListener('error', () => toast('Щось пішло не так. Онови сторінку, якщо застосунок не відповідає.', { ms: 5000 }));
 
 applyTheme();
 cloud.init();

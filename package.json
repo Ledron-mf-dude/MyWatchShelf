@@ -1,0 +1,13 @@
+{
+  "name": "mywatchshelf",
+  "version": "2.0.0",
+  "description": "Полиця переглядів — трекер аніме, серіалів і фільмів без власного сервера",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "start": "python -m http.server 8765",
+    "icons": "node tools/icons.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

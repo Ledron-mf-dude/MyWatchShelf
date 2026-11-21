@@ -17,7 +17,7 @@ for (const e of Object.values(load(KEY, {}))) {
   const c = sanitize(e);
   if (c) entries[c.id] = c;
 }
-const settings = { view: 'list', sort: 'updated', dir: -1, theme: 'auto', name: '', hint: true, ...load(SKEY, {}) };
+const settings = { view: 'grid', sort: 'updated', dir: -1, theme: 'dark', name: '', hint: true, ...load(SKEY, {}) };
 
 const subs = new Set(), localSubs = new Set();
 const emit = () => subs.forEach(fn => fn());
@@ -77,6 +77,12 @@ export const store = {
     }
     if (n) { save(); emit(); }
     return n;
+  },
+  // Повернути щойно видалене («Скасувати» в повідомленні)
+  restore(entry) {
+    const next = sanitize({ ...entry, updated: Date.now() });
+    if (!next) return;
+    entries[next.id] = next; save(); emit(); emitLocal(next, 'user');
   },
   clear() { entries = {}; save(); emit(); },
 };

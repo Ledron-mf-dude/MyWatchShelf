@@ -68,6 +68,7 @@ function normalize(m, type) {
       runtime: String(m.runtime || ''),
       state: String(m.status || ''),
       cast: (Array.isArray(m.cast) ? m.cast : []).slice(0, 4),
+      trailer: (Array.isArray(m.trailers) && m.trailers[0]?.source) || '',
       seasons,
     },
   };
@@ -89,4 +90,17 @@ export async function fetchMeta(id, type, signal) {
   }
   if (!m || !m.name) throw new Error('нічого не знайдено');
   return normalize(m, t);
+}
+
+// Готові добірки каталогу: list — 'top' (популярне) або 'year' (тоді в
+// genre передається рік). Записи приходять одразу з довідковими даними.
+const catalogCache = new Map();
+export async function catalog({ type = 'series', list = 'top', genre = '', skip = 0 } = {}, signal) {
+  const extra = [genre && `genre=${encodeURIComponent(genre)}`, skip && `skip=${skip}`].filter(Boolean).join('&');
+  const url = `${BASE}/catalog/${type}/${list}${extra ? '/' + extra : ''}.json`;
+  if (catalogCache.has(url)) return catalogCache.get(url);
+  const j = await getJson(url, signal);
+  const out = (j.metas || []).filter(m => isId(m.imdb_id || m.id) && m.name).map(m => normalize(m, type));
+  catalogCache.set(url, out);
+  return out;
 }

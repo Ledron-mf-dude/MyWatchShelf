@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   safeUrl, parseInput, sanitize, mergeEntry, nextEpisode, progressText,
   filterSort, encodeRecs, decodeRecs, cleanRecs, plural,
+  episodesWatched, episodesTotal, progressPct, minutesWatched, insights, fmtRuntime, genreUk,
 } from '../js/logic.js';
 
 test('safeUrl пускає лише http(s)', () => {
@@ -95,4 +96,61 @@ test('чужий список чиститься', () => {
 test('множина', () => {
   assert.deepEqual([1, 2, 5, 11, 21, 22].map(n => plural(n, 'запис', 'записи', 'записів')),
     ['запис', 'записи', 'записів', 'записів', 'запис', 'записи']);
+});
+
+test('прогрес по серіях', () => {
+  const e = { type: 'series', kind: 'anime', status: 'watching', season: 2, episode: 3, meta: { seasons: { 1: 12, 2: 8 }, runtime: '25 min' } };
+  assert.equal(episodesWatched(e), 15);
+  assert.equal(episodesTotal(e), 20);
+  assert.equal(progressPct(e), 75);
+  assert.equal(minutesWatched(e), 375);
+  assert.equal(progressPct({ ...e, status: 'done' }), 100);
+  assert.equal(progressPct({ type: 'movie', status: 'planned' }), 0);
+  assert.equal(minutesWatched({ type: 'movie', status: 'done', meta: { runtime: '136 min' } }), 136);
+  assert.equal(minutesWatched({ type: 'movie', status: 'planned', meta: { runtime: '136 min' } }), 0);
+});
+
+test('статистика полиці', () => {
+  const list = [
+    { id: 'tt1', kind: 'anime', type: 'series', status: 'watching', season: 1, episode: 4, score: 9, rec: true, meta: { imdb: 8.5, genres: ['Animation', 'Drama'], seasons: { 1: 12 }, runtime: '30 min' } },
+    { id: 'tt2', kind: 'movie', type: 'movie', status: 'done', score: 6, meta: { imdb: 8.6, genres: ['Drama'], runtime: '120 min' } },
+    { id: 'tt3', kind: 'movie', type: 'movie', status: 'planned', score: 0, meta: { genres: ['Comedy'] } },
+  ];
+  const s = insights(list);
+  assert.equal(s.total, 3);
+  assert.equal(s.minutes, 240);
+  assert.equal(s.episodes, 4);
+  assert.equal(s.rated, 2);
+  assert.equal(s.avg, 7.5);
+  assert.equal(s.rec, 1);
+  assert.deepEqual(s.genres[0], ['Drama', 2]);
+  assert.equal(s.scores[8], 1);
+  assert.deepEqual(s.byKind, { anime: 1, movie: 2 });
+  assert.equal(s.gaps[0].e.id, 'tt2');
+});
+
+test('фільтр за жанрами й пошук українською назвою жанру', () => {
+  const list = [
+    { id: 'tt1', title: 'A', kind: 'anime', status: 'done', meta: { genres: ['Fantasy'] } },
+    { id: 'tt2', title: 'B', kind: 'movie', status: 'done', meta: { genres: ['Drama'] } },
+  ];
+  assert.deepEqual(filterSort(list, { genres: ['Fantasy'] }, 'title', 1).map(e => e.id), ['tt1']);
+  assert.deepEqual(filterSort(list, { q: 'фентезі' }, 'title', 1).map(e => e.id), ['tt1']);
+  assert.deepEqual(filterSort(list, { genres: [] }, 'title', 1).length, 2);
+});
+
+test('підписи: тривалість і жанри', () => {
+  assert.equal(fmtRuntime('25 min'), '25 хв');
+  assert.equal(fmtRuntime('155 min'), '2 год 35 хв');
+  assert.equal(fmtRuntime('120 min'), '2 год');
+  assert.equal(fmtRuntime(''), '');
+  assert.equal(genreUk('Sci-Fi'), 'фантастика');
+  assert.equal(genreUk('Unknown Thing'), 'unknown thing');
+});
+
+test('sanitize: трейлер лише як ідентифікатор YouTube', () => {
+  const ok = sanitize({ id: 'tt1234567', updated: 1, meta: { trailer: 'VFkjBy2b50Q' } });
+  assert.equal(ok.meta.trailer, 'VFkjBy2b50Q');
+  const bad = sanitize({ id: 'tt1234567', updated: 1, meta: { trailer: '"><script>' } });
+  assert.equal(bad.meta.trailer, '');
 });

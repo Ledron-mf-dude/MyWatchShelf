@@ -1,0 +1,207 @@
+// Мови інтерфейсу. Кожен рядок — [англійською, українською]; англійська
+// основна. Модуль не знає про DOM, тож ним користуються і тести.
+export const LANGS = [['en', 'English'], ['uk', 'Українська']];
+let cur = 0;
+export const setLang = l => { cur = l === 'uk' ? 1 : 0; };
+export const getLang = () => LANGS[cur][0];
+
+const D = {
+  brand: ['Kadr', 'Кадр'],
+  'brand.long': ['your watch tracker', 'трекер переглядів'],
+  skip: ['Skip to content', 'До вмісту'],
+  sections: ['Sections', 'Розділи'],
+  'nav.home': ['Home', 'Головна'], 'nav.library': ['Library', 'Бібліотека'], 'nav.discover': ['Discover', 'Каталог'], 'nav.stats': ['Stats', 'Статистика'],
+  'search.btn': ['Search and add', 'Пошук і додавання'], search: ['Search', 'Пошук'],
+  add: ['Add', 'Додати'], 'add.lc': ['add', 'додати'], 'add.first': ['Add your first title', 'Додати перший запис'], 'add.entry': ['Add a title', 'Додати запис'],
+  'account.aria': ['Account and menu', 'Акаунт і меню'],
+  'my.shelf': ['My list', 'Мій список'],
+  signin: ['Sign in', 'Увійти'], 'not.now': ['Not now', 'Не зараз'],
+  close: ['Close', 'Закрити'], done: ['Done', 'Готово'], open: ['Open', 'Відкрити'], undo: ['Undo', 'Скасувати'], restore: ['Restore', 'Повернути'],
+  cancel: ['Cancel', 'Скасувати'], save: ['Save', 'Зберегти'], retry: ['Try again', 'Спробувати ще раз'],
+  back: ['Back', 'Назад'], forward: ['Forward', 'Далі'], all: ['See all', 'Усе'],
+  link: ['Link', 'Посилання'], copy: ['Copy', 'Копіювати'], send: ['Send…', 'Надіслати…'],
+  // стани синхронізації
+  'state.local': ['this device only', 'лише цей пристрій'], 'state.off': ['not signed in', 'не ввійшов'],
+  'state.connecting': ['connecting…', 'з’єднання…'], 'state.synced': ['synced', 'синхронізовано'],
+  'state.offline': ['offline — changes are saved here', 'офлайн — зміни збережено тут'], 'state.error': ['sync error', 'помилка синхронізації'],
+  // меню
+  'menu.google': ['Google account', 'Акаунт Google'],
+  'menu.signin.text': ['Sign in to keep your list in sync between phone and computer.', 'Увійди, щоб список синхронізувався між телефоном і компʼютером.'],
+  'menu.signin': ['Sign in with Google', 'Увійти через Google'],
+  'menu.local.text': ['Your list is stored in this browser.', 'Список зберігається в цьому браузері.'],
+  'menu.share': ['Share recommendations', 'Поділитись рекомендаціями'],
+  'menu.name': ['Name on recommendations', 'Підпис у рекомендаціях'], 'not.set': ['not set', 'не вказано'],
+  'menu.lang': ['Language', 'Мова'], 'menu.theme': ['Theme', 'Тема'],
+  'theme.auto': ['system', 'як у системі'], 'theme.light': ['light', 'світла'], 'theme.dark': ['dark', 'темна'],
+  'menu.export': ['Save a backup file', 'Зберегти копію у файл'], 'menu.import': ['Load from a file…', 'Завантажити з файла…'],
+  'menu.signout': ['Sign out', 'Вийти'],
+  'signout.title': ['Sign out?', 'Вийти з акаунта?'],
+  'signout.text': ['Your list stays on this device but stops syncing.', 'Список лишиться на цьому пристрої, але перестане синхронізуватись.'],
+  'name.text': ['Everyone you share your recommendations link with will see it.', 'Його побачать усі, кому ти даси посилання на свої рекомендації.'],
+  'name.ph': ['For example, Alex', 'Наприклад, Костя'],
+  // статуси й типи
+  'st.watching': ['Watching', 'Дивлюсь'], 'st.planned': ['Plan to watch', 'У планах'], 'st.done': ['Completed', 'Переглянуто'],
+  'st.paused': ['On hold', 'На паузі'], 'st.dropped': ['Dropped', 'Кинув'],
+  'kind.anime': ['anime', 'аніме'], 'kind.series': ['series', 'серіал'], 'kind.movie': ['movie', 'фільм'],
+  'kinds.anime': ['Anime', 'Аніме'], 'kinds.series': ['Series', 'Серіали'], 'kinds.movie': ['Movies', 'Фільми'],
+  'all.kinds': ['All', 'Усе'], 'all.statuses': ['All statuses', 'Усі статуси'], 'all.genres': ['All genres', 'Усі жанри'], 'any.year': ['Any year', 'Будь-який рік'],
+  type: ['Type', 'Тип'], genre: ['Genre', 'Жанр'], genres: ['Genres', 'Жанри'], year: ['Year', 'Рік'],
+  season: ['season', 'сезон'], episode: ['episode', 'серія'],
+  'prog': ['season {s} · episode {e}', 'сезон {s} · серія {e}'],
+  'eps.of': ['{a} of {b} episodes', '{a} з {b} серій'],
+  'episode.n': ['Episode {n}', 'Серія {n}'], 'episode.of': ['episode of {n}', 'серія з {n}'],
+  min: ['min', 'хв'], h: ['h', 'год'],
+  // картки й головна
+  'badge.rec': ['pick', 'раджу'],
+  watch: ['Watch', 'Дивитись'], 'next.ep': ['Next episode', 'Наступна серія'], 'prev.ep': ['Previous episode', 'Попередня серія'],
+  'next.season': ['Next season', 'Наступний сезон'], 'prev.season': ['Previous season', 'Попередній сезон'],
+  'ep.watched': ['Mark episode watched', 'Серію переглянуто'], details: ['Details', 'Картка'],
+  'on.shelf': ['in my list', 'у списку'], 'on.shelf.already': ['Already in your list', 'Уже у твоєму списку'], 'to.shelf': ['Add to my list', 'Додати до списку'],
+  'rail.continue': ['Continue watching', 'Продовжити перегляд'], 'rail.top': ['My top rated', 'Мій топ'], 'rail.planned': ['Plan to watch', 'У планах'],
+  'rail.popular': ['Popular right now', 'Популярне зараз'], 'rail.anime': ['Popular anime', 'Популярне аніме'], 'rail.movies': ['Movies everyone talks about', 'Фільми, про які говорять'],
+  'hint.title': ['Your list lives only in this browser', 'Список живе лише в цьому браузері'],
+  'hint.text': ['Sign in with Google and it will follow you to your phone and other devices.', 'Увійди через Google — і він сам з’явиться на телефоні та інших пристроях.'],
+  'hero.empty.title': ['Everything you watch, in one place', 'Усе, що ти дивишся, — в одному місці'],
+  'hero.empty.text': ['Anime, series and movies with IMDb ratings. Remembers the episode you stopped at, your scores and where you watch — and syncs across devices.',
+    'Аніме, серіали й фільми з оцінками IMDb. Памʼятає серію, на якій ти зупинився, твої оцінки й посилання, де дивишся, — і синхронізується між пристроями.'],
+  'hero.from.shelf': ['From your list', 'З твого списку'], 'not.started': ['not started yet', 'ще не починав'],
+  demo: ['Load demo data', 'Показати на прикладі'],
+  'catalog.down': ['The catalog is unavailable right now — check your connection.', 'Каталог зараз недоступний — перевір мережу.'],
+  'catalog.down.retry': ['The catalog is unavailable right now. Check your connection and try again.', 'Каталог зараз недоступний. Перевір мережу й спробуй ще раз.'],
+  // бібліотека
+  'lib.search': ['Search: title, genre, note', 'Пошук: назва, жанр, нотатка'], 'lib.search.aria': ['Search your library', 'Пошук у бібліотеці'],
+  sorting: ['Sorting', 'Сортування'], 'sort.dir': ['Sort direction', 'Напрям сортування'], 'view.toggle': ['Grid or list', 'Плитка або список'],
+  'sort.updated': ['Recently updated', 'Нещодавно змінені'], 'sort.added': ['Recently added', 'Нещодавно додані'], 'sort.score': ['My score', 'Моя оцінка'],
+  'sort.imdb': ['IMDb rating', 'Оцінка IMDb'], 'sort.progress': ['Progress', 'Прогрес'], 'sort.title': ['Title', 'Назва'], 'sort.year': ['Year', 'Рік'],
+  'reset.filters': ['Reset filters', 'Скинути фільтри'],
+  'genres.empty': ['Genres appear once your list has at least one title.', 'Жанри зʼявляться, коли у списку буде хоч один запис.'],
+  'genres.loading': ['Genres are still loading.', 'Жанри ще підтягуються.'],
+  'n.of.m': ['{a} of {b}', '{a} з {b}'],
+  'lib.empty.title': ['Your list is empty', 'Список поки порожній'],
+  'lib.empty.text': ['Add your first anime, movie or series — by title, an IMDb link, or a link to the site where you watch.',
+    'Додай перше аніме, фільм чи серіал — за назвою, посиланням IMDb або посиланням сайту, де дивишся.'],
+  'open.catalog': ['Browse the catalog', 'Відкрити каталог'],
+  'nothing.found': ['Nothing found', 'Нічого не знайшлось'], 'nothing.found.text': ['Try another query or reset the filters.', 'Спробуй інший запит або скинь фільтри.'],
+  // каталог
+  'disc.sub': ['popular right now', 'популярне просто зараз'],
+  'disc.empty.title': ['Nothing matches these filters', 'За цими фільтрами порожньо'], 'disc.empty.text': ['Try another genre or year.', 'Спробуй інший жанр чи рік.'],
+  'show.more': ['Show more', 'Показати ще'],
+  // статистика
+  'stats.empty.title': ['Nothing to count yet', 'Поки нема що рахувати'],
+  'stats.empty.text': ['Add a few titles and you will see hours watched, favourite genres and your score distribution here.',
+    'Додай кілька записів — і тут зʼявляться години перегляду, улюблені жанри та розподіл оцінок.'],
+  'stats.sub': ['{n} in your list', '{n} у списку'],
+  'tile.watched': ['Watched', 'Переглянуто'], 'tile.days': ['that is {d} days non-stop', 'це {d} доби без перерви'], 'tile.start': ['and this is just the start', 'і це лише початок'],
+  'tile.episodes': ['Episodes', 'Серій'], 'tile.watching': ['{n} in progress', '{n} дивлюсь зараз'],
+  'tile.avg': ['Average score', 'Середня оцінка'], 'tile.rated': ['{a} of {b} rated', 'оцінено {a} з {b}'],
+  'tile.done': ['Completed', 'Завершено'], 'tile.recs': ['{n} recommended', '{n} у рекомендаціях'],
+  'panel.scores': ['My scores', 'Мої оцінки'], 'panel.genres': ['Favourite genres', 'Улюблені жанри'], 'panel.status': ['By status', 'За статусом'],
+  'panel.kind': ['By type', 'За типом'], 'panel.gaps': ['Where I disagree with IMDb', 'Де я не згоден з IMDb'],
+  'gap.line': ['mine {a} · IMDb {b}', 'моя {a} · IMDb {b}'], 'gaps.empty': ['Rate a few titles and I will compare them with IMDb.', 'Постав кілька оцінок — порівняю їх з IMDb.'],
+  // рекомендації гостю
+  'recs.kicker': ['Hand-picked', 'Добірка'], 'recs.title': ['Recommended to watch', 'Рекомендації до перегляду'], 'recs.title.by': ['{name} recommends', '{name} радить подивитись'],
+  'recs.text': ['{n} with personal scores and comments. Tap “Add to my list” to keep a title in your own list.',
+    '{n} з особистими оцінками й коментарями. Натисни «Собі у список» — і запис опиниться у твоєму власному списку.'],
+  take: ['Add to my list', 'Собі у список'], 'have.already': ['In your list', 'Уже в тебе'], 'author.score': ['their score', 'оцінка автора'],
+  'recs.empty.title': ['Nothing here yet', 'Тут поки порожньо'], 'recs.empty.text': ['The author has not recommended anything yet.', 'Автор ще нічого не порадив.'],
+  'recs.loading': ['Loading recommendations…', 'Завантажую рекомендації…'], 'recs.missing': ['this list does not exist', 'такого списку немає'],
+  'recs.fail.title': ['The list could not be opened', 'Список не відкрився'],
+  'recs.fail.text': ['{e}. Ask the author to send the link again.', '{e}. Попроси автора надіслати посилання ще раз.'],
+  'title.recs': ['Recommendations', 'Рекомендації'], 'title.recs.by': ['Recommendations by {name}', 'Рекомендації від {name}'],
+  // картка запису
+  'card.aria': ['Title card', 'Картка запису'], trailer: ['trailer', 'трейлер'], cast: ['Cast', 'У ролях'],
+  'card.where': ['Where I stopped', 'Де я зупинився'], 'show.ended': ['The show has ended', 'Серіал завершено'], 'show.ongoing': ['The show is still airing', 'Серіал ще виходить'],
+  'eps.unknown': ['episode count for this season is unknown', 'кількість серій у цьому сезоні невідома'],
+  'card.score': ['My score', 'Моя оцінка'], 'score.none': ['not rated yet', 'ще не оцінено'],
+  'score.1': ['appalling', 'жахливо'], 'score.2': ['horrible', 'дуже погано'], 'score.3': ['bad', 'погано'], 'score.4': ['weak', 'слабко'], 'score.5': ['average', 'середньо'],
+  'score.6': ['fine', 'непогано'], 'score.7': ['good', 'добре'], 'score.8': ['very good', 'дуже добре'], 'score.9': ['great', 'чудово'], 'score.10': ['masterpiece', 'шедевр'],
+  'card.link': ['Where I watch', 'Де дивлюсь'], 'card.link.ph': ['Link to the site or player', 'Посилання на сайт чи плеєр'],
+  'card.rec': ['Recommendation', 'Рекомендація'], 'rec.on': ['Recommended to friends', 'Раджу друзям'], 'rec.off': ['Add to recommendations', 'Додати в рекомендації'],
+  'rec.on.sub': ['Visible through your recommendations link', 'Запис видно за твоїм посиланням на рекомендації'],
+  'rec.off.sub': ['Goes into a list you can share with a link', 'Потрапить у список, яким можна поділитись посиланням'],
+  'rec.note.ph': ['A few words on why it is worth watching', 'Кілька слів, чому варто подивитись'],
+  'card.note': ['Note', 'Нотатка'], 'card.note.ph': ['Just for you: impressions, who to watch with, what is next', 'Для себе: враження, з ким дивитись, що далі'],
+  'card.about': ['About', 'Про тайтл'], 'no.plot': ['No description.', 'Опису немає.'], 'loading.plot': ['Loading description and rating…', 'Тягну опис і оцінку…'],
+  'card.delete': ['Remove from my list', 'Видалити зі списку'], 'card.refresh': ['Refresh data from the catalog', 'Оновити дані з каталогу'],
+  'add.as': ['Add to my list as', 'Покласти у список як'],
+  // пошук
+  'pal.ph': ['Title, IMDb link, or a link to where you watch', 'Назва, посилання IMDb або сайту, де дивишся'],
+  'pal.url.keep': ['will be saved as “where I watch”', 'збережу як «де дивлюсь»'], 'pal.url.drop': ['don’t', 'не треба'],
+  'pal.recent': ['Recent in my list', 'Нещодавнє у списку'], 'pal.mine': ['In my list', 'У моєму списку'],
+  'pal.url.noguess': ['Could not guess the title from the link — type it in.', 'З посилання не вдалося вгадати назву — допиши її вручну.'],
+  'pal.hint': ['Start typing a title in any language, or paste a link.', 'Почни вводити назву будь-якою мовою або встав посилання.'],
+  'pal.none': ['Nothing found. Try the English or original title, or paste an IMDb link.', 'Нічого не знайшлось. Спробуй англійську чи оригінальну назву або встав посилання з IMDb.'],
+  'pal.fail': ['Search is unavailable right now ({e}). Check your connection and try again.', 'Пошук зараз недоступний ({e}). Перевір мережу й спробуй ще раз.'],
+  // поширення
+  'share.title': ['My recommendations', 'Мої рекомендації'],
+  'share.none': ['First open a title and turn on “Add to recommendations”', 'Спершу відкрий запис і ввімкни «Додати в рекомендації»'],
+  'share.live': ['permanent link', 'постійне посилання'], 'share.snap': ['snapshot', 'знімок'],
+  'share.live.text': ['Always shows the current list — add or remove recommendations and guests see the change.', 'Завжди показує свіжий список — додаєш чи прибираєш рекомендації, і гості бачать зміни.'],
+  'share.snap.text': ['The list is packed into the link itself. If you change your recommendations, send a new one.', 'Список зашито просто в посилання. Зміниш рекомендації — надішли нове.'],
+  'share.snap.signin': ['Sign in with Google to make the link permanent.', 'Увійди через Google, і посилання стане постійним.'],
+  'share.preview': ['View as a guest', 'Як бачить гість'],
+  'share.privacy': ['Guests see titles, your scores and recommendation comments. “Where I watch” links and notes are never shared.',
+    'Гість бачить назви, твої оцінки й коментарі до рекомендацій. Посилання «де дивлюсь» і нотатки не передаються.'],
+  'share.signed': ['Signed as “{name}”.', 'Підпис: «{name}».'],
+  // показ на прикладі
+  'demo.title': ['Load demo data?', 'Показати на прикладі?'],
+  'demo.text': ['{n} well-known titles with scores, progress and recommendations will be added so you can see the app in action.',
+    'У список ляже {n} відомих тайтлів з оцінками, прогресом і рекомендаціями — щоб побачити застосунок у дії.'],
+  'demo.sync': ['You are signed in, so they will sync to your other devices.', 'Ти ввійшов в акаунт, тож вони синхронізуються на інші пристрої.'],
+  'demo.removable': ['Any title can be removed.', 'Кожен запис можна видалити.'],
+  'demo.ok': ['Load', 'Заповнити'], 'demo.loading': ['Filling your list…', 'Заповнюю список…'], 'demo.done': ['Done — your list is filled with examples', 'Готово — список заповнено прикладами'],
+  'demo.n1': ['The warmest fantasy in years — about time and memory.', 'Найтепліше фентезі останніх років — про час і памʼять.'],
+  'demo.n2': ['The gold standard of TV drama: not a single wasted episode.', 'Еталон серіальної драми: жодної зайвої серії.'],
+  'demo.n3': ['An ending that delivered.', 'Фінал, який не підвів.'],
+  'demo.n4': ['A kitchen shot like a thriller. Do not watch hungry.', 'Кухня як трилер. Дивитись голодним не раджу.'],
+  'demo.n5': ['Miyazaki at his very best.', 'Міядзакі в найкращій формі.'],
+  // повідомлення
+  'toast.refreshed': ['Data refreshed', 'Дані оновлено'], 'toast.refresh.fail': ['Could not refresh: {e}', 'Не вдалося оновити: {e}'],
+  'toast.last.ep': ['That is the last known episode', 'Це остання відома серія'], 'toast.finished': ['“{title}” — completed', '«{title}» — переглянуто повністю'],
+  'toast.removed': ['“{title}” removed from your list', '«{title}» прибрано зі списку'],
+  'toast.added': ['“{title}” added to your list', '«{title}» додано до списку'], 'toast.added.as': ['“{title}” added — {status}', '«{title}» додано — {status}'],
+  'toast.planned': ['“{title}” — plan to watch', '«{title}» — у планах'], 'toast.taken': ['“{title}” is now in your list', '«{title}» — у твоєму списку'],
+  'toast.exported': ['Backup file saved', 'Копію збережено у файл'], 'import.nolist': ['the file has no list', 'у файлі немає списку'],
+  'toast.imported': ['Loaded: {n}', 'Завантажено: {n}'], 'toast.import.none': ['Nothing new in the file', 'Нового у файлі немає'], 'toast.import.fail': ['Could not read the file: {e}', 'Файл не прочитався: {e}'],
+  'toast.signin.fail': ['Could not sign in ({e}). Please try again.', 'Не вдалося ввійти ({e}). Спробуй ще раз.'],
+  'toast.signedin': ['Signed in — your list is syncing', 'Вхід виконано — список синхронізується'], 'toast.signedout': ['You have signed out', 'Ви вийшли з акаунта'],
+  'toast.name.saved': ['Name saved', 'Підпис збережено'], 'toast.copied': ['Link copied', 'Посилання скопійовано'], 'toast.copy.manual': ['Selected — copy it manually', 'Виділено — скопіюй вручну'],
+  'toast.error': ['Something went wrong. Reload the page if the app stops responding.', 'Щось пішло не так. Онови сторінку, якщо застосунок не відповідає.'],
+  // помилки з глибини
+  'err.too.big': ['the list is too large', 'список завеликий'], 'err.link.big': ['the link is too long', 'посилання завелике'],
+  'err.search': ['search is unavailable', 'пошук недоступний'], 'err.notfound': ['nothing found', 'нічого не знайдено'], 'err.badid': ['this is not an IMDb ID', 'не схоже на ID з IMDb'],
+  'err.nocloud': ['sync is not configured', 'хмару не налаштовано'], 'err.private': ['the browser blocks storage — sign-in is unavailable in private mode', 'браузер не дає зберегти дані — вхід неможливий у приватному режимі'],
+};
+
+const GENRES_UK = {
+  'Action': 'бойовик', 'Adventure': 'пригоди', 'Animation': 'анімація', 'Biography': 'біографія', 'Comedy': 'комедія', 'Crime': 'кримінал',
+  'Documentary': 'документальний', 'Drama': 'драма', 'Family': 'сімейний', 'Fantasy': 'фентезі', 'History': 'історичний', 'Horror': 'жахи',
+  'Mystery': 'детектив', 'Romance': 'романтика', 'Sci-Fi': 'фантастика', 'Sport': 'спорт', 'Thriller': 'трилер', 'War': 'воєнний', 'Western': 'вестерн',
+  'Music': 'музика', 'Musical': 'мюзикл', 'Sci-Fi & Fantasy': 'фантастика', 'Action & Adventure': 'бойовик', 'Reality-TV': 'реаліті',
+  'Talk-Show': 'ток-шоу', 'Game-Show': 'ігрове шоу', 'Short': 'короткий метр', 'News': 'новини', 'Kids': 'дитячий', 'Film-Noir': 'нуар',
+};
+// Жанр мовою інтерфейсу (каталог віддає англійською); у пошуку шукаємо за обома.
+export const genreName = g => (cur ? GENRES_UK[g] || String(g || '').toLowerCase() : String(g || ''));
+export const genreNames = g => [String(g || ''), GENRES_UK[g] || ''];
+
+export function t(key, vars) {
+  const s = (D[key] || [key, key])[cur];
+  return vars ? s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '') : s;
+}
+
+// Слово в потрібній формі числа: англійська має дві форми, українська — три.
+const P = {
+  entry: [['title', 'titles'], ['запис', 'записи', 'записів']],
+  title: [['title', 'titles'], ['тайтл', 'тайтли', 'тайтлів']],
+  season: [['season', 'seasons'], ['сезон', 'сезони', 'сезонів']],
+  episode: [['episode', 'episodes'], ['серія', 'серії', 'серій']],
+};
+export function tn(key, n) {
+  const f = P[key][cur];
+  if (!cur) return Math.abs(n) === 1 ? f[0] : f[1];
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return f[2];
+  if (b === 1) return f[0];
+  if (b >= 2 && b <= 4) return f[1];
+  return f[2];
+}

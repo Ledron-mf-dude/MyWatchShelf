@@ -1,5 +1,5 @@
 // Малює іконки застосунку без сторонніх бібліотек: node tools/icons.mjs
-// Темне тло, три «корінці» на полиці й трикутник відтворення.
+// Знак — кадр кіноплівки з кнопкою відтворення (той самий, що в шапці).
 import { deflateSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
 
@@ -16,25 +16,33 @@ const chunk = (type, data) => {
   return Buffer.concat([head, body, tail]);
 };
 
+const BG = [10, 12, 11], A1 = [100, 227, 200], A2 = [61, 214, 181], HOLE = [28, 96, 82];
+// усе в сітці 64×64; кадр лишає поля, щоб знак пережив «маску» Android
+const inRound = (x, y, x0, y0, x1, y1, r) => {
+  if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+  const cx = Math.max(x0 + r, Math.min(x, x1 - r)), cy = Math.max(y0 + r, Math.min(y, y1 - r));
+  return (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
+};
+function pixel(x, y) {
+  if (!inRound(x, y, 12, 17, 52, 47, 9)) return BG;
+  // трикутник відтворення (27,25) (27,39) (39,32)
+  if (x >= 27 && x <= 39 && Math.abs(y - 32) <= 7 * (39 - x) / 12) return BG;
+  for (const hx of [15.5, 44.5]) for (const hy of [22, 30, 38]) if (inRound(x, y, hx, hy, hx + 4, hy + 4, 1.2)) return HOLE;
+  const k = (x - 12 + y - 17) / 70;      // легкий градієнт по діагоналі
+  return A1.map((c, i) => Math.round(c + (A2[i] - c) * k));
+}
+
 function png(size) {
-  const BG = [17, 21, 18], PETROL = [87, 181, 168], AMBER = [210, 162, 76], INK = [231, 234, 227];
-  const u = size / 64;                       // малюємо в сітці 64×64
-  const rect = (x, y, x0, y0, x1, y1) => x >= x0 * u && x < x1 * u && y >= y0 * u && y < y1 * u;
-  const tri = (x, y) => {                    // трикутник (40,22) (40,40) (54,31)
-    const px = x / u, py = y / u;
-    return px >= 40 && py >= 22 + (px - 40) * 9 / 14 && py <= 40 - (px - 40) * 9 / 14;
-  };
-  const rows = [];
+  const ss = 3, rows = [];               // згладжування: 3×3 проби на піксель
   for (let y = 0; y < size; y++) {
     const row = Buffer.alloc(1 + size * 3);
     for (let x = 0; x < size; x++) {
-      let c = BG;
-      if (rect(x, y, 12, 44, 52, 47)) c = INK;            // полиця
-      else if (rect(x, y, 14, 20, 20, 44)) c = PETROL;    // корінці
-      else if (rect(x, y, 22, 26, 28, 44)) c = AMBER;
-      else if (rect(x, y, 30, 17, 36, 44)) c = PETROL;
-      else if (tri(x, y)) c = INK;
-      row.set(c, 1 + x * 3);
+      const acc = [0, 0, 0];
+      for (let j = 0; j < ss; j++) for (let i = 0; i < ss; i++) {
+        const c = pixel((x + (i + .5) / ss) * 64 / size, (y + (j + .5) / ss) * 64 / size);
+        acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2];
+      }
+      row.set(acc.map(v => Math.round(v / (ss * ss))), 1 + x * 3);
     }
     rows.push(row);
   }

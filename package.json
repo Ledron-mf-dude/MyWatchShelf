@@ -1,7 +1,7 @@
 {
   "name": "mywatchshelf",
-  "version": "2.0.0",
-  "description": "Полиця переглядів — трекер аніме, серіалів і фільмів без власного сервера",
+  "version": "2.1.0",
+  "description": "Kadr — трекер аніме, серіалів і фільмів без власного сервера",
   "private": true,
   "type": "module",
   "scripts": {

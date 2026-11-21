@@ -1,19 +1,12 @@
 // Чиста логіка без DOM і без мережі — її ж ганяють тести (tests/logic.test.mjs).
 
-export const STATUSES = [
-  ['watching', 'дивлюсь'],
-  ['planned', 'у планах'],
-  ['done', 'переглянуто'],
-  ['paused', 'на паузі'],
-  ['dropped', 'кинув'],
-];
-export const KINDS = [
-  ['anime', 'аніме'],
-  ['series', 'серіал'],
-  ['movie', 'фільм'],
-];
-export const STATUS_LABEL = Object.fromEntries(STATUSES);
-export const KIND_LABEL = Object.fromEntries(KINDS);
+import { t, getLang, genreName, genreNames } from './i18n.js';
+export { genreName };
+
+export const STATUS_IDS = ['watching', 'planned', 'done', 'paused', 'dropped'];
+export const KIND_IDS = ['anime', 'series', 'movie'];
+export const statusLabel = id => t('st.' + id);
+export const kindLabel = id => (KIND_IDS.includes(id) ? t('kind.' + id) : '');
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -37,37 +30,17 @@ export const poster = (id, size = 'small') =>
 export const backdrop = (id, size = 'medium') =>
   isId(id) ? `https://images.metahub.space/background/${size}/${id}/img` : '';
 
-// Каталог віддає жанри англійською; показуємо своїми словами.
-const GENRES_UK = {
-  'Action': 'бойовик', 'Adventure': 'пригоди', 'Animation': 'анімація', 'Biography': 'біографія',
-  'Comedy': 'комедія', 'Crime': 'кримінал', 'Documentary': 'документальний', 'Drama': 'драма',
-  'Family': 'сімейний', 'Fantasy': 'фентезі', 'History': 'історичний', 'Horror': 'жахи',
-  'Mystery': 'детектив', 'Romance': 'романтика', 'Sci-Fi': 'фантастика', 'Sport': 'спорт',
-  'Thriller': 'трилер', 'War': 'воєнний', 'Western': 'вестерн', 'Music': 'музика', 'Musical': 'мюзикл',
-  'Sci-Fi & Fantasy': 'фантастика', 'Action & Adventure': 'бойовик', 'Reality-TV': 'реаліті',
-  'Talk-Show': 'ток-шоу', 'Game-Show': 'ігрове шоу', 'Short': 'короткий метр', 'News': 'новини',
-  'Kids': 'дитячий', 'Film-Noir': 'нуар',
-};
 export const CATALOG_GENRES = ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama',
   'Family', 'Fantasy', 'History', 'Horror', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western'];
-export const genreUk = g => GENRES_UK[g] || String(g || '').toLowerCase();
 export function fmtRuntime(r) {
   const n = parseInt(r, 10);
   if (!n) return '';
-  if (n < 60) return `${n} хв`;
-  return `${Math.floor(n / 60)} год${n % 60 ? ' ' + (n % 60) + ' хв' : ''}`;
-}
-
-export function plural(n, one, few, many) {
-  const a = Math.abs(n) % 100, b = a % 10;
-  if (a > 10 && a < 20) return many;
-  if (b === 1) return one;
-  if (b >= 2 && b <= 4) return few;
-  return many;
+  if (n < 60) return `${n} ${t('min')}`;
+  return `${Math.floor(n / 60)} ${t('h')}${n % 60 ? ` ${n % 60} ${t('min')}` : ''}`;
 }
 
 export const fmtRating = x => (typeof x === 'number' && x > 0)
-  ? x.toFixed(1).replace('.', ',') : '';
+  ? (getLang() === 'uk' ? x.toFixed(1).replace('.', ',') : x.toFixed(1)) : '';
 
 // Що людина вставила в поле додавання: ID чи посилання IMDb, чуже посилання
 // (тоді з його хвоста робимо запит, а саме посилання лишаємо як «де дивлюсь»)
@@ -105,10 +78,10 @@ export function sanitize(e) {
   const out = {
     id: e.id,
     type: e.type === 'movie' ? 'movie' : 'series',
-    kind: KIND_LABEL[e.kind] ? e.kind : (e.type === 'movie' ? 'movie' : 'series'),
+    kind: KIND_IDS.includes(e.kind) ? e.kind : (e.type === 'movie' ? 'movie' : 'series'),
     title: str(e.title, 300) || e.id,
     year: str(e.year, 20),
-    status: STATUS_LABEL[e.status] ? e.status : 'planned',
+    status: STATUS_IDS.includes(e.status) ? e.status : 'planned',
     season: int(e.season, 1, 999),
     episode: int(e.episode, 0, 99999),
     score: int(e.score, 0, 10),
@@ -186,7 +159,7 @@ export function progressText(e) {
   if (e.type !== 'series') return '';
   if (!e.episode && e.status === 'planned') return '';
   const total = seasonTotal(e);
-  return `сезон ${e.season || 1} · серія ${e.episode || 0}${total ? '/' + total : ''}`;
+  return t('prog', { s: e.season || 1, e: `${e.episode || 0}${total ? '/' + total : ''}` });
 }
 
 export function filterSort(list, f, sort, dir) {
@@ -197,7 +170,7 @@ export function filterSort(list, f, sort, dir) {
     if (f.status === 'rec') { if (!e.rec) return false; }
     else if (f.status && f.status !== 'all' && e.status !== f.status) return false;
     if (q) {
-      const hay = [e.title, e.year, e.note, KIND_LABEL[e.kind], ...(e.meta?.genres || []), ...(e.meta?.genres || []).map(genreUk)]
+      const hay = [e.title, e.year, e.note, kindLabel(e.kind), ...(e.meta?.genres || []).flatMap(genreNames)]
         .join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
@@ -211,8 +184,8 @@ export function filterSort(list, f, sort, dir) {
     added: e => e.added || 0,
     progress: e => progressPct(e),
   }[sort];
-  if (sort === 'title') out.sort((a, b) => a.title.localeCompare(b.title, 'uk') * dir);
-  else if (key) out.sort((a, b) => (key(a) - key(b)) * dir || a.title.localeCompare(b.title, 'uk'));
+  if (sort === 'title') out.sort((a, b) => a.title.localeCompare(b.title, getLang()) * dir);
+  else if (key) out.sort((a, b) => (key(a) - key(b)) * dir || a.title.localeCompare(b.title, getLang()));
   return out;
 }
 
@@ -283,7 +256,7 @@ export function cleanRecs(data) {
   const items = (Array.isArray(data?.items) ? data.items : []).slice(0, 500)
     .filter(x => x && isId(x.id))
     .map(x => ({
-      id: x.id, k: KIND_LABEL[x.k] ? x.k : 'series', t: str(x.t, 300) || x.id,
+      id: x.id, k: KIND_IDS.includes(x.k) ? x.k : 'series', t: str(x.t, 300) || x.id,
       y: str(x.y, 20), s: int(x.s, 0, 10), n: str(x.n, 500),
       r: Number(x.r) > 0 ? Math.min(10, Number(x.r)) : 0,
     }));
@@ -312,7 +285,7 @@ async function pipe(bytes, stream, limit = MAX_RAW) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.length;
-    if (size > limit) { await reader.cancel(); throw new Error('список завеликий'); }
+    if (size > limit) { await reader.cancel(); throw new Error(t('err.too.big')); }
     chunks.push(value);
   }
   const out = new Uint8Array(size);
@@ -328,7 +301,7 @@ export async function encodeRecs(name, items) {
   return b64u.enc(await pipe(raw, new CompressionStream('deflate-raw')));
 }
 export async function decodeRecs(text) {
-  if (typeof text !== 'string' || text.length > MAX_LINK) throw new Error('посилання завелике');
+  if (typeof text !== 'string' || text.length > MAX_LINK) throw new Error(t('err.link.big'));
   const raw = await pipe(b64u.dec(text), new DecompressionStream('deflate-raw'));
   const c = JSON.parse(new TextDecoder().decode(raw));
   return cleanRecs({

@@ -60,9 +60,7 @@ img{display:block}
   border-bottom:1px solid var(--line2)}
 .logo{display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--text); margin-right:10px}
 .logo b{font-weight:800; font-size:19px; letter-spacing:-.02em}
-.mark{display:flex; align-items:flex-end; gap:3px; height:24px; padding:0 3px 3px; border-bottom:3px solid var(--text); border-radius:1px}
-.mark i{display:block; width:5px; border-radius:2px 2px 0 0; background:var(--accent)}
-.mark i:nth-child(1){height:17px} .mark i:nth-child(2){height:12px; background:var(--amber)} .mark i:nth-child(3){height:20px}
+.logo-mark{width:34px; height:34px; flex:none}
 .nav{display:flex; gap:2px}
 .nav a{padding:8px 14px; border-radius:99px; text-decoration:none; color:var(--muted); font-weight:700; font-size:14px; transition:.15s}
 .nav a:hover{color:var(--text); background:var(--surface2)}

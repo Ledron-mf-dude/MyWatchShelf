@@ -3,9 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   safeUrl, parseInput, sanitize, mergeEntry, nextEpisode, progressText,
-  filterSort, encodeRecs, decodeRecs, cleanRecs, plural,
-  episodesWatched, episodesTotal, progressPct, minutesWatched, insights, fmtRuntime, genreUk,
+  filterSort, encodeRecs, decodeRecs, cleanRecs, fmtRating, statusLabel, kindLabel,
+  episodesWatched, episodesTotal, progressPct, minutesWatched, insights, fmtRuntime, genreName,
 } from '../js/logic.js';
+import { setLang, getLang, t, tn } from '../js/i18n.js';
+
+// Основна частина тестів перевіряє українські підписи; англійські — окремо внизу.
+setLang('uk');
 
 test('safeUrl пускає лише http(s)', () => {
   assert.equal(safeUrl('javascript:alert(1)'), '');
@@ -94,7 +98,7 @@ test('чужий список чиститься', () => {
 });
 
 test('множина', () => {
-  assert.deepEqual([1, 2, 5, 11, 21, 22].map(n => plural(n, 'запис', 'записи', 'записів')),
+  assert.deepEqual([1, 2, 5, 11, 21, 22].map(n => tn('entry', n)),
     ['запис', 'записи', 'записів', 'записів', 'запис', 'записи']);
 });
 
@@ -144,8 +148,8 @@ test('підписи: тривалість і жанри', () => {
   assert.equal(fmtRuntime('155 min'), '2 год 35 хв');
   assert.equal(fmtRuntime('120 min'), '2 год');
   assert.equal(fmtRuntime(''), '');
-  assert.equal(genreUk('Sci-Fi'), 'фантастика');
-  assert.equal(genreUk('Unknown Thing'), 'unknown thing');
+  assert.equal(genreName('Sci-Fi'), 'фантастика');
+  assert.equal(genreName('Unknown Thing'), 'unknown thing');
 });
 
 test('sanitize: трейлер лише як ідентифікатор YouTube', () => {
@@ -153,4 +157,32 @@ test('sanitize: трейлер лише як ідентифікатор YouTube'
   assert.equal(ok.meta.trailer, 'VFkjBy2b50Q');
   const bad = sanitize({ id: 'tt1234567', updated: 1, meta: { trailer: '"><script>' } });
   assert.equal(bad.meta.trailer, '');
+});
+
+test('англійська — мова за замовчуванням: підписи, множина, числа', () => {
+  setLang('en');
+  try {
+    assert.equal(getLang(), 'en');
+    assert.equal(t('nav.library'), 'Library');
+    assert.equal(statusLabel('watching'), 'Watching');
+    assert.equal(kindLabel('movie'), 'movie');
+    assert.deepEqual([0, 1, 2, 21].map(n => tn('episode', n)), ['episodes', 'episode', 'episodes', 'episodes']);
+    assert.equal(progressText({ type: 'series', status: 'watching', season: 2, episode: 5, meta: { seasons: { 2: 12 } } }), 'season 2 · episode 5/12');
+    assert.equal(fmtRuntime('155 min'), '2 h 35 min');
+    assert.equal(fmtRating(8.9), '8.9');
+    assert.equal(genreName('Sci-Fi'), 'Sci-Fi');
+    assert.equal(t('toast.added', { title: 'Dune' }), '“Dune” added to your list');
+    // пошук знаходить жанр і англійською, і українською, хоч би яка мова стояла
+    const list = [{ id: 'tt1', title: 'A', kind: 'anime', status: 'done', meta: { genres: ['Fantasy'] } }];
+    assert.equal(filterSort(list, { q: 'fantasy' }, 'title', 1).length, 1);
+    assert.equal(filterSort(list, { q: 'фентезі' }, 'title', 1).length, 1);
+  } finally { setLang('uk'); }
+});
+
+test('невідома мова чи ключ не ламають інтерфейс', () => {
+  setLang('xx');
+  assert.equal(getLang(), 'en');
+  assert.equal(t('no.such.key'), 'no.such.key');
+  setLang('uk');
+  assert.equal(fmtRating(8.9), '8,9');
 });

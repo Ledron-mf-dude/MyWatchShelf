@@ -1,8 +1,8 @@
 {
-  "name": "Полиця переглядів",
-  "short_name": "Полиця",
-  "description": "Особистий список аніме, фільмів і серіалів",
-  "lang": "uk",
+  "name": "Kadr — watch tracker",
+  "short_name": "Kadr",
+  "description": "Personal tracker for anime, series and movies",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

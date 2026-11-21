@@ -7,6 +7,7 @@
 import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
 import { recItem, cleanRecs } from './logic.js';
+import { t, getLang } from './i18n.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
 const FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
@@ -27,7 +28,7 @@ function set(state) { cloud.state = state; subs.forEach(fn => fn()); }
 // SDK важить чимало, тож вантажимо його лише тим, кому він потрібен:
 // хто входив раніше, хто тисне «Увійти», хто відкрив чужі рекомендації.
 function sdk() {
-  if (!FIREBASE) return Promise.reject(new Error('хмару не налаштовано'));
+  if (!FIREBASE) return Promise.reject(new Error(t('err.nocloud')));
   sdkPromise ??= Promise.all([
     import(CDN + 'firebase-app.js'),
     import(CDN + 'firebase-auth.js'),
@@ -142,7 +143,7 @@ function onUser(c, u) {
 function signIn() {
   const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
   const state = rnd();
-  try { localStorage.setItem(STATE, state); } catch { throw new Error('браузер не дає зберегти дані — вхід неможливий у приватному режимі'); }
+  try { localStorage.setItem(STATE, state); } catch { throw new Error(t('err.private')); }
   const q = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: location.origin === new URL(SITE_URL).origin ? SITE_URL : location.origin + location.pathname,
@@ -161,7 +162,7 @@ async function signOut() {
 
 function recsPayload() {
   const items = store.list().filter(e => e.rec)
-    .sort((a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, 'uk'))
+    .sort((a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, getLang()))
     .map(recItem);
   // Підпис — лише той, що людина вписала сама; ім'я з Google-акаунта
   // без її волі в публічний документ не потрапляє.

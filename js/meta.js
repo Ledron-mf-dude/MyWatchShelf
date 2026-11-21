@@ -3,6 +3,7 @@
 // віддає JSON будь-якій сторінці, ключа не просить. Сам IMDb браузерну
 // сторінку до себе не пускає, тож напряму до нього не ходимо.
 import { isId } from './logic.js';
+import { t } from './i18n.js';
 
 const BASE = 'https://v3-cinemeta.strem.io';
 
@@ -18,7 +19,7 @@ export async function search(q, signal) {
     getJson(`${BASE}/catalog/${t}/top/search=${enc}.json`, signal)
       .then(x => x.metas || [])
       .catch(e => { if (e.name === 'AbortError') throw e; return null; })));
-  if (lists.every(l => l === null)) throw new Error('пошук недоступний');
+  if (lists.every(l => l === null)) throw new Error(t('err.search'));
   const [s, m] = lists.map(l => l || []);
   const mixed = [];
   for (let i = 0; i < Math.max(s.length, m.length); i++) {
@@ -77,7 +78,7 @@ function normalize(m, type) {
 // type невідомий (вставили посилання IMDb) — пробуємо серіал; якщо серій
 // немає, це фільм.
 export async function fetchMeta(id, type, signal) {
-  if (!isId(id)) throw new Error('не схоже на ID з IMDb');
+  if (!isId(id)) throw new Error(t('err.badid'));
   let m = null, t = type;
   if (type !== 'movie') {
     m = (await getJson(`${BASE}/meta/series/${id}.json`, signal)).meta;
@@ -88,7 +89,7 @@ export async function fetchMeta(id, type, signal) {
     m = (await getJson(`${BASE}/meta/movie/${id}.json`, signal)).meta;
     t = 'movie';
   }
-  if (!m || !m.name) throw new Error('нічого не знайдено');
+  if (!m || !m.name) throw new Error(t('err.notfound'));
   return normalize(m, t);
 }
 

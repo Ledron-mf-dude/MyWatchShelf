@@ -1,6 +1,7 @@
 // Спільне для всіх екранів: іконки, постери, повідомлення, діалоги,
 // шар поверх сторінки та реєстр дій (data-act → функція).
 import { esc, poster, isId } from './logic.js';
+import { t } from './i18n.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -40,6 +41,7 @@ const I = {
   download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 16V5M7 9l5-5 5 5M5 20h14"/>',
   logout: '<path d="M14 5h4a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h9"/>',
+  globe: '<circle cx="12" cy="12" r="8.500"/><path d="M3.500 12h17M12 3.500c2.500 2.300 3.800 5.200 3.800 8.500s-1.300 6.200-3.800 8.500c-2.500-2.300-3.800-5.200-3.800-8.500s1.300-6.200 3.800-8.500z"/>',
   sparkle: '<path d="M12 4l1.800 5.200L19 11l-5.200 1.800L12 18l-1.800-5.200L5 11l5.200-1.800z"/>',
 };
 export const icon = (name, cls = '') =>
@@ -115,12 +117,12 @@ function modal(html, resolveWith) {
     (box.querySelector('input') || box.querySelector('[data-ok]')).focus();
   });
 }
-export const confirmBox = ({ title, text = '', ok = 'Так', danger = false }) => modal(`
+export const confirmBox = ({ title, text = '', ok = 'OK', danger = false }) => modal(`
   <h2>${esc(title)}</h2>${text ? `<p>${esc(text)}</p>` : ''}
-  <div class="modal-act"><button class="btn" data-cancel>Скасувати</button>
+  <div class="modal-act"><button class="btn" data-cancel>${t('cancel')}</button>
   <button class="btn ${danger ? 'danger-fill' : 'primary'}" data-ok>${esc(ok)}</button></div>`, (_, yes) => yes);
-export const promptBox = ({ title, text = '', value = '', placeholder = '', ok = 'Зберегти' }) => modal(`
+export const promptBox = ({ title, text = '', value = '', placeholder = '', ok = t('save') }) => modal(`
   <h2>${esc(title)}</h2>${text ? `<p>${esc(text)}</p>` : ''}
   <input class="inp" maxlength="80" value="${esc(value)}" placeholder="${esc(placeholder)}">
-  <div class="modal-act"><button class="btn" data-cancel>Скасувати</button>
+  <div class="modal-act"><button class="btn" data-cancel>${t('cancel')}</button>
   <button class="btn primary" data-ok>${esc(ok)}</button></div>`, (box, yes) => (yes ? box.querySelector('input').value.trim() : null));

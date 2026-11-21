@@ -1,5 +1,6 @@
 // Каркас застосунку: шапка, навігація, маршрути, глобальні події.
-import { esc, plural, decodeRecs } from './logic.js';
+import { esc, decodeRecs } from './logic.js';
+import { t, tn, setLang, getLang, LANGS } from './i18n.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
 import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox } from './ui.js';
@@ -10,36 +11,49 @@ import {
 } from './panel.js';
 
 const S = store.settings;
-const NAV = [['home', 'Головна', 'home'], ['library', 'Бібліотека', 'library'], ['discover', 'Каталог', 'compass'], ['stats', 'Статистика', 'chart']];
+const NAV = [['home', 'home'], ['library', 'library'], ['discover', 'compass'], ['stats', 'chart']];
 const top = $('#top'), tabs = $('#tabs');
+// Знак: кадр кіноплівки з кнопкою відтворення.
+const LOGO = `<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="var(--accent-2)"/><stop offset="1" stop-color="var(--accent)"/></linearGradient></defs>
+  <rect x="1" y="4" width="30" height="24" rx="7" fill="url(#lg)"/>
+  <g fill="var(--bg)" opacity=".55"><rect x="4" y="8" width="3" height="3" rx="1"/><rect x="4" y="14.500" width="3" height="3" rx="1"/><rect x="4" y="21" width="3" height="3" rx="1"/>
+  <rect x="25" y="8" width="3" height="3" rx="1"/><rect x="25" y="14.500" width="3" height="3" rx="1"/><rect x="25" y="21" width="3" height="3" rx="1"/></g>
+  <path d="M13 10.500v11l9-5.500z" fill="var(--bg)"/></svg>`;
 
 function applyTheme() {
   if (S.theme === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = S.theme;
 }
+function applyLang() {
+  setLang(S.lang);
+  document.documentElement.lang = getLang();
+  $('.skip').textContent = t('skip');
+}
+const stateText = () => t('state.' + (cloud.available ? cloud.state : 'local'));
+const initial = u => esc((u.name || u.email || '?').trim()[0].toUpperCase());
 
 // ── шапка й нижня навігація ───────────────────────────────────────
 function drawChrome() {
   const recs = view.route === 'recs';
   const here = r => (view.route === r ? 'on' : '');
+  const href = r => `#/${r === 'home' ? '' : r}`;
   const u = cloud.user;
-  const stateText = !cloud.available ? 'лише цей пристрій'
-    : { off: '', connecting: 'з’єднання…', synced: 'синхронізовано', offline: 'офлайн', error: 'помилка синхронізації' }[cloud.state];
   top.innerHTML = `
-    <a class="logo" href="#/" aria-label="Полиця — на головну"><span class="mark"><i></i><i></i><i></i></span><b>Полиця</b></a>
-    ${recs ? '<span class="grow"></span>' : `<nav class="nav" aria-label="Розділи">${NAV.map(([r, l]) => `<a class="${here(r)}" href="#/${r === 'home' ? '' : r}">${l}</a>`).join('')}</nav>
-    <button class="searchbtn" data-act="add" aria-label="Пошук і додавання">${icon('search')}<span>Пошук і додавання</span><kbd>/</kbd></button>`}
-    ${recs ? `<a class="btn" href="./">${icon('library')}Моя полиця</a>` : `
-    <button class="btn primary addbtn" data-act="add">${icon('plus')}<span>Додати</span></button>
+    <a class="logo" href="#/" aria-label="${t('brand')}">${LOGO}<b>${t('brand')}</b></a>
+    ${recs ? '<span class="grow"></span>' : `<nav class="nav" aria-label="${t('sections')}">${NAV.map(([r]) => `<a class="${here(r)}" href="${href(r)}">${t('nav.' + r)}</a>`).join('')}</nav>
+    <button class="searchbtn" data-act="add" aria-label="${t('search.btn')}">${icon('search')}<span>${t('search.btn')}</span><kbd>/</kbd></button>`}
+    ${recs ? `<a class="btn" href="./">${icon('library')}${t('my.shelf')}</a>` : `
+    <button class="btn primary addbtn" data-act="add">${icon('plus')}<span>${t('add')}</span></button>
     <div class="dd">
-      <button class="acct st-${cloud.available ? cloud.state : 'local'}" data-act="menu" aria-haspopup="true" aria-label="Акаунт і меню" title="${esc(stateText)}">
-        ${u ? `<span class="avatar">${esc((u.name || u.email || '?').trim()[0].toUpperCase())}</span>` : icon('user')}<i class="state"></i></button>
+      <button class="acct st-${cloud.available ? cloud.state : 'local'}" data-act="menu" aria-haspopup="true" aria-label="${t('account.aria')}" title="${esc(stateText())}">
+        ${u ? `<span class="avatar">${initial(u)}</span>` : icon('user')}<i class="state"></i></button>
       <div class="pop menu" id="menu" hidden></div>
     </div>`}`;
   tabs.hidden = recs;
+  const tab = ([r, ic]) => `<a class="tab ${here(r)}" href="${href(r)}">${icon(ic)}<span>${t('nav.' + r)}</span></a>`;
   tabs.innerHTML = recs ? '' : NAV.slice(0, 2).map(tab).join('')
-    + `<button class="tab add" data-act="add" aria-label="Додати">${icon('plus')}</button>` + NAV.slice(2).map(tab).join('');
-  function tab([r, l, ic]) { return `<a class="tab ${here(r)}" href="#/${r === 'home' ? '' : r}">${icon(ic)}<span>${l}</span></a>`; }
+    + `<button class="tab add" data-act="add" aria-label="${t('add')}">${icon('plus')}</button>` + NAV.slice(2).map(tab).join('');
 }
 
 function toggleMenu(force) {
@@ -48,21 +62,21 @@ function toggleMenu(force) {
   const open = force ?? menu.hidden;
   if (open) {
     const u = cloud.user, nRec = store.list().filter(e => e.rec).length;
-    const state = { off: 'не ввійшов', connecting: 'з’єднання…', synced: 'синхронізовано', offline: 'офлайн — зміни збережено тут', error: 'помилка синхронізації' }[cloud.state];
     menu.innerHTML = `
       ${cloud.available ? (u
-        ? `<div class="who"><span class="avatar lg">${esc((u.name || u.email || '?').trim()[0].toUpperCase())}</span><div><b>${esc(u.name || 'Акаунт Google')}</b><small>${esc(u.email)}</small><em class="st-${cloud.state}"><i class="state"></i>${state}</em></div></div>`
-        : `<div class="who signin"><p>Увійди, щоб полиця синхронізувалась між телефоном і компʼютером.</p><button class="btn primary" data-act="signin">${icon('user')}Увійти через Google</button></div>`)
-        : '<div class="who"><p>Список зберігається в цьому браузері.</p></div>'}
+        ? `<div class="who"><span class="avatar lg">${initial(u)}</span><div><b>${esc(u.name || t('menu.google'))}</b><small>${esc(u.email)}</small><em class="st-${cloud.state}"><i class="state"></i>${stateText()}</em></div></div>`
+        : `<div class="who signin"><p>${t('menu.signin.text')}</p><button class="btn primary" data-act="signin">${icon('user')}${t('menu.signin')}</button></div>`)
+        : `<div class="who"><p>${t('menu.local.text')}</p></div>`}
       <hr>
-      <button data-act="share">${icon('share')}Поділитись рекомендаціями<small>${nRec}</small></button>
-      <button data-act="name">${icon('user')}Підпис у рекомендаціях<small>${esc(S.name || 'не вказано')}</small></button>
+      <button data-act="share">${icon('share')}${t('menu.share')}<small>${nRec}</small></button>
+      <button data-act="name">${icon('user')}${t('menu.name')}<small>${esc(S.name || t('not.set'))}</small></button>
       <hr>
-      <button data-act="theme">${icon('sun')}Тема<small>${{ auto: 'як у системі', light: 'світла', dark: 'темна' }[S.theme]}</small></button>
-      <button data-act="demo">${icon('sparkle')}Показати на прикладі</button>
-      <button data-act="export">${icon('download')}Зберегти копію у файл</button>
-      <button data-act="import">${icon('upload')}Завантажити з файла…</button>
-      ${u ? `<hr><button data-act="signout">${icon('logout')}Вийти</button>` : ''}`;
+      <button data-act="lang">${icon('globe')}${t('menu.lang')}<small>${LANGS.find(l => l[0] === getLang())[1]}</small></button>
+      <button data-act="theme">${icon('sun')}${t('menu.theme')}<small>${t('theme.' + S.theme)}</small></button>
+      <button data-act="demo">${icon('sparkle')}${t('demo')}</button>
+      <button data-act="export">${icon('download')}${t('menu.export')}</button>
+      <button data-act="import">${icon('upload')}${t('menu.import')}</button>
+      ${u ? `<hr><button data-act="signout">${icon('logout')}${t('menu.signout')}</button>` : ''}`;
   }
   menu.hidden = !open;
 }
@@ -70,37 +84,41 @@ function toggleMenu(force) {
 // ── маршрути ──────────────────────────────────────────────────────
 const RENDER = { home: renderHome, library: renderLibrary, discover: renderDiscover, stats: renderStats, recs: renderRecs };
 function draw() { RENDER[view.route](); }
+function setTitle() {
+  document.title = view.route === 'recs'
+    ? `${view.recs?.name ? t('title.recs.by', { name: view.recs.name }) : t('title.recs')} · ${t('brand')}`
+    : view.route === 'home' ? `${t('brand')} — ${t('brand.long')}` : `${t('nav.' + view.route)} · ${t('brand')}`;
+}
 async function route() {
   closeOverlay();
   const raw = location.hash.slice(1);
   if (raw.startsWith('u=') || raw.startsWith('r=')) {
     view.route = 'recs';
     drawChrome();
-    app.innerHTML = '<div class="empty"><b>Завантажую рекомендації…</b></div>';
+    app.innerHTML = `<div class="empty"><b>${t('recs.loading')}</b></div>`;
     try {
       view.recs = raw.startsWith('u=') ? await cloud.loadPublic(raw.slice(2).replace(/[^\w-]/g, '')) : await decodeRecs(raw.slice(2));
-      if (!view.recs) throw new Error('такого списку немає');
-      document.title = `Рекомендації${view.recs.name ? ' від ' + view.recs.name : ''} · Полиця`;
+      if (!view.recs) throw new Error(t('recs.missing'));
+      setTitle();
       renderRecs();
     } catch (err) {
-      app.innerHTML = `<div class="empty">${icon('link')}<b>Список не відкрився</b><p>${esc(err.message || 'невідома помилка')}. Попроси автора надіслати посилання ще раз.</p><a class="btn primary" href="./">На мою полицю</a></div>`;
+      app.innerHTML = `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.fail.text', { e: esc(err.message || '') })}</p><a class="btn primary" href="./">${t('my.shelf')}</a></div>`;
     }
     return;
   }
   const r = raw.replace(/^\//, '');
   view.route = RENDER[r] && r !== 'recs' ? r : 'home';
   view.recs = null;
-  document.title = { home: 'Полиця переглядів', library: 'Бібліотека · Полиця', discover: 'Каталог · Полиця', stats: 'Статистика · Полиця' }[view.route];
-  drawChrome(); draw();
+  setTitle(); drawChrome(); draw();
   scrollTo(0, 0);
 }
 
 // ── дії ───────────────────────────────────────────────────────────
 function exportFile() {
   const blob = new Blob([JSON.stringify({ app: 'MyWatchShelf', version: 1, entries: store.raw() }, null, 1)], { type: 'application/json' });
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `watchshelf-${new Date().toISOString().slice(0, 10)}.json` });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `kadr-${new Date().toISOString().slice(0, 10)}.json` });
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast('Копію збережено у файл');
+  toast(t('toast.exported'));
 }
 function importFile() {
   const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'application/json,.json' });
@@ -108,10 +126,10 @@ function importFile() {
     try {
       const data = JSON.parse(await inp.files[0].text());
       const list = Array.isArray(data) ? data : data.entries;
-      if (!Array.isArray(list)) throw new Error('у файлі немає списку');
+      if (!Array.isArray(list)) throw new Error(t('import.nolist'));
       const n = store.importMany(list);
-      toast(n ? `Завантажено: ${n} ${plural(n, 'запис', 'записи', 'записів')}` : 'Нового у файлі немає');
-    } catch (err) { toast('Файл не прочитався: ' + err.message, { ms: 4500 }); }
+      toast(n ? t('toast.imported', { n: `${n} ${tn('entry', n)}` }) : t('toast.import.none'));
+    } catch (err) { toast(t('toast.import.fail', { e: err.message }), { ms: 4500 }); }
   };
   inp.click();
 }
@@ -122,17 +140,22 @@ on({
   close: closeOverlay,
   add: openPalette,
   menu: () => toggleMenu(),
-  signin: () => { try { cloud.signIn(); } catch (err) { toast('Не вдалося ввійти: ' + err.message, { ms: 5000 }); } },
+  signin: () => { try { cloud.signIn(); } catch (err) { toast(t('toast.signin.fail', { e: err.message }), { ms: 5000 }); } },
   signout: async () => {
-    if (await confirmBox({ title: 'Вийти з акаунта?', text: 'Список лишиться на цьому пристрої, але перестане синхронізуватись.', ok: 'Вийти' })) {
-      await cloud.signOut(); toast('Ви вийшли з акаунта');
+    if (await confirmBox({ title: t('signout.title'), text: t('signout.text'), ok: t('menu.signout') })) {
+      await cloud.signOut(); toast(t('toast.signedout'));
     }
   },
   'hide-hint': () => { store.setSetting('hint', false); draw(); },
   theme: () => { store.setSetting('theme', { auto: 'light', light: 'dark', dark: 'auto' }[S.theme]); applyTheme(); toggleMenu(true); return 'keep'; },
+  lang: () => {
+    store.setSetting('lang', getLang() === 'en' ? 'uk' : 'en');
+    applyLang(); setTitle(); drawChrome(); draw(); toggleMenu(true);
+    return 'keep';
+  },
   name: async () => {
-    const v = await promptBox({ title: 'Підпис у рекомендаціях', text: 'Його побачать усі, кому ти даси посилання на свої рекомендації.', value: S.name || cloud.user?.name || '', placeholder: 'Наприклад, Костя' });
-    if (v !== null) { store.setSetting('name', v.slice(0, 80)); cloud.publishNow().catch(() => {}); toast('Підпис збережено'); }
+    const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: S.name || cloud.user?.name || '', placeholder: t('name.ph') });
+    if (v !== null) { store.setSetting('name', v.slice(0, 80)); cloud.publishNow().catch(() => {}); toast(t('toast.name.saved')); }
   },
   share: openShare,
   demo: loadDemo,
@@ -145,16 +168,16 @@ on({
   'quick-add': (v, el) => {
     const x = recall(idOf(el));
     if (!x || !addItem(x)) return;
-    toast(`«${x.title}» — у планах`, { label: 'Відкрити', action: () => openCard(x.id) });
+    toast(t('toast.planned', { title: x.title }), { label: t('open'), action: () => openCard(x.id) });
   },
   take: (v, el) => {
     const x = recall(idOf(el));
     if (!x || !addItem(x)) return;
-    toast(`«${x.title}» — на твоїй полиці`);
+    toast(t('toast.taken', { title: x.title }));
     if (ui.overlay) closeOverlay();
   },
   'add-as': v => addFromPreview(v),
-  rail: (v, el) => { const t = $('.rail-track', el.closest('.rail')); t.scrollBy({ left: +v * t.clientWidth * 0.85, behavior: 'smooth' }); },
+  rail: (v, el) => { const tr = $('.rail-track', el.closest('.rail')); tr.scrollBy({ left: +v * tr.clientWidth * 0.85, behavior: 'smooth' }); },
   // бібліотека
   kind: v => { view.f.kind = v; updateLibrary(); },
   status: v => { view.f.status = v; updateLibrary(); },
@@ -170,10 +193,10 @@ on({
   pick: v => pickResult(+v),
   'drop-url': dropUrl,
   copy: async () => {
-    try { await navigator.clipboard.writeText(ui.overlay.link); toast('Посилання скопійовано'); }
-    catch { $('.linkbox', layer).select(); toast('Виділено — скопіюй вручну'); }
+    try { await navigator.clipboard.writeText(ui.overlay.link); toast(t('toast.copied')); }
+    catch { $('.linkbox', layer).select(); toast(t('toast.copy.manual')); }
   },
-  'native-share': () => navigator.share({ title: 'Мої рекомендації', url: ui.overlay.link }).catch(() => {}),
+  'native-share': () => navigator.share({ title: t('share.title'), url: ui.overlay.link }).catch(() => {}),
 });
 
 document.addEventListener('click', ev => {
@@ -199,9 +222,9 @@ function refresh() {
   else if (view.route === 'discover') drawDiscover();
   else if (view.route === 'home') {
     // ряди після перемальовування лишаються там, де їх прогорнули
-    const pos = new Map($$('.rail').map(r => [$('h2', r).textContent, $('.rail-track', r).scrollLeft]));
+    const pos = new Map($$('.rail').map(r => [r.dataset.rail, $('.rail-track', r).scrollLeft]));
     draw();
-    $$('.rail').forEach(r => { const x = pos.get($('h2', r).textContent); if (x) $('.rail-track', r).scrollLeft = x; });
+    $$('.rail').forEach(r => { const x = pos.get(r.dataset.rail); if (x) $('.rail-track', r).scrollLeft = x; });
   } else draw();
 }
 // Поки відкрита картка, сторінку під нею не перемальовуємо (щоб не
@@ -222,12 +245,13 @@ let greeted = false;
 cloud.onChange(() => {
   drawChrome();
   if (view.route === 'home' && !ui.overlay) draw();
-  if (cloud.lastError) { toast(`Не вдалося ввійти (${cloud.lastError}). Спробуй ще раз.`, { ms: 5000 }); cloud.lastError = ''; }
-  if (cloud.justSignedIn && cloud.state === 'synced' && !greeted) { greeted = true; toast('Вхід виконано — полиця синхронізується'); }
+  if (cloud.lastError) { toast(t('toast.signin.fail', { e: cloud.lastError }), { ms: 5000 }); cloud.lastError = ''; }
+  if (cloud.justSignedIn && cloud.state === 'synced' && !greeted) { greeted = true; toast(t('toast.signedin')); }
 });
-addEventListener('error', () => toast('Щось пішло не так. Онови сторінку, якщо застосунок не відповідає.', { ms: 5000 }));
+addEventListener('error', () => toast(t('toast.error'), { ms: 5000 }));
 
 applyTheme();
+applyLang();
 cloud.init();
 addEventListener('hashchange', route);
 route();

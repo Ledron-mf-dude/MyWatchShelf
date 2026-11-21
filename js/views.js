@@ -1,8 +1,9 @@
 // Екрани: головна, бібліотека, каталог, статистика, чужі рекомендації.
 import {
-  STATUSES, STATUS_LABEL, KIND_LABEL, CATALOG_GENRES, esc, safeUrl, backdrop, plural, fmtRating, fmtRuntime,
-  genreUk, progressText, progressPct, filterSort, insights, episodesWatched, episodesTotal,
+  STATUS_IDS, KIND_IDS, CATALOG_GENRES, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtRuntime,
+  genreName, progressText, progressPct, filterSort, insights, episodesWatched, episodesTotal,
 } from './logic.js';
+import { t, tn } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
@@ -16,10 +17,9 @@ export const view = {
   recs: null,
   home: null,   // добірки каталогу для головної, щоб не тягнути їх щоразу
 };
-const KIND_PLURAL = { anime: 'Аніме', series: 'Серіали', movie: 'Фільми' };
-const SORTS = [['updated', 'Нещодавно змінені'], ['added', 'Нещодавно додані'], ['score', 'Моя оцінка'], ['imdb', 'Оцінка IMDb'],
-  ['progress', 'Прогрес'], ['title', 'Назва'], ['year', 'Рік']];
+const SORTS = ['updated', 'added', 'score', 'imdb', 'progress', 'title', 'year'];
 const canPlus = e => e.type === 'series' && e.status !== 'done' && e.status !== 'dropped';
+const count = (key, n) => `${n} ${tn(key, n)}`;
 
 // ── картки ────────────────────────────────────────────────────────
 export function entryCard(e, { rank = 0 } = {}) {
@@ -28,16 +28,16 @@ export function entryCard(e, { rank = 0 } = {}) {
     ${rank ? `<span class="rank" aria-hidden="true">${rank}</span>` : ''}
     <div class="pc-body">
       <div class="pc-img">${ph(e.id, e.title, 'medium', 'fill')}
-        <span class="pc-top">${e.score ? `<b class="badge score">${icon('starFill')}${e.score}</b>` : ''}${e.rec ? '<b class="badge rec">раджу</b>' : ''}</span>
+        <span class="pc-top">${e.score ? `<b class="badge score">${icon('starFill')}${e.score}</b>` : ''}${e.rec ? `<b class="badge rec">${t('badge.rec')}</b>` : ''}</span>
         ${m.imdb ? `<span class="badge imdb">IMDb ${fmtRating(m.imdb)}</span>` : ''}
         <div class="pc-acts">
-          ${url ? `<a class="rb solid" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Дивитись" aria-label="Дивитись">${icon('play')}</a>` : ''}
-          ${canPlus(e) ? '<button class="rb solid" data-act="plus" title="Наступна серія">+1</button>' : ''}
+          ${url ? `<a class="rb solid" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${t('watch')}" aria-label="${t('watch')}">${icon('play')}</a>` : ''}
+          ${canPlus(e) ? `<button class="rb solid" data-act="plus" title="${t('next.ep')}">+1</button>` : ''}
         </div>
         ${e.type === 'series' && pct > 0 && pct < 100 ? `<i class="pc-bar" style="--w:${pct}%"></i>` : ''}
       </div>
       <h3>${esc(e.title)}</h3>
-      <p><i class="dot st-${e.status}"></i>${esc(progressText(e) || STATUS_LABEL[e.status])}</p>
+      <p><i class="dot st-${e.status}"></i>${esc(progressText(e) || statusLabel(e.status))}</p>
     </div>
   </article>`;
 }
@@ -50,42 +50,42 @@ export function catalogCard(x, { rank = 0 } = {}) {
       <div class="pc-img">${ph(x.id, x.title, 'medium', 'fill')}
         ${m.imdb ? `<span class="badge imdb">IMDb ${fmtRating(m.imdb)}</span>` : ''}
         <div class="pc-acts show">${have
-          ? `<span class="rb solid on" title="Уже на полиці">${icon('check')}</span>`
-          : `<button class="rb solid" data-act="quick-add" title="На полицю" aria-label="Додати на полицю">${icon('plus')}</button>`}</div>
+          ? `<span class="rb solid on" title="${t('on.shelf.already')}">${icon('check')}</span>`
+          : `<button class="rb solid" data-act="quick-add" title="${t('to.shelf')}" aria-label="${t('to.shelf')}">${icon('plus')}</button>`}</div>
       </div>
       <h3>${esc(x.title)}</h3>
-      <p>${esc([x.year, KIND_LABEL[x.kind]].filter(Boolean).join(' · '))}</p>
+      <p>${esc([x.year, kindLabel(x.kind)].filter(Boolean).join(' · '))}</p>
     </div>
   </article>`;
 }
 const skeletons = n => Array.from({ length: n }, () => '<div class="pc skel"><div class="pc-body"><div class="pc-img"></div><h3>&nbsp;</h3><p>&nbsp;</p></div></div>').join('');
 
-function rail(title, cards, { ranked = false, link = '' } = {}) {
-  return `<section class="rail ${ranked ? 'ranked' : ''}">
-    <header><h2>${esc(title)}</h2>${link}<span class="grow"></span>
-      <button class="rb ghost" data-act="rail" data-v="-1" aria-label="Назад">${icon('chevL')}</button>
-      <button class="rb ghost" data-act="rail" data-v="1" aria-label="Далі">${icon('chevR')}</button></header>
+function rail(id, cards, { ranked = false, link = '' } = {}) {
+  return `<section class="rail ${ranked ? 'ranked' : ''}" data-rail="${id}">
+    <header><h2>${t('rail.' + id)}</h2>${link}<span class="grow"></span>
+      <button class="rb ghost" data-act="rail" data-v="-1" aria-label="${t('back')}">${icon('chevL')}</button>
+      <button class="rb ghost" data-act="rail" data-v="1" aria-label="${t('forward')}">${icon('chevR')}</button></header>
     <div class="rail-track">${cards}</div>
   </section>`;
 }
 
 function hintHtml() {
   const show = cloud.available && !cloud.user && cloud.state === 'off' && S.hint && store.list().length > 0;
-  return show ? `<div class="hint">${icon('sparkle')}<div><b>Список живе лише в цьому браузері</b>
-    <p>Увійди через Google — і полиця сама з’явиться на телефоні та інших пристроях.</p></div>
-    <div class="hint-act"><button class="btn primary" data-act="signin">Увійти</button>
-    <button class="btn ghost" data-act="hide-hint">Не зараз</button></div></div>` : '';
+  return show ? `<div class="hint">${icon('sparkle')}<div><b>${t('hint.title')}</b>
+    <p>${t('hint.text')}</p></div>
+    <div class="hint-act"><button class="btn primary" data-act="signin">${t('signin')}</button>
+    <button class="btn ghost" data-act="hide-hint">${t('not.now')}</button></div></div>` : '';
 }
 
 // ── головна ───────────────────────────────────────────────────────
 function heroHtml(e) {
   if (!e) {
     return `<section class="hero empty"><div class="hero-in">
-      <span class="kicker">Полиця переглядів</span>
-      <h1>Усе, що ти дивишся, — в одному місці</h1>
-      <p class="hero-plot">Аніме, серіали й фільми з оцінками IMDb. Памʼятає серію, на якій ти зупинився, твої оцінки й посилання, де дивишся, — і синхронізується між пристроями.</p>
-      <div class="hero-act"><button class="btn primary lg" data-act="add">${icon('plus')}Додати перший запис</button>
-        <button class="btn lg" data-act="demo">${icon('sparkle')}Показати на прикладі</button></div>
+      <span class="kicker">${t('brand.long')}</span>
+      <h1>${t('hero.empty.title')}</h1>
+      <p class="hero-plot">${t('hero.empty.text')}</p>
+      <div class="hero-act"><button class="btn primary lg" data-act="add">${icon('plus')}${t('add.first')}</button>
+        <button class="btn lg" data-act="demo">${icon('sparkle')}${t('demo')}</button></div>
     </div></section>`;
   }
   const m = e.meta || {}, url = safeUrl(e.url), pct = progressPct(e);
@@ -93,17 +93,17 @@ function heroHtml(e) {
   return `<section class="hero" data-img data-id="${e.id}">
     <img class="hero-bg" alt="" src="${backdrop(e.id)}">
     <div class="hero-in">
-      <span class="kicker">${e.status === 'watching' || e.status === 'paused' ? 'Продовжити перегляд' : 'З твоєї полиці'}</span>
+      <span class="kicker">${e.status === 'watching' || e.status === 'paused' ? t('rail.continue') : t('hero.from.shelf')}</span>
       <h1>${esc(e.title)}</h1>
-      <p class="hero-meta">${[KIND_LABEL[e.kind], e.year, fmtRuntime(m.runtime)].filter(Boolean).map(esc).join('<i>·</i>')}
+      <p class="hero-meta">${[kindLabel(e.kind), e.year, fmtRuntime(m.runtime)].filter(Boolean).map(esc).join('<i>·</i>')}
         ${m.imdb ? `<b class="badge imdb static">IMDb ${fmtRating(m.imdb)}</b>` : ''}${e.score ? `<b class="badge score static">${icon('starFill')}${e.score}</b>` : ''}</p>
       ${m.plot ? `<p class="hero-plot">${esc(m.plot)}</p>` : ''}
       ${e.type === 'series' ? `<div class="hero-prog"><i class="bar" style="--w:${pct}%"></i>
-        <span>${esc(progressText(e) || 'ще не починав')}${total ? ` · ${episodesWatched(e)} з ${total} серій` : ''}</span></div>` : ''}
+        <span>${esc(progressText(e) || t('not.started'))}${total ? ` · ${t('eps.of', { a: episodesWatched(e), b: total })}` : ''}</span></div>` : ''}
       <div class="hero-act">
-        ${url ? `<a class="btn primary lg" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${icon('play')}Дивитись</a>` : ''}
-        ${canPlus(e) ? `<button class="btn lg ${url ? '' : 'primary'}" data-act="plus">${icon('check')}Серію переглянуто</button>` : ''}
-        <button class="btn lg ghost" data-act="open">Картка</button>
+        ${url ? `<a class="btn primary lg" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${icon('play')}${t('watch')}</a>` : ''}
+        ${canPlus(e) ? `<button class="btn lg ${url ? '' : 'primary'}" data-act="plus">${icon('check')}${t('ep.watched')}</button>` : ''}
+        <button class="btn lg ghost" data-act="open">${t('details')}</button>
       </div>
     </div>
   </section>`;
@@ -116,20 +116,20 @@ export function renderHome() {
   const top = list.filter(e => e.score >= 7).sort((a, b) => b.score - a.score || byUpd(a, b)).slice(0, 10);
   const planned = list.filter(e => e.status === 'planned').sort(byUpd);
   const feature = watching[0] || top[0] || [...list].sort(byUpd)[0];
-  const more = r => `<a class="more" href="#/${r}">Усе ${icon('chevR')}</a>`;
+  const more = r => `<a class="more" href="#/${r}">${t('all')} ${icon('chevR')}</a>`;
   app.innerHTML = heroHtml(feature) + hintHtml()
-    + (watching.length > 1 ? rail('Продовжити перегляд', watching.map(e => entryCard(e)).join(''), { link: more('library') }) : '')
-    + (top.length ? rail('Мій топ', top.map((e, i) => entryCard(e, { rank: i + 1 })).join(''), { ranked: true }) : '')
-    + (planned.length ? rail('У планах', planned.slice(0, 20).map(e => entryCard(e)).join(''), { link: more('library') }) : '')
+    + (watching.length > 1 ? rail('continue', watching.map(e => entryCard(e)).join(''), { link: more('library') }) : '')
+    + (top.length ? rail('top', top.map((e, i) => entryCard(e, { rank: i + 1 })).join(''), { ranked: true }) : '')
+    + (planned.length ? rail('planned', planned.slice(0, 20).map(e => entryCard(e)).join(''), { link: more('library') }) : '')
     + '<div id="home-catalog"></div>';
   drawHomeCatalog();
 }
 function drawHomeCatalog() {
   const box = $('#home-catalog');
   if (!box) return;
-  const more = `<a class="more" href="#/discover">Каталог ${icon('chevR')}</a>`;
+  const more = `<a class="more" href="#/discover">${t('nav.discover')} ${icon('chevR')}</a>`;
   if (!view.home) {
-    box.innerHTML = rail('Популярне зараз', skeletons(8), { ranked: true });
+    box.innerHTML = rail('popular', skeletons(8), { ranked: true });
     if (view.home === null) {
       view.home = undefined;   // «уже вантажимо»
       Promise.all([catalog.catalog({ type: 'series' }), catalog.catalog({ type: 'series', genre: 'Animation' }), catalog.catalog({ type: 'movie' })])
@@ -139,28 +139,28 @@ function drawHomeCatalog() {
     }
     return;
   }
-  if (view.home.error) { box.innerHTML = '<p class="muted pad">Каталог зараз недоступний — перевір мережу.</p>'; return; }
+  if (view.home.error) { box.innerHTML = `<p class="muted pad">${t('catalog.down')}</p>`; return; }
   const h = view.home;
-  box.innerHTML = rail('Популярне зараз', h.series.slice(0, 10).map((x, i) => catalogCard(x, { rank: i + 1 })).join(''), { ranked: true, link: more })
-    + (h.anime.length ? rail('Популярне аніме', h.anime.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more }) : '')
-    + rail('Фільми, про які говорять', h.movies.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more });
+  box.innerHTML = rail('popular', h.series.slice(0, 10).map((x, i) => catalogCard(x, { rank: i + 1 })).join(''), { ranked: true, link: more })
+    + (h.anime.length ? rail('anime', h.anime.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more }) : '')
+    + rail('movies', h.movies.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more });
 }
 
 // ── бібліотека ────────────────────────────────────────────────────
 function rowHtml(e) {
   const m = e.meta || {}, url = safeUrl(e.url), pct = progressPct(e);
-  const line = [STATUS_LABEL[e.status], progressText(e), ...(m.genres || []).slice(0, 3).map(genreUk), fmtRuntime(m.runtime)].filter(Boolean).join(' · ');
+  const line = [statusLabel(e.status), progressText(e), ...(m.genres || []).slice(0, 3).map(genreName), fmtRuntime(m.runtime)].filter(Boolean).join(' · ');
   return `<li class="row" data-id="${e.id}" data-act="open" tabindex="0">
     ${ph(e.id, e.title, 'small')}
     <div class="row-main">
-      <div class="row-title"><i class="dot st-${e.status}"></i><b>${esc(e.title)}</b>${e.rec ? '<span class="badge rec static">раджу</span>' : ''}</div>
-      <div class="row-sub">${esc([KIND_LABEL[e.kind], e.year].filter(Boolean).join(' · '))}</div>
+      <div class="row-title"><i class="dot st-${e.status}"></i><b>${esc(e.title)}</b>${e.rec ? `<span class="badge rec static">${t('badge.rec')}</span>` : ''}</div>
+      <div class="row-sub">${esc([kindLabel(e.kind), e.year].filter(Boolean).join(' · '))}</div>
       <div class="row-meta">${esc(line)}</div>
       ${e.type === 'series' && pct > 0 ? `<i class="bar thin" style="--w:${pct}%"></i>` : ''}
     </div>
     <div class="row-act">
-      ${url ? `<a class="rb" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Дивитись" aria-label="Дивитись">${icon('play')}</a>` : ''}
-      ${canPlus(e) ? '<button class="rb" data-act="plus" title="Наступна серія">+1</button>' : ''}
+      ${url ? `<a class="rb" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${t('watch')}" aria-label="${t('watch')}">${icon('play')}</a>` : ''}
+      ${canPlus(e) ? `<button class="rb" data-act="plus" title="${t('next.ep')}">+1</button>` : ''}
     </div>
     <div class="score ${e.score ? '' : 'none'}"><b>${e.score || '—'}</b><small>IMDb ${fmtRating(m.imdb) || '—'}</small></div>
   </li>`;
@@ -168,16 +168,16 @@ function rowHtml(e) {
 
 export function renderLibrary() {
   app.innerHTML = `
-  <header class="page-head"><h1>Бібліотека</h1><span class="count" id="lib-count"></span></header>
+  <header class="page-head"><h1>${t('nav.library')}</h1><span class="count" id="lib-count"></span></header>
   <div class="filters">
-    <label class="field search">${icon('search')}<input id="lib-q" type="search" placeholder="Пошук: назва, жанр, нотатка" autocomplete="off" aria-label="Пошук у бібліотеці"></label>
+    <label class="field search">${icon('search')}<input id="lib-q" type="search" placeholder="${t('lib.search')}" autocomplete="off" aria-label="${t('lib.search.aria')}"></label>
     <div class="seg" id="lib-kind" role="tablist"></div>
     <span class="grow"></span>
-    <div class="dd"><button class="btn" data-act="genres-toggle" aria-haspopup="true">${icon('filter')}Жанри<b id="lib-gcount"></b></button>
+    <div class="dd"><button class="btn" data-act="genres-toggle" aria-haspopup="true">${icon('filter')}${t('genres')}<b id="lib-gcount"></b></button>
       <div class="pop" id="lib-genres" hidden></div></div>
-    <label class="field">${icon('sortDown')}<select id="lib-sort" aria-label="Сортування">${SORTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
-    <button class="rb" data-act="dir" id="lib-dir" title="Напрям сортування"></button>
-    <button class="rb" data-act="view" id="lib-view" title="Плитка або список"></button>
+    <label class="field">${icon('sortDown')}<select id="lib-sort" aria-label="${t('sorting')}">${SORTS.map(v => `<option value="${v}">${t('sort.' + v)}</option>`).join('')}</select></label>
+    <button class="rb" data-act="dir" id="lib-dir" title="${t('sort.dir')}"></button>
+    <button class="rb" data-act="view" id="lib-view" title="${t('view.toggle')}"></button>
   </div>
   <div class="chips" id="lib-status"></div>
   <div id="lib-list"></div>`;
@@ -192,29 +192,29 @@ export function updateLibrary() {
   const all = store.list(), f = view.f;
   const n = fn => all.filter(fn).length;
   const seg = (v, l, c) => `<button class="${f.kind === v ? 'on' : ''}" data-act="kind" data-v="${v}" role="tab" aria-selected="${f.kind === v}">${l}<small>${c}</small></button>`;
-  $('#lib-kind').innerHTML = seg('all', 'Усе', all.length) + ['anime', 'series', 'movie'].map(k => seg(k, KIND_PLURAL[k], n(e => e.kind === k))).join('');
+  $('#lib-kind').innerHTML = seg('all', t('all.kinds'), all.length) + KIND_IDS.map(k => seg(k, t('kinds.' + k), n(e => e.kind === k))).join('');
   const chip = (v, l, c, cls = '') => `<button class="chip ${cls} ${f.status === v ? 'on' : ''}" data-act="status" data-v="${v}" aria-pressed="${f.status === v}">${l}<small>${c}</small></button>`;
-  $('#lib-status').innerHTML = chip('all', 'Усі статуси', all.length)
-    + STATUSES.map(([v, l]) => chip(v, `<i class="dot st-${v}"></i>${l}`, n(e => e.status === v))).join('')
-    + chip('rec', `${icon('starFill')}раджу`, n(e => e.rec), 'rec')
-    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length ? `<button class="chip reset" data-act="reset-filters">${icon('close')}Скинути фільтри</button>` : '');
+  $('#lib-status').innerHTML = chip('all', t('all.statuses'), all.length)
+    + STATUS_IDS.map(v => chip(v, `<i class="dot st-${v}"></i>${statusLabel(v)}`, n(e => e.status === v))).join('')
+    + chip('rec', `${icon('starFill')}${t('badge.rec')}`, n(e => e.rec), 'rec')
+    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length ? `<button class="chip reset" data-act="reset-filters">${icon('close')}${t('reset.filters')}</button>` : '');
   const genres = insights(all).genres;
   $('#lib-gcount').textContent = f.genres.length || '';
   $('#lib-genres').innerHTML = genres.length
-    ? genres.map(([g, c]) => `<button class="chip ${f.genres.includes(g) ? 'on' : ''}" data-act="genre" data-v="${esc(g)}">${esc(genreUk(g))}<small>${c}</small></button>`).join('')
-    : '<p class="muted">Жанри зʼявляться, коли на полиці буде хоч один запис.</p>';
+    ? genres.map(([g, c]) => `<button class="chip ${f.genres.includes(g) ? 'on' : ''}" data-act="genre" data-v="${esc(g)}">${esc(genreName(g))}<small>${c}</small></button>`).join('')
+    : `<p class="muted">${t('genres.empty')}</p>`;
   $('#lib-dir').innerHTML = icon(S.dir < 0 ? 'sortDown' : 'sortUp');
   $('#lib-view').innerHTML = icon(S.view === 'grid' ? 'list' : 'grid');
   const list = filterSort(all, f, S.sort, S.dir);
-  $('#lib-count').textContent = list.length === all.length ? `${all.length} ${plural(all.length, 'запис', 'записи', 'записів')}` : `${list.length} з ${all.length}`;
+  $('#lib-count').textContent = list.length === all.length ? count('entry', all.length) : t('n.of.m', { a: list.length, b: all.length });
   const box = $('#lib-list');
   if (!all.length) {
-    box.innerHTML = `<div class="empty">${icon('library')}<b>Полиця поки порожня</b>
-      <p>Додай перше аніме, фільм чи серіал — за назвою, посиланням IMDb або посиланням сайту, де дивишся.</p>
-      <div class="hero-act"><button class="btn primary" data-act="add">${icon('plus')}Додати запис</button><a class="btn" href="#/discover">${icon('compass')}Відкрити каталог</a></div></div>`;
+    box.innerHTML = `<div class="empty">${icon('library')}<b>${t('lib.empty.title')}</b>
+      <p>${t('lib.empty.text')}</p>
+      <div class="hero-act"><button class="btn primary" data-act="add">${icon('plus')}${t('add.entry')}</button><a class="btn" href="#/discover">${icon('compass')}${t('open.catalog')}</a></div></div>`;
   } else if (!list.length) {
-    box.innerHTML = `<div class="empty">${icon('search')}<b>Нічого не знайшлось</b><p>Спробуй інший запит або скинь фільтри.</p>
-      <button class="btn" data-act="reset-filters">Скинути фільтри</button></div>`;
+    box.innerHTML = `<div class="empty">${icon('search')}<b>${t('nothing.found')}</b><p>${t('nothing.found.text')}</p>
+      <button class="btn" data-act="reset-filters">${t('reset.filters')}</button></div>`;
   } else {
     box.innerHTML = S.view === 'grid'
       ? `<div class="grid">${list.map(e => entryCard(e)).join('')}</div>`
@@ -227,14 +227,14 @@ export function renderDiscover() {
   const d = view.disc;
   const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i);
   app.innerHTML = `
-  <header class="page-head"><h1>Каталог</h1><span class="count">популярне просто зараз</span></header>
+  <header class="page-head"><h1>${t('nav.discover')}</h1><span class="count">${t('disc.sub')}</span></header>
   <div class="filters">
-    <div class="seg" id="disc-type" role="tablist">${[['series', 'Серіали'], ['anime', 'Аніме'], ['movie', 'Фільми']].map(([v, l]) =>
-      `<button class="${d.type === v ? 'on' : ''}" data-act="disc-type" data-v="${v}" role="tab" aria-selected="${d.type === v}">${l}</button>`).join('')}</div>
+    <div class="seg" id="disc-type" role="tablist">${['series', 'anime', 'movie'].map(v =>
+      `<button class="${d.type === v ? 'on' : ''}" data-act="disc-type" data-v="${v}" role="tab" aria-selected="${d.type === v}">${t('kinds.' + v)}</button>`).join('')}</div>
     <span class="grow"></span>
-    <label class="field">${icon('filter')}<select id="disc-genre" aria-label="Жанр"><option value="">Усі жанри</option>${CATALOG_GENRES.map(g =>
-      `<option value="${g}" ${d.genre === g ? 'selected' : ''}>${esc(genreUk(g))}</option>`).join('')}</select></label>
-    <label class="field">${icon('clock')}<select id="disc-year" aria-label="Рік"><option value="">Будь-який рік</option>${years.map(y =>
+    <label class="field">${icon('filter')}<select id="disc-genre" aria-label="${t('genre')}"><option value="">${t('all.genres')}</option>${CATALOG_GENRES.map(g =>
+      `<option value="${g}" ${d.genre === g ? 'selected' : ''}>${esc(genreName(g))}</option>`).join('')}</select></label>
+    <label class="field">${icon('clock')}<select id="disc-year" aria-label="${t('year')}"><option value="">${t('any.year')}</option>${years.map(y =>
       `<option ${String(d.year) === String(y) ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
   </div>
   <div id="disc-list" class="grid"></div><div id="disc-more" class="center"></div>`;
@@ -245,7 +245,7 @@ export function renderDiscover() {
 }
 export async function loadDiscover(reset) {
   const d = view.disc;
-  if (reset) { d.items = []; d.skip = 0; d.more = true; d.error = ''; }
+  if (reset) { d.items = []; d.skip = 0; d.more = true; d.error = false; }
   const key = d.key = [d.type, d.genre, d.year].join('|');
   d.loading = true; drawDiscover();
   try {
@@ -262,7 +262,7 @@ export async function loadDiscover(reset) {
       && (!anime || x.kind === 'anime')
       && (!(d.year || anime) || !d.genre || x.meta.genres.includes(d.genre))));
   } catch (err) {
-    if (d.key === key) d.error = 'Каталог зараз недоступний. Перевір мережу й спробуй ще раз.';
+    if (d.key === key) d.error = true;
   } finally {
     if (d.key === key) { d.loading = false; drawDiscover(); }
   }
@@ -271,42 +271,42 @@ export function drawDiscover() {
   const box = $('#disc-list'), d = view.disc;
   if (!box) return;
   box.innerHTML = d.items.map(x => catalogCard(x)).join('') + (d.loading ? skeletons(d.items.length ? 6 : 18) : '');
-  $('#disc-more').innerHTML = d.error ? `<p class="muted">${esc(d.error)}</p><button class="btn" data-act="disc-more">Спробувати ще раз</button>`
-    : !d.loading && !d.items.length ? `<div class="empty">${icon('compass')}<b>За цими фільтрами порожньо</b><p>Спробуй інший жанр чи рік.</p></div>`
-    : !d.loading && d.more ? `<button class="btn lg" data-act="disc-more">Показати ще</button>` : '';
+  $('#disc-more').innerHTML = d.error ? `<p class="muted">${t('catalog.down.retry')}</p><button class="btn" data-act="disc-more">${t('retry')}</button>`
+    : !d.loading && !d.items.length ? `<div class="empty">${icon('compass')}<b>${t('disc.empty.title')}</b><p>${t('disc.empty.text')}</p></div>`
+    : !d.loading && d.more ? `<button class="btn lg" data-act="disc-more">${t('show.more')}</button>` : '';
 }
 
 // ── статистика ────────────────────────────────────────────────────
 export function renderStats() {
   const list = store.list(), s = insights(list);
   if (!list.length) {
-    app.innerHTML = `<header class="page-head"><h1>Статистика</h1></header><div class="empty">${icon('chart')}<b>Поки нема що рахувати</b>
-      <p>Додай кілька записів — і тут зʼявляться години перегляду, улюблені жанри та розподіл оцінок.</p>
-      <div class="hero-act"><button class="btn primary" data-act="add">${icon('plus')}Додати запис</button><button class="btn" data-act="demo">${icon('sparkle')}Показати на прикладі</button></div></div>`;
+    app.innerHTML = `<header class="page-head"><h1>${t('nav.stats')}</h1></header><div class="empty">${icon('chart')}<b>${t('stats.empty.title')}</b>
+      <p>${t('stats.empty.text')}</p>
+      <div class="hero-act"><button class="btn primary" data-act="add">${icon('plus')}${t('add.entry')}</button><button class="btn" data-act="demo">${icon('sparkle')}${t('demo')}</button></div></div>`;
     return;
   }
   const hours = Math.round(s.minutes / 60);
-  const bars = (rows, max, cls = '') => rows.map(([l, v, extra]) =>
-    `<div class="hbar ${cls}"><span>${l}</span><i style="--w:${max ? Math.max(2, v / max * 100) : 0}%"></i><b>${extra ?? v}</b></div>`).join('');
-  const maxS = Math.max(1, ...s.scores), maxG = s.genres[0]?.[1] || 1, maxSt = Math.max(1, ...Object.values(s.byStatus));
+  const bars = rows => { const max = Math.max(1, ...rows.map(r => r[1])); return rows.map(([l, v]) =>
+    `<div class="hbar"><span>${l}</span><i style="--w:${Math.max(2, v / max * 100)}%"></i><b>${v}</b></div>`).join(''); };
+  const maxS = Math.max(1, ...s.scores), w = s.byStatus.watching || 0;
   app.innerHTML = `
-  <header class="page-head"><h1>Статистика</h1><span class="count">${s.total} ${plural(s.total, 'запис', 'записи', 'записів')} на полиці</span></header>
+  <header class="page-head"><h1>${t('nav.stats')}</h1><span class="count">${t('stats.sub', { n: count('entry', s.total) })}</span></header>
   <div class="tiles">
-    <div class="tile"><span>Переглянуто</span><b>${hours}<small> год</small></b><em>${hours >= 48 ? `це ${(hours / 24).toFixed(1).replace('.', ',')} доби без перерви` : 'і це лише початок'}</em></div>
-    <div class="tile"><span>Серій</span><b>${s.episodes}</b><em>${s.byStatus.watching || 0} ${plural(s.byStatus.watching || 0, 'тайтл', 'тайтли', 'тайтлів')} дивлюсь зараз</em></div>
-    <div class="tile"><span>Середня оцінка</span><b>${fmtRating(s.avg) || '—'}</b><em>оцінено ${s.rated} з ${s.total}</em></div>
-    <div class="tile"><span>Завершено</span><b>${s.byStatus.done || 0}</b><em>${s.rec} у рекомендаціях</em></div>
+    <div class="tile"><span>${t('tile.watched')}</span><b>${hours}<small> ${t('h')}</small></b><em>${hours >= 48 ? t('tile.days', { d: fmtRating(hours / 24) }) : t('tile.start')}</em></div>
+    <div class="tile"><span>${t('tile.episodes')}</span><b>${s.episodes}</b><em>${t('tile.watching', { n: count('title', w) })}</em></div>
+    <div class="tile"><span>${t('tile.avg')}</span><b>${fmtRating(s.avg) || '—'}</b><em>${t('tile.rated', { a: s.rated, b: s.total })}</em></div>
+    <div class="tile"><span>${t('tile.done')}</span><b>${s.byStatus.done || 0}</b><em>${t('tile.recs', { n: s.rec })}</em></div>
   </div>
   <div class="panels">
-    <section class="panel"><h2>Мої оцінки</h2>
+    <section class="panel"><h2>${t('panel.scores')}</h2>
       <div class="vbars">${s.scores.map((v, i) => `<div><i style="--h:${v / maxS * 100}%" title="${v}"></i><span>${i + 1}</span></div>`).join('')}</div></section>
-    <section class="panel"><h2>Улюблені жанри</h2>${bars(s.genres.slice(0, 8).map(([g, v]) => [esc(genreUk(g)), v]), maxG) || '<p class="muted">Жанри ще підтягуються.</p>'}</section>
-    <section class="panel"><h2>За статусом</h2>${bars(STATUSES.map(([k, l]) => [`<i class="dot st-${k}"></i>${l}`, s.byStatus[k] || 0]), maxSt)}
-      <h2 class="mt">За типом</h2>${bars(['anime', 'series', 'movie'].map(k => [KIND_PLURAL[k], s.byKind[k] || 0]), Math.max(1, ...Object.values(s.byKind)))}</section>
-    <section class="panel"><h2>Де я не згоден з IMDb</h2>${s.gaps.length ? `<ul class="gaps">${s.gaps.map(({ e, d }) =>
+    <section class="panel"><h2>${t('panel.genres')}</h2>${bars(s.genres.slice(0, 8).map(([g, v]) => [esc(genreName(g)), v])) || `<p class="muted">${t('genres.loading')}</p>`}</section>
+    <section class="panel"><h2>${t('panel.status')}</h2>${bars(STATUS_IDS.map(k => [`<i class="dot st-${k}"></i>${statusLabel(k)}`, s.byStatus[k] || 0]))}
+      <h2 class="mt">${t('panel.kind')}</h2>${bars(KIND_IDS.map(k => [t('kinds.' + k), s.byKind[k] || 0]))}</section>
+    <section class="panel"><h2>${t('panel.gaps')}</h2>${s.gaps.length ? `<ul class="gaps">${s.gaps.map(({ e, d }) =>
       `<li data-id="${e.id}" data-act="open" tabindex="0">${ph(e.id, e.title, 'small')}<div><b>${esc(e.title)}</b>
-        <span>моя ${e.score} · IMDb ${fmtRating(e.meta.imdb)}</span></div><em class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : '−'}${fmtRating(Math.abs(d)) || '0'}</em></li>`).join('')}</ul>`
-      : '<p class="muted">Постав кілька оцінок — порівняю їх з IMDb.</p>'}</section>
+        <span>${t('gap.line', { a: e.score, b: fmtRating(e.meta.imdb) })}</span></div><em class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : '−'}${fmtRating(Math.abs(d)) || '0'}</em></li>`).join('')}</ul>`
+      : `<p class="muted">${t('gaps.empty')}</p>`}</section>
   </div>`;
 }
 
@@ -318,20 +318,20 @@ export function renderRecs() {
   app.innerHTML = `
   <section class="hero recs-hero" data-img>
     ${lead ? `<img class="hero-bg" alt="" src="${backdrop(lead.id)}">` : ''}
-    <div class="hero-in"><span class="kicker">Добірка</span>
-      <h1>${name ? `${esc(name)} радить подивитись` : 'Рекомендації до перегляду'}</h1>
-      <p class="hero-plot">${items.length} ${plural(items.length, 'назва', 'назви', 'назв')} з особистими оцінками й коментарями. Натисни «Собі на полицю» — і запис опиниться у твоєму власному списку.</p>
-      <div class="hero-act"><a class="btn lg" href="./">${icon('library')}Моя полиця</a></div></div>
+    <div class="hero-in"><span class="kicker">${t('recs.kicker')}</span>
+      <h1>${name ? t('recs.title.by', { name: esc(name) }) : t('recs.title')}</h1>
+      <p class="hero-plot">${t('recs.text', { n: count('title', items.length) })}</p>
+      <div class="hero-act"><a class="btn lg" href="./">${icon('library')}${t('my.shelf')}</a></div></div>
   </section>
   <ul class="rec-list">${items.map((x, i) => {
     const have = store.get(x.id);
     return `<li class="rcard" data-id="${x.id}" data-act="preview" tabindex="0">
       <span class="rec-n">${i + 1}</span>${ph(x.id, x.t, 'medium')}
       <div class="rec-main"><h3>${esc(x.t)}</h3>
-        <p class="row-sub">${esc([KIND_LABEL[x.k], x.y].filter(Boolean).join(' · '))}${x.r ? ` · IMDb ${fmtRating(x.r)}` : ''}</p>
+        <p class="row-sub">${esc([kindLabel(x.k), x.y].filter(Boolean).join(' · '))}${x.r ? ` · IMDb ${fmtRating(x.r)}` : ''}</p>
         ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
-        <button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? 'Уже в тебе' : 'Собі на полицю'}</button></div>
-      ${x.s ? `<div class="rec-score"><b>${x.s}</b><small>оцінка автора</small></div>` : ''}
+        <button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : t('take')}</button></div>
+      ${x.s ? `<div class="rec-score"><b>${x.s}</b><small>${t('author.score')}</small></div>` : ''}
     </li>`;
-  }).join('') || `<li class="empty">${icon('star')}<b>Тут поки порожньо</b><p>Автор ще нічого не порадив.</p></li>`}</ul>`;
+  }).join('') || `<li class="empty">${icon('star')}<b>${t('recs.empty.title')}</b><p>${t('recs.empty.text')}</p></li>`}</ul>`;
 }

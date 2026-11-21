@@ -9,3 +9,7 @@ export const FIREBASE = {
   messagingSenderId: '520582060325',
   appId: '1:520582060325:web:eda9af48604111f08662cc',
 };
+
+// Веб-клієнт Google для входу (той, що Firebase створив сам). Теж не
+// секрет. Адреса сайту має стояти серед його «Authorized redirect URIs».
+export const GOOGLE_CLIENT_ID = '520582060325-j9lute0q05tdusso96qqnbso6ak2l39j.apps.googleusercontent.com';

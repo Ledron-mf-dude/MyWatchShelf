@@ -4,12 +4,12 @@
 //
 //   users/{uid}/entries/{imdbId}  — приватний список людини
 //   public/{uid}                  — її рекомендації, читати може будь-хто
-import { FIREBASE } from './config.js';
+import { FIREBASE, GOOGLE_CLIENT_ID } from './config.js';
 import { store } from './store.js';
 import { recItem, cleanRecs } from './logic.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
-const FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published';
+const FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
 
 let sdkPromise = null, unsub = null, pubTimer = null, lastPub = '';
 const subs = new Set();
@@ -42,11 +42,37 @@ function sdk() {
   return sdkPromise;
 }
 
+// Вхід — звичайним переходом сторінки до Google і назад, без спливних
+// вікон: їх блокують телефони й застосунки з головного екрана, а
+// вбудований у Firebase «redirect» не працює, коли сайт і вікно входу
+// живуть на різних доменах. Google повертає підписаний id_token у хвості
+// адреси; його й віддаємо Firebase.
+function takeReturn() {
+  const h = location.hash.slice(1);
+  if (!/(^|&)(id_token|error)=/.test(h) || !/(^|&)state=/.test(h)) return null;
+  const p = new URLSearchParams(h);
+  history.replaceState(null, '', location.pathname + location.search);   // токену в адресі не місце
+  let expected = '';
+  try { expected = localStorage.getItem(STATE) || ''; localStorage.removeItem(STATE); } catch { /* нічого */ }
+  // state — наш одноразовий квиток: чужий токен, підсунутий посиланням, не пройде
+  if (!expected || p.get('state') !== expected) return { error: 'state' };
+  return p.get('id_token') ? { token: p.get('id_token') } : { error: p.get('error') || 'unknown' };
+}
+
 function init() {
   if (!FIREBASE) return;
+  const back = takeReturn();
   let was = false;
   try { was = !!localStorage.getItem(FLAG); } catch { /* нічого */ }
-  if (was) { set('connecting'); sdk().catch(() => set('offline')); }
+  if (back?.token) {
+    cloud.justSignedIn = true;
+    set('connecting');
+    sdk().then(c => c.au.signInWithCredential(c.auth, c.au.GoogleAuthProvider.credential(back.token)))
+      .catch(e => { console.warn('вхід', e); cloud.lastError = e?.code || 'sign-in'; set('error'); });
+  } else if (back?.error && back.error !== 'access_denied') {
+    cloud.lastError = back.error;
+  }
+  if (was && !back?.token) { set('connecting'); sdk().catch(() => set('offline')); }
   store.onLocal((entry, what) => {
     if (!cloud.user) return;
     if (what === 'meta') pushMeta(entry); else push(entry);
@@ -113,9 +139,20 @@ function onUser(c, u) {
   }, err => { console.warn('синхронізація', err); set('error'); });
 }
 
-async function signIn() {
-  const c = await sdk();
-  await c.au.signInWithPopup(c.auth, new c.au.GoogleAuthProvider());
+function signIn() {
+  const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+  const state = rnd();
+  try { localStorage.setItem(STATE, state); } catch { throw new Error('браузер не дає зберегти дані — вхід неможливий у приватному режимі'); }
+  const q = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: location.origin + location.pathname,
+    response_type: 'id_token',
+    scope: 'openid email profile',
+    nonce: rnd(),
+    state,
+    prompt: 'select_account',
+  });
+  location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + q);
 }
 async function signOut() {
   const c = await sdk();

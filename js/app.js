@@ -478,15 +478,9 @@ function plus(id) {
   if (overlay?.type === 'card') drawCard();
   toast(patch.status === 'done' ? `«${n.title}» — переглянуто повністю` : `${n.title}: ${progressText(n)}`);
 }
-async function signIn() {
-  try { await cloud.signIn(); toast('Вхід виконано — список синхронізується'); }
-  catch (err) {
-    const code = err?.code || '';
-    if (/popup-closed|cancelled/.test(code)) return;
-    toast(/unauthorized-domain/.test(code) ? 'Цю адресу не додано до дозволених у Firebase'
-      : /popup-blocked/.test(code) ? 'Браузер заблокував вікно входу — дозволь спливні вікна'
-      : 'Не вдалося ввійти: ' + (err.message || code), 5000);
-  }
+function signIn() {
+  // сторінка перейде до Google і повернеться вже з входом
+  try { cloud.signIn(); } catch (err) { toast('Не вдалося ввійти: ' + err.message, 5000); }
 }
 function exportFile() {
   const blob = new Blob([JSON.stringify({ app: 'MyWatchShelf', version: 1, entries: store.raw() }, null, 1)], { type: 'application/json' });
@@ -512,7 +506,7 @@ const actions = {
   add: openAdd,
   menu: () => toggleMenu(),
   pill: () => (!cloud.available ? toast('Список зберігається в цьому браузері. Копію можна зберегти у файл через меню «···».', 4500)
-    : cloud.user ? toggleMenu(true) : cloud.state === 'off' ? signIn() : null),
+    : cloud.user ? toggleMenu(true) : cloud.state !== 'connecting' ? signIn() : null),
   signin: signIn,
   signout: async () => { if (confirm('Вийти з акаунта? Список лишиться на цьому пристрої, але перестане синхронізуватись.')) { await cloud.signOut(); toast('Ви вийшли'); } },
   'hide-hint': () => { store.setSetting('hint', false); renderHint(); },
@@ -596,7 +590,12 @@ store.onChange(() => {
     if (!(a && layer.contains(a) && a.matches('input,textarea'))) drawCard();
   }
 });
-cloud.onChange(() => { renderPill(); renderHint(); });
+let greeted = false;
+cloud.onChange(() => {
+  renderPill(); renderHint();
+  if (cloud.lastError) { toast('Не вдалося ввійти (' + cloud.lastError + '). Спробуй ще раз.', 5000); cloud.lastError = ''; }
+  if (cloud.justSignedIn && cloud.state === 'synced' && !greeted) { greeted = true; toast('Вхід виконано — список синхронізується'); }
+});
 
 // ── маршрути ──────────────────────────────────────────────────────
 async function route() {

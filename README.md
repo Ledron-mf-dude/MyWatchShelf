@@ -96,7 +96,13 @@ http://localhost:8765 (модулі з подвійного кліку по фа
    [Firebase](https://console.firebase.google.com): Authentication → Google,
    Firestore Database, у Authentication → Settings → Authorized domains додай
    свій `<нік>.github.io`, а правила візьми з `firestore.rules`.
-3. Веб-конфіг проєкту встав у `js/config.js`.
+3. Веб-конфіг проєкту й ID веб-клієнта Google встав у `js/config.js`.
+4. У Google Cloud Console → Credentials → «Web client (auto created by
+   Google Service)» додай адресу сайту в **Authorized redirect URIs**.
+
+Вхід зроблено звичайним переходом сторінки до Google і назад (без
+спливних вікон): так він працює і в мобільних браузерах, і в застосунку,
+доданому на головний екран.
 
 Без кроків 2–3 застосунок працює в межах одного пристрою, а рекомендації
 діляться посиланням-знімком.

@@ -133,7 +133,7 @@ textarea.inp{display:block; resize:vertical; min-height:76px}
   background:linear-gradient(90deg,var(--bg) 0%,color-mix(in srgb,var(--bg) 82%,transparent) 34%,transparent 72%),linear-gradient(0deg,var(--bg) 0%,transparent 42%)}
 .hero-in{position:relative; z-index:1; max-width:620px; padding:44px 44px 40px; display:grid; gap:12px}
 .kicker{font-weight:800; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent)}
-.hero h1{font-size:clamp(28px,4.2vw,50px); line-height:1.06; font-weight:800; letter-spacing:-.03em; text-wrap:balance}
+.hero h1{color:var(--text); font-size:clamp(28px,4.2vw,50px); line-height:1.06; font-weight:800; letter-spacing:-.03em; text-wrap:balance}
 .hero-meta{display:flex; flex-wrap:wrap; align-items:center; gap:8px; color:var(--muted); font-weight:700; font-size:14px}
 .hero-meta i{font-style:normal; opacity:.5}
 .hero-plot{color:var(--muted); font-size:15px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; max-width:56ch}

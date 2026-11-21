@@ -83,7 +83,11 @@ function onUser(c, u) {
   // прибираємо (він і так цілий у хмарі власника).
   let owner = '';
   try { owner = localStorage.getItem(OWNER) || ''; } catch { /* нічого */ }
-  if (owner && owner !== u.uid) store.clear();
+  if (owner && owner !== u.uid) {
+    store.clear();
+    store.setSetting('name', '');   // підпис рекомендацій теж був чужий
+    try { localStorage.removeItem(PUBLISHED); } catch { /* нічого */ }
+  }
   lastPub = '';
   try { localStorage.setItem(OWNER, u.uid); localStorage.setItem(FLAG, '1'); } catch { /* нічого */ }
   set('connecting');

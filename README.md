@@ -94,7 +94,7 @@ js/
   app.js      каркас: шапка, навігація, маршрути, події
 sw.js, manifest.webmanifest, icon-*.png   застосунок на телефоні
 firestore.rules                           хто що може читати й писати
-tests/logic.test.mjs                      npm test
+tests/logic.test.mjs                      npm test (на GitHub запускається сам)
 tools/icons.mjs                           перемальовує іконки
 ```
 

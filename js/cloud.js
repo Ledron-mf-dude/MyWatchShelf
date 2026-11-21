@@ -12,7 +12,7 @@ import { t, getLang } from './i18n.js';
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
 const FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
 
-let sdkPromise = null, unsub = null, pubTimer = null, lastPub = '';
+let signingIn = false, sdkPromise = null, unsub = null, pubTimer = null, lastPub = '';
 const subs = new Set();
 
 export const cloud = {
@@ -53,10 +53,15 @@ function takeReturn() {
   if (!/(^|&)(id_token|error)=/.test(h) || !/(^|&)state=/.test(h)) return null;
   const p = new URLSearchParams(h);
   history.replaceState(null, '', location.pathname + location.search);   // токену в адресі не місце
-  let expected = '';
-  try { expected = localStorage.getItem(STATE) || ''; localStorage.removeItem(STATE); } catch { /* нічого */ }
-  // state — наш одноразовий квиток: чужий токен, підсунутий посиланням, не пройде
-  if (!expected || p.get('state') !== expected) return { error: 'state' };
+  // state — наш одноразовий квиток: чужий токен, підсунутий посиланням, не пройде.
+  // Лежить і в сховищі, і в cookie: встановлений на телефон застосунок
+  // відкриває вхід в окремій вкладці, і одне з двох може туди не доїхати.
+  const expected = new Set();
+  try { expected.add(localStorage.getItem(STATE)); localStorage.removeItem(STATE); } catch { /* нічого */ }
+  expected.add(document.cookie.match(/(?:^|; )mws_state=([0-9a-f]{32})/)?.[1]);
+  document.cookie = 'mws_state=; Max-Age=0; Path=/; Secure; SameSite=Lax';
+  expected.delete(null); expected.delete(undefined); expected.delete('');
+  if (!expected.has(p.get('state'))) return { error: 'state' };
   return p.get('id_token') ? { token: p.get('id_token') } : { error: p.get('error') || 'unknown' };
 }
 
@@ -68,8 +73,9 @@ function init() {
   if (back?.token) {
     cloud.justSignedIn = true;
     set('connecting');
+    signingIn = true;
     sdk().then(c => c.au.signInWithCredential(c.auth, c.au.GoogleAuthProvider.credential(back.token)))
-      .catch(e => { console.warn('вхід', e); cloud.lastError = e?.code || 'sign-in'; set('error'); });
+      .catch(e => { console.warn('вхід', e); cloud.lastError = e?.code || 'sign-in'; signingIn = false; set('error'); });
   } else if (back?.error && back.error !== 'access_denied') {
     cloud.lastError = back.error;
   }
@@ -79,6 +85,16 @@ function init() {
     if (what === 'meta') pushMeta(entry); else push(entry);
     schedulePublish();
   });
+  // Увійти могли в іншій вкладці (так буває в застосунку з головного
+  // екрана): повернувшись сюди, підхоплюємо вже наявний вхід.
+  const wake = () => {
+    let was2 = false;
+    try { was2 = !!localStorage.getItem(FLAG); } catch { /* нічого */ }
+    if (was2 && !cloud.user && !sdkPromise) { set('connecting'); sdk().catch(() => set('offline')); }
+  };
+  addEventListener('storage', e => { if (e.key === FLAG) wake(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+  addEventListener('pageshow', wake);
   addEventListener('online', () => cloud.user && set('synced'));
   addEventListener('offline', () => cloud.user && set('offline'));
 }
@@ -100,10 +116,14 @@ async function pushMeta(entry) {
 function onUser(c, u) {
   unsub?.(); unsub = null;
   if (!u) {
+    // Поки токен від Google ще обмінюється на вхід, Firebase встигає
+    // сказати «нікого немає» — це не привід показувати «Увійти».
+    if (signingIn) return;
     cloud.user = null;
     try { localStorage.removeItem(FLAG); } catch { /* нічого */ }
     return set('off');
   }
+  signingIn = false;
   cloud.user = { uid: u.uid, name: u.displayName || '', email: u.email || '' };
   // Чий список лежить на пристрої. Накопичене без входу віддаємо першому,
   // хто ввійде; а от список іншого акаунта чужому не дістається — його
@@ -144,6 +164,7 @@ function signIn() {
   const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
   const state = rnd();
   try { localStorage.setItem(STATE, state); } catch { throw new Error(t('err.private')); }
+  document.cookie = `mws_state=${state}; Max-Age=900; Path=/; Secure; SameSite=Lax`;
   const q = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: location.origin === new URL(SITE_URL).origin ? SITE_URL : location.origin + location.pathname,

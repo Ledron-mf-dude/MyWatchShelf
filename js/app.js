@@ -255,4 +255,6 @@ applyLang();
 cloud.init();
 addEventListener('hashchange', route);
 route();
+// вхід міг не вдатися ще до того, як сторінка намалювалась — скажемо про це
+if (cloud.lastError) { toast(t('toast.signin.fail', { e: cloud.lastError }), { ms: 8000 }); cloud.lastError = ''; }
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

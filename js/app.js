@@ -9,9 +9,12 @@ import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl,
   cardActions, loadDemo,
 } from './panel.js';
+import { renderCalendar, pickActions, wrapActions } from './extras.js';
 
 const S = store.settings;
-const NAV = [['home', 'home'], ['library', 'library'], ['discover', 'compass'], ['stats', 'chart']];
+const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['discover', 'compass'], ['stats', 'chart']];
+// на телефоні внизу лишається чотири розділи й «+»; календар — із головної
+const TABS = NAV.filter(n => n[0] !== 'calendar');
 const top = $('#top'), tabs = $('#tabs');
 // Знак: кадр кіноплівки з кнопкою відтворення.
 const LOGO = `<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
@@ -52,8 +55,8 @@ function drawChrome() {
     </div>`}`;
   tabs.hidden = recs;
   const tab = ([r, ic]) => `<a class="tab ${here(r)}" href="${href(r)}">${icon(ic)}<span>${t('nav.' + r)}</span></a>`;
-  tabs.innerHTML = recs ? '' : NAV.slice(0, 2).map(tab).join('')
-    + `<button class="tab add" data-act="add" aria-label="${t('add')}">${icon('plus')}</button>` + NAV.slice(2).map(tab).join('');
+  tabs.innerHTML = recs ? '' : TABS.slice(0, 2).map(tab).join('')
+    + `<button class="tab add" data-act="add" aria-label="${t('add')}">${icon('plus')}</button>` + TABS.slice(2).map(tab).join('');
 }
 
 function toggleMenu(force) {
@@ -67,6 +70,9 @@ function toggleMenu(force) {
         ? `<div class="who"><span class="avatar lg">${initial(u)}</span><div><b>${esc(u.name || t('menu.google'))}</b><small>${esc(u.email)}</small><em class="st-${cloud.state}"><i class="state"></i>${stateText()}</em></div></div>`
         : `<div class="who signin"><p>${t('menu.signin.text')}</p><button class="btn primary" data-act="signin">${icon('user')}${t('menu.signin')}</button></div>`)
         : `<div class="who"><p>${t('menu.local.text')}</p></div>`}
+      <hr>
+      <button data-act="go" data-v="calendar">${icon('calendar')}${t('nav.calendar')}</button>
+      <button data-act="tonight">${icon('dice')}${t('pick.title')}</button>
       <hr>
       <button data-act="share">${icon('share')}${t('menu.share')}<small>${nRec}</small></button>
       <button data-act="name">${icon('user')}${t('menu.name')}<small>${esc(S.name || t('not.set'))}</small></button>
@@ -82,11 +88,11 @@ function toggleMenu(force) {
 }
 
 // ── маршрути ──────────────────────────────────────────────────────
-const RENDER = { home: renderHome, library: renderLibrary, discover: renderDiscover, stats: renderStats, recs: renderRecs };
+const RENDER = { home: renderHome, library: renderLibrary, calendar: renderCalendar, discover: renderDiscover, stats: renderStats, recs: renderRecs };
 function draw() { RENDER[view.route](); }
 function setTitle() {
   document.title = view.route === 'recs'
-    ? `${view.recs?.name ? t('title.recs.by', { name: view.recs.name }) : t('title.recs')} · ${t('brand')}`
+    ? `${view.recs?.title || (view.recs?.name ? t('title.recs.by', { name: view.recs.name }) : t('title.recs'))} · ${t('brand')}`
     : view.route === 'home' ? `${t('brand')} — ${t('brand.long')}` : `${t('nav.' + view.route)} · ${t('brand')}`;
 }
 async function route() {
@@ -97,7 +103,14 @@ async function route() {
     drawChrome();
     app.innerHTML = `<div class="empty"><b>${t('recs.loading')}</b></div>`;
     try {
-      view.recs = raw.startsWith('u=') ? await cloud.loadPublic(raw.slice(2).replace(/[^\w-]/g, '')) : await decodeRecs(raw.slice(2));
+      if (raw.startsWith('u=')) {
+        // #u=<uid> — загальні рекомендації; #u=<uid>&l=<назва> — одна добірка
+        const q = new URLSearchParams(raw), list = (q.get('l') || '').slice(0, 40);
+        const data = await cloud.loadPublic((q.get('u') || '').replace(/[^\w-]/g, ''));
+        view.recs = data && { name: data.name, title: list,
+          items: data.items.filter(x => (list ? (x.l || []).includes(list) : x.p !== 0)) };
+        if (view.recs && list && !view.recs.items.length) view.recs = null;
+      } else view.recs = await decodeRecs(raw.slice(2));
       if (!view.recs) throw new Error(t('recs.missing'));
       setTitle();
       renderRecs();
@@ -136,7 +149,10 @@ function importFile() {
 const idOf = el => el.closest('[data-id]')?.dataset.id || ui.overlay?.id;
 
 on({
-  ...cardActions,
+  ...cardActions, ...pickActions, ...wrapActions,
+  go: v => { location.hash = '#/' + v; },
+  'share-list': v => openShare(v),
+  'list-filter': v => { view.f.list = view.f.list === v ? '' : v; updateLibrary(); },
   close: closeOverlay,
   add: openPalette,
   menu: () => toggleMenu(),
@@ -157,7 +173,7 @@ on({
     const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: S.name || cloud.user?.name || '', placeholder: t('name.ph') });
     if (v !== null) { store.setSetting('name', v.slice(0, 80)); cloud.publishNow().catch(() => {}); toast(t('toast.name.saved')); }
   },
-  share: openShare,
+  share: () => openShare(),
   demo: loadDemo,
   export: exportFile,
   import: importFile,
@@ -183,7 +199,7 @@ on({
   status: v => { view.f.status = v; updateLibrary(); },
   genre: v => { const g = view.f.genres, i = g.indexOf(v); if (i < 0) g.push(v); else g.splice(i, 1); updateLibrary(); return 'keep'; },
   'genres-toggle': () => { const p = $('#lib-genres'); p.hidden = !p.hidden; return 'keep'; },
-  'reset-filters': () => { Object.assign(view.f, { q: '', kind: 'all', status: 'all', genres: [] }); if ($('#lib-q')) $('#lib-q').value = ''; updateLibrary(); },
+  'reset-filters': () => { Object.assign(view.f, { q: '', kind: 'all', status: 'all', genres: [], list: '' }); if ($('#lib-q')) $('#lib-q').value = ''; updateLibrary(); },
   dir: () => { store.setSetting('dir', -S.dir); updateLibrary(); },
   view: () => { store.setSetting('view', S.view === 'grid' ? 'list' : 'grid'); updateLibrary(); },
   // каталог

@@ -89,6 +89,7 @@ export function sanitize(e) {
     note: str(e.note, 5000),
     rec: !!e.rec,
     recNote: str(e.recNote, 500),
+    lists: [...new Set((Array.isArray(e.lists) ? e.lists : []).map(x => str(x, 40).trim()).filter(Boolean))].slice(0, 8),
     added: Number(e.added) || updated,
     updated,
   };
@@ -167,6 +168,7 @@ export function filterSort(list, f, sort, dir) {
   const out = list.filter(e => {
     if (f.kind && f.kind !== 'all' && e.kind !== f.kind) return false;
     if (f.genres?.length && !f.genres.some(g => (e.meta?.genres || []).includes(g))) return false;
+    if (f.list && !(e.lists || []).includes(f.list)) return false;
     if (f.status === 'rec') { if (!e.rec) return false; }
     else if (f.status && f.status !== 'all' && e.status !== f.status) return false;
     if (q) {
@@ -247,20 +249,91 @@ export function insights(list) {
 // ── рекомендації ──────────────────────────────────────────────────
 // У рекомендації йде лише те, що не соромно показати: назва, оцінка,
 // кілька слів «чому». Посилання «де дивлюсь» і нотатки лишаються вдома.
+// p: 0 — запис не в загальних рекомендаціях, а лише в добірках; l — назви добірок.
 export const recItem = e => ({
   id: e.id, k: e.kind, t: e.title, y: e.year || '',
   s: e.score || 0, n: e.recNote || '', r: e.meta?.imdb || 0,
+  ...(e.rec ? {} : { p: 0 }), ...(e.lists?.length ? { l: e.lists } : {}),
 });
 
 export function cleanRecs(data) {
   const items = (Array.isArray(data?.items) ? data.items : []).slice(0, 500)
     .filter(x => x && isId(x.id))
-    .map(x => ({
-      id: x.id, k: KIND_IDS.includes(x.k) ? x.k : 'series', t: str(x.t, 300) || x.id,
-      y: str(x.y, 20), s: int(x.s, 0, 10), n: str(x.n, 500),
-      r: Number(x.r) > 0 ? Math.min(10, Number(x.r)) : 0,
-    }));
-  return { name: str(data?.name, 80), items };
+    .map(x => {
+      const l = (Array.isArray(x.l) ? x.l : []).map(v => str(v, 40)).filter(Boolean).slice(0, 8);
+      return {
+        id: x.id, k: KIND_IDS.includes(x.k) ? x.k : 'series', t: str(x.t, 300) || x.id,
+        y: str(x.y, 20), s: int(x.s, 0, 10), n: str(x.n, 500),
+        r: Number(x.r) > 0 ? Math.min(10, Number(x.r)) : 0,
+        ...(x.p === 0 ? { p: 0 } : {}), ...(l.length ? { l } : {}),
+      };
+    });
+  const out = { name: str(data?.name, 80), items };
+  if (data?.title) out.title = str(data.title, 40);
+  return out;
+}
+
+// ── добірки ───────────────────────────────────────────────────────
+// Добірка — це просто мітка на записах: існує, доки нею позначено хоч
+// один запис. Окремого сховища для неї не треба, тож і синхронізується
+// вона разом із записами.
+export const listNames = list =>
+  [...new Set(list.flatMap(e => e.lists || []))].sort((a, b) => a.localeCompare(b, getLang()));
+
+// ── збіг смаків ───────────────────────────────────────────────────
+// Порівнюємо оцінки автора рекомендацій з моїми. Відсоток — наскільки
+// близькі оцінки на спільних тайтлах (різниця 0 → 100%, різниця 9 → 0%).
+export function tasteMatch(mine, items) {
+  const by = new Map(mine.map(e => [e.id, e]));
+  const rows = items.map(x => {
+    const e = by.get(x.id);
+    return { x, have: !!e, mine: e?.score || 0, d: e?.score && x.s ? e.score - x.s : null };
+  });
+  const scored = rows.filter(r => r.d !== null);
+  return {
+    rows,
+    pct: scored.length ? Math.round(100 - scored.reduce((a, r) => a + Math.abs(r.d), 0) / scored.length / 9 * 100) : null,
+    scored: scored.length,
+    common: rows.filter(r => r.have).length,
+    unseen: rows.filter(r => !r.have).length,
+  };
+}
+export const matchTag = r => (r.d === null ? (r.have ? 'have' : 'new') : Math.abs(r.d) <= 1 ? 'match' : 'differ');
+
+// ── «що подивитись сьогодні» ──────────────────────────────────────
+export function pickCandidates(list, { max = 0, kind = 'all', genre = '' } = {}) {
+  return list.filter(e => e.status === 'planned' || e.status === 'paused')
+    .filter(e => kind === 'all' || e.kind === kind)
+    .filter(e => !genre || (e.meta?.genres || []).includes(genre))
+    .filter(e => !max || (runtimeMin(e) > 0 && runtimeMin(e) <= max));
+}
+
+// ── календар серій ────────────────────────────────────────────────
+// schedules: { id: [{ s, e, d }] } — сезон, серія, час виходу (мс).
+// Для кожного серіалу, який людина дивиться: скільки серій уже вийшло
+// після її позиції, чи є свіжа (за останній тиждень) і коли наступна.
+export function agenda(entries, schedules, now = Date.now()) {
+  const DAY = 864e5, rows = [];
+  for (const e of entries) {
+    if (e.type !== 'series' || !['watching', 'paused'].includes(e.status)) continue;
+    const eps = schedules[e.id];
+    if (!eps?.length) continue;
+    const after = v => v.s > (e.season || 1) || (v.s === (e.season || 1) && v.e > (e.episode || 0));
+    const aired = eps.filter(v => v.d <= now && after(v)).sort((a, b) => a.d - b.d);
+    const next = eps.filter(v => v.d > now && v.d <= now + 14 * DAY).sort((a, b) => a.d - b.d)[0] || null;
+    const fresh = aired.filter(v => v.d >= now - 7 * DAY).pop() || null;
+    if (aired.length || next) rows.push({ e, behind: aired.length, fresh, next });
+  }
+  return {
+    fresh: rows.filter(r => r.fresh).sort((a, b) => b.fresh.d - a.fresh.d),
+    upcoming: rows.filter(r => r.next).sort((a, b) => a.next.d - b.next.d),
+    behind: rows.filter(r => !r.fresh && r.behind > 0).sort((a, b) => b.behind - a.behind),
+  };
+}
+// Скільки календарних днів від сьогодні до дати (0 — сьогодні, −1 — вчора).
+export function dayDiff(d, now = Date.now()) {
+  const day = x => { const v = new Date(x); return new Date(v.getFullYear(), v.getMonth(), v.getDate()).getTime(); };
+  return Math.round((day(d) - day(now)) / 864e5);
 }
 
 const b64u = {
@@ -295,8 +368,8 @@ async function pipe(bytes, stream, limit = MAX_RAW) {
 }
 
 // Список-знімок, зашитий просто в посилання: сервер для цього не потрібен.
-export async function encodeRecs(name, items) {
-  const compact = { n: name || '', i: items.map(x => [x.id, x.k, x.t, x.y, x.s, x.n, x.r]) };
+export async function encodeRecs(name, items, title = '') {
+  const compact = { n: name || '', i: items.map(x => [x.id, x.k, x.t, x.y, x.s, x.n, x.r]), ...(title ? { t: title } : {}) };
   const raw = new TextEncoder().encode(JSON.stringify(compact));
   return b64u.enc(await pipe(raw, new CompressionStream('deflate-raw')));
 }
@@ -305,7 +378,7 @@ export async function decodeRecs(text) {
   const raw = await pipe(b64u.dec(text), new DecompressionStream('deflate-raw'));
   const c = JSON.parse(new TextDecoder().decode(raw));
   return cleanRecs({
-    name: c.n,
+    name: c.n, title: c.t,
     items: (c.i || []).map(a => ({ id: a[0], k: a[1], t: a[2], y: a[3], s: a[4], n: a[5], r: a[6] })),
   });
 }

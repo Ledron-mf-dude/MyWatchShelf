@@ -107,3 +107,22 @@ export async function catalog({ type = 'series', list = 'top', genre = '', skip 
   catalogCache.set(url, out);
   return out;
 }
+
+// Дати виходу серій — для календаря. Тримаємо в пам'яті й у сховищі
+// вкладки шість годин: розклад змінюється рідко, а записів багато.
+const schedCache = new Map();
+export async function schedule(id, signal) {
+  if (schedCache.has(id)) return schedCache.get(id);
+  const key = 'mws.sched.' + id;
+  try {
+    const c = JSON.parse(sessionStorage.getItem(key));
+    if (c && Date.now() - c.at < 6 * 3600e3) { schedCache.set(id, c.eps); return c.eps; }
+  } catch { /* нічого */ }
+  const m = (await getJson(`${BASE}/meta/series/${id}.json`, signal)).meta;
+  const eps = (m?.videos || [])
+    .map(v => ({ s: Number(v.season), e: Number(v.number ?? v.episode), d: Date.parse(v.released || v.firstAired) }))
+    .filter(v => v.s > 0 && v.e > 0 && Number.isFinite(v.d));
+  schedCache.set(id, eps);
+  try { sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), eps })); } catch { /* нічого */ }
+  return eps;
+}

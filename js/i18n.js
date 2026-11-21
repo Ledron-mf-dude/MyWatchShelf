@@ -134,7 +134,7 @@ const D = {
   'pal.fail': ['Search is unavailable right now ({e}). Check your connection and try again.', 'Пошук зараз недоступний ({e}). Перевір мережу й спробуй ще раз.'],
   // поширення
   'share.title': ['My recommendations', 'Мої рекомендації'],
-  'share.none': ['First open a title and turn on “Add to recommendations”', 'Спершу відкрий запис і ввімкни «Додати в рекомендації»'],
+  'share.none': ['First open a title and turn on “Add to recommendations” or add it to a collection', 'Спершу відкрий запис і ввімкни «Додати в рекомендації» або додай його в добірку'],
   'share.live': ['permanent link', 'постійне посилання'], 'share.snap': ['snapshot', 'знімок'],
   'share.live.text': ['Always shows the current list — add or remove recommendations and guests see the change.', 'Завжди показує свіжий список — додаєш чи прибираєш рекомендації, і гості бачать зміни.'],
   'share.snap.text': ['The list is packed into the link itself. If you change your recommendations, send a new one.', 'Список зашито просто в посилання. Зміниш рекомендації — надішли нове.'],
@@ -167,6 +167,37 @@ const D = {
   'toast.signedin': ['Signed in — your list is syncing', 'Вхід виконано — список синхронізується'], 'toast.signedout': ['You have signed out', 'Ви вийшли з акаунта'],
   'toast.name.saved': ['Name saved', 'Підпис збережено'], 'toast.copied': ['Link copied', 'Посилання скопійовано'], 'toast.copy.manual': ['Selected — copy it manually', 'Виділено — скопіюй вручну'],
   'toast.error': ['Something went wrong. Reload the page if the app stops responding.', 'Щось пішло не так. Онови сторінку, якщо застосунок не відповідає.'],
+  // календар
+  'nav.calendar': ['Calendar', 'Календар'],
+  'cal.title': ['New episodes', 'Нові серії'], 'cal.new': ['new', 'нова'], 'cal.waiting': ['waiting', 'чекають'], 'cal.catchup': ['catch up', 'наздогнати'],
+  'cal.fresh': ['Out this week', 'Вийшло цього тижня'], 'cal.upcoming': ['Coming up', 'Скоро'], 'cal.behind': ['Waiting for you', 'Чекають на тебе'],
+  'cal.sub': ['{n} in progress', '{n} дивлюсь зараз'], 'cal.loading': ['Loading the schedule…', 'Завантажую розклад…'],
+  'cal.empty.title': ['Nothing on the calendar', 'У календарі порожньо'],
+  'cal.empty.text': ['Mark a series as “Watching” and its new episodes will show up here.', 'Познач серіал як «Дивлюсь» — і його нові серії зʼявляться тут.'],
+  'cal.empty.quiet': ['You are all caught up, and nothing new airs in the next two weeks.', 'Ти все наздогнав, і найближчі два тижні нічого нового не виходить.'],
+  'day.today': ['today', 'сьогодні'], 'day.tomorrow': ['tomorrow', 'завтра'], 'day.yesterday': ['yesterday', 'вчора'], 'day.ago': ['{n} days ago', '{n} дн. тому'],
+  // вибір на вечір
+  'pick.title': ['What to watch tonight?', 'Що подивитись сьогодні?'], 'pick.short': ['Pick for me', 'Обери за мене'],
+  'pick.any.time': ['Any length', 'Будь-яка тривалість'], 'pick.upto': ['up to {n}', 'до {n}'],
+  'pick.from': ['From your plans · {n} match', 'З твоїх планів · підходить {n}'],
+  'pick.start': ['Start watching', 'Почати дивитись'], 'pick.again': ['Another one', 'Інший варіант'],
+  'pick.none': ['Your plan-to-watch list is empty', 'У планах поки нічого немає'], 'pick.none.text': ['Add a few titles to your plans and I will pick one for you.', 'Додай кілька тайтлів у плани — і я оберу з них.'],
+  'pick.none.filter': ['Nothing matches these filters', 'За цими фільтрами нічого немає'], 'pick.none.filter.text': ['Loosen the filters — try any length or all genres.', 'Послаб фільтри — спробуй будь-яку тривалість або всі жанри.'],
+  // збіг смаків
+  'taste.match': ['taste match', 'збіг смаків'], 'taste.high': ['You watch very much alike', 'Ви дивитесь дуже схоже'], 'taste.mid': ['You agree on a lot', 'У вас багато спільного'],
+  'taste.low': ['You see things differently', 'У вас різні погляди'], 'taste.none': ['Compare with your own list', 'Порівняння з твоїм списком'],
+  'taste.line': ['{a} in common · {b} you have not seen yet.', 'Спільних: {a} · ще не бачив: {b}.'], 'taste.scored': ['Based on {n} titles you both rated.', 'За {n} тайтлами, які оцінили обоє.'],
+  'taste.tag.match': ['you agree', 'збіг'], 'taste.tag.differ': ['you disagree', 'сперечаєтесь'], 'taste.tag.new': ['new for you', 'нове для тебе'], 'taste.mine': ['yours {n}', 'твоя {n}'],
+  // картка-підсумок
+  'wrap.btn': ['Share card', 'Картка-підсумок'], 'wrap.title': ['My watching in numbers', 'Мої перегляди в цифрах'], 'wrap.kicker': ['My watching in numbers', 'Мої перегляди в цифрах'],
+  'wrap.hours': ['hours', 'годин'], 'wrap.top': ['Top rated', 'Найвищі оцінки'], 'wrap.genre': ['Favourite genre', 'Улюблений жанр'],
+  'wrap.save': ['Download image', 'Завантажити зображення'], 'wrap.saved': ['Image saved', 'Зображення збережено'], 'wrap.noshare': ['Sharing images is not supported here — download it instead', 'Тут не можна надіслати зображення — завантаж його'],
+  'wrap.note': ['Totals for your whole list. Titles only — no links or notes.', 'Підсумок за всім списком. Лише назви — без посилань і нотаток.'], 'wrap.empty': ['Add a few titles first', 'Спершу додай кілька записів'],
+  // добірки
+  lists: ['Collections', 'Добірки'], 'list.new': ['New collection', 'Нова добірка'], 'list.create': ['Create', 'Створити'],
+  'list.new.text': ['A named list with its own link — for example, for a friend who is new to anime.', 'Іменований список із власним посиланням — наприклад, для друга, який тільки починає дивитись аніме.'],
+  'list.new.ph': ['Anime for beginners', 'Аніме для новачків'], 'list.limit': ['A title can be in up to 8 collections', 'Запис може бути щонайбільше у 8 добірках'],
+  'recs.list': ['Collection', 'Добірка'], 'recs.list.by': ['Collection by {name}', 'Добірка від {name}'],
   // помилки з глибини
   'err.too.big': ['the list is too large', 'список завеликий'], 'err.link.big': ['the link is too long', 'посилання завелике'],
   'err.search': ['search is unavailable', 'пошук недоступний'], 'err.notfound': ['nothing found', 'нічого не знайдено'], 'err.badid': ['this is not an IMDb ID', 'не схоже на ID з IMDb'],

@@ -5,6 +5,7 @@ import {
   safeUrl, parseInput, sanitize, mergeEntry, nextEpisode, progressText,
   filterSort, encodeRecs, decodeRecs, cleanRecs, fmtRating, statusLabel, kindLabel,
   episodesWatched, episodesTotal, progressPct, minutesWatched, insights, fmtRuntime, genreName,
+  agenda, dayDiff, tasteMatch, matchTag, pickCandidates, listNames, recItem,
 } from '../js/logic.js';
 import { setLang, getLang, t, tn } from '../js/i18n.js';
 
@@ -185,4 +186,93 @@ test('невідома мова чи ключ не ламають інтерфе
   assert.equal(t('no.such.key'), 'no.such.key');
   setLang('uk');
   assert.equal(fmtRating(8.9), '8,9');
+});
+
+test('календар: свіжі, наступні й пропущені серії', () => {
+  const DAY = 864e5, now = Date.UTC(2026, 10, 20, 12);
+  const sched = {
+    tt1: [{ s: 1, e: 1, d: now - 30 * DAY }, { s: 1, e: 2, d: now - 2 * DAY }, { s: 1, e: 3, d: now + 5 * DAY }, { s: 1, e: 4, d: now + 40 * DAY }],
+    tt2: [{ s: 1, e: 1, d: now - 90 * DAY }, { s: 1, e: 2, d: now - 80 * DAY }, { s: 1, e: 3, d: now - 70 * DAY }],
+    tt3: [{ s: 1, e: 1, d: now - 2 * DAY }],
+    tt4: [{ s: 2, e: 1, d: now + DAY }],
+  };
+  const entries = [
+    { id: 'tt1', type: 'series', status: 'watching', season: 1, episode: 1 },
+    { id: 'tt2', type: 'series', status: 'paused', season: 1, episode: 1 },
+    { id: 'tt3', type: 'series', status: 'planned', season: 1, episode: 0 },   // не дивлюсь — не в календарі
+    { id: 'tt4', type: 'series', status: 'watching', season: 1, episode: 12 },
+    { id: 'tt5', type: 'movie', status: 'watching' },
+  ];
+  const a = agenda(entries, sched, now);
+  assert.deepEqual(a.fresh.map(r => [r.e.id, r.fresh.e, r.behind]), [['tt1', 2, 1]]);
+  assert.deepEqual(a.upcoming.map(r => [r.e.id, r.next.s, r.next.e]), [['tt4', 2, 1], ['tt1', 1, 3]]);
+  assert.deepEqual(a.behind.map(r => [r.e.id, r.behind]), [['tt2', 2]]);
+  // усе наздогнав — зі «свіжих» зникає, наступна лишається
+  const b = agenda([{ ...entries[0], episode: 2 }], sched, now);
+  assert.equal(b.fresh.length, 0);
+  assert.equal(b.upcoming[0].next.e, 3);
+  assert.deepEqual(agenda(entries, {}, now), { fresh: [], upcoming: [], behind: [] });
+});
+
+test('різниця в календарних днях', () => {
+  const now = new Date(2026, 10, 20, 23, 30).getTime();
+  assert.equal(dayDiff(new Date(2026, 10, 20, 0, 5).getTime(), now), 0);
+  assert.equal(dayDiff(new Date(2026, 10, 21, 0, 5).getTime(), now), 1);
+  assert.equal(dayDiff(new Date(2026, 10, 19, 23, 59).getTime(), now), -1);
+});
+
+test('збіг смаків', () => {
+  const mine = [{ id: 'tt1', score: 10 }, { id: 'tt2', score: 6 }, { id: 'tt3', score: 0 }];
+  const items = [{ id: 'tt1', s: 10 }, { id: 'tt2', s: 9 }, { id: 'tt3', s: 8 }, { id: 'tt4', s: 7 }];
+  const m = tasteMatch(mine, items);
+  assert.equal(m.scored, 2);
+  assert.equal(m.common, 3);
+  assert.equal(m.unseen, 1);
+  assert.equal(m.pct, 83);                       // середня різниця 1,5 з 9
+  assert.deepEqual(m.rows.map(matchTag), ['match', 'differ', 'have', 'new']);
+  assert.equal(tasteMatch([], items).pct, null);
+  assert.equal(tasteMatch([{ id: 'tt1', score: 1 }], [{ id: 'tt1', s: 10 }]).pct, 0);
+});
+
+test('вибір на вечір: лише плани й пауза, фільтри', () => {
+  const list = [
+    { id: 'tt1', status: 'planned', kind: 'anime', meta: { runtime: '24 min', genres: ['Comedy'] } },
+    { id: 'tt2', status: 'planned', kind: 'movie', meta: { runtime: '140 min', genres: ['Drama'] } },
+    { id: 'tt3', status: 'paused', kind: 'series', meta: { runtime: '', genres: ['Comedy'] } },
+    { id: 'tt4', status: 'done', kind: 'anime', meta: { runtime: '24 min', genres: ['Comedy'] } },
+    { id: 'tt5', status: 'watching', kind: 'anime', meta: { runtime: '24 min' } },
+  ];
+  const ids = f => pickCandidates(list, f).map(e => e.id);
+  assert.deepEqual(ids({}), ['tt1', 'tt2', 'tt3']);
+  assert.deepEqual(ids({ max: 30 }), ['tt1']);      // без відомої тривалості під ліміт не підходить
+  assert.deepEqual(ids({ kind: 'movie' }), ['tt2']);
+  assert.deepEqual(ids({ genre: 'Comedy' }), ['tt1', 'tt3']);
+  assert.deepEqual(ids({ max: 30, genre: 'Drama' }), []);
+});
+
+test('добірки: чистка, перелік, фільтр, публічний запис', async () => {
+  const e = sanitize({ id: 'tt1234567', updated: 1, lists: [' A ', 'A', '', 5, 'x'.repeat(60), ...'bcdefghij'.split('')] });
+  assert.equal(e.lists.length, 8);
+  assert.equal(e.lists[0], 'A');
+  assert.equal(e.lists[1].length, 40);
+  assert.deepEqual(sanitize({ id: 'tt1234567', updated: 1 }).lists, []);
+  const list = [
+    { id: 'tt1', title: 'A', kind: 'anime', status: 'done', rec: true, lists: ['Вечір'] },
+    { id: 'tt2', title: 'B', kind: 'movie', status: 'done', rec: false, lists: ['Вечір', 'Аніме'] },
+    { id: 'tt3', title: 'C', kind: 'movie', status: 'done', rec: true },
+  ];
+  assert.deepEqual(listNames(list), ['Аніме', 'Вечір']);
+  assert.deepEqual(filterSort(list, { list: 'Вечір' }, 'title', 1).map(x => x.id), ['tt1', 'tt2']);
+  assert.deepEqual(recItem(list[1]).p, 0);
+  assert.deepEqual(recItem(list[1]).l, ['Вечір', 'Аніме']);
+  assert.ok(!('p' in recItem(list[0])) && !('l' in recItem(list[2])));
+  // чужий документ: мітки чистяться, сміття відкидається
+  const c = cleanRecs({ items: [{ id: 'tt1234567', t: 'X', p: 0, l: ['ok', 7, ''] }, { id: 'tt7654321', t: 'Y', p: 'zzz', l: 'nope' }] });
+  assert.deepEqual(c.items[0].l, ['ok']);
+  assert.equal(c.items[0].p, 0);
+  assert.ok(!('p' in c.items[1]) && !('l' in c.items[1]));
+  // знімок добірки несе її назву
+  const back = await decodeRecs(await encodeRecs('Костя', [recItem({ ...list[1], id: 'tt1234567' })], 'Вечір'));
+  assert.equal(back.title, 'Вечір');
+  assert.equal(back.items[0].id, 'tt1234567');
 });

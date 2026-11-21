@@ -363,6 +363,43 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
 #toast button{border:0; background:none; color:var(--accent); font-weight:800; padding:0; white-space:nowrap}
 :root[data-theme="dark"] #toast button{color:#0B7A68}
 
+/* ── календар, вибір, збіг смаків, добірки ─────────── */
+.agenda{margin-top:28px}
+.agenda header{display:flex; align-items:center; gap:14px; margin-bottom:12px}
+.agenda h2{font-size:22px; font-weight:800; letter-spacing:-.02em}
+.agenda-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px}
+.ag{display:flex; gap:12px; align-items:center; padding:12px; border:1px solid var(--line2); border-radius:16px; background:var(--surface); cursor:pointer; transition:.15s; min-width:0}
+.ag:hover{border-color:var(--accent)}
+.ag .ph{width:44px}
+.ag-main{min-width:0; display:grid; gap:3px; justify-items:start}
+.ag-main b{font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+.ag-main span{font-size:12.500px; color:var(--muted)}
+.badge.static.warn{color:var(--amber); border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+.cal-h{display:flex; align-items:baseline; gap:10px; margin:26px 0 4px; font-size:18px; font-weight:800}
+.cal-h small{font-size:13px; color:var(--faint)}
+.when{text-align:right}
+button.more{border:0; background:none; padding:0; cursor:pointer; gap:6px}
+button.more .ic{width:16px; height:16px}
+.pick-f{display:grid; gap:8px}
+.pick-f>div{display:flex; flex-wrap:wrap; gap:6px}
+.pick-f .chip,.share-tabs .chip,.lists .chip{height:30px; padding:0 12px; font-size:13px}
+.pick-res{display:flex; gap:16px; align-items:flex-start}
+.pick-res h3{font-size:20px; font-weight:800; letter-spacing:-.01em; margin:2px 0 4px}
+.plot.clamp{display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; margin-top:6px}
+.empty.small{padding:28px 8px}
+.taste{display:flex; gap:20px; align-items:center; max-width:920px; margin-top:24px; padding:18px 22px; border:1px solid var(--line2); border-radius:20px;
+  background:linear-gradient(90deg,var(--accent-soft),transparent 70%),var(--surface)}
+.taste p{color:var(--muted); font-size:14px}
+.taste-pct{text-align:center; flex:none}
+.taste-pct b{display:block; font-size:40px; font-weight:800; line-height:1; color:var(--accent)}
+.taste-pct small{font-size:11px; font-weight:700; color:var(--faint); white-space:nowrap}
+.lists{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:12px}
+.lists>span{font-size:13px; color:var(--faint); font-weight:700; margin-right:4px}
+.chip .ic{width:14px; height:14px}
+.share-tabs{display:flex; flex-wrap:wrap; gap:6px}
+#wrap-cv{width:100%; max-width:300px; height:auto; justify-self:center; border-radius:16px; border:1px solid var(--line)}
+.page-head{flex-wrap:wrap}
+
 /* ── нижня навігація (телефон) ─────────────────────── */
 .tabs{display:none}
 @media (hover:none){ .pc-acts{opacity:1; transform:none} .pc:hover .pc-img{transform:none; box-shadow:0 0 0 1px var(--line2)} }
@@ -407,6 +444,7 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
   .palette{top:0; left:0; transform:none; width:100%; max-height:100%; height:100%; border-radius:0; border:0}
   .palette.narrow{top:auto; bottom:0; height:auto; width:100%; border-radius:22px 22px 0 0; border-top:1px solid var(--line)}
   .pal-head kbd{display:none}
+  .agenda h2{font-size:19px} .agenda-row{grid-template-columns:1fr} .pick-res .ph.lg{width:76px} .taste{flex-direction:column; align-items:flex-start; gap:10px}
   .card-foot.fwrap .muted{flex-basis:100%} .card-foot.fwrap .grow{display:none} .card-foot.fwrap .btn{flex:1}
   /* шапка з розмиттям сама стає «вікном» для position:fixed, тож меню лишаємо звичайним випадним */
   .pop.menu{right:0; width:min(320px,calc(100vw - 24px)); max-height:calc(100vh - 170px); overflow-y:auto}

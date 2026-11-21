@@ -182,7 +182,8 @@ async function signOut() {
 }
 
 function recsPayload() {
-  const items = store.list().filter(e => e.rec)
+  // у публічний документ ідуть рекомендації й усе, що в добірках
+  const items = store.list().filter(e => e.rec || e.lists?.length)
     .sort((a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, getLang()))
     .map(recItem);
   // Підпис — лише той, що людина вписала сама; ім'я з Google-акаунта

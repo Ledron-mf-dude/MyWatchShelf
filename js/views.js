@@ -1,8 +1,9 @@
 // Екрани: головна, бібліотека, каталог, статистика, чужі рекомендації.
 import {
   STATUS_IDS, KIND_IDS, CATALOG_GENRES, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtRuntime,
-  genreName, progressText, progressPct, filterSort, insights, episodesWatched, episodesTotal,
+  genreName, progressText, progressPct, filterSort, insights, episodesWatched, episodesTotal, listNames,
 } from './logic.js';
+import { ensureSchedules, agendaStrip, taste, tasteBadge } from './extras.js';
 import { t, tn } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
@@ -12,7 +13,7 @@ import { $, app, icon, ph, remember } from './ui.js';
 const S = store.settings;
 export const view = {
   route: 'home',
-  f: { q: '', kind: 'all', status: 'all', genres: [] },
+  f: { q: '', kind: 'all', status: 'all', genres: [], list: '' },
   disc: { type: 'series', genre: '', year: '', items: [], skip: 0, loading: false, more: true, error: '', key: '' },
   recs: null,
   home: null,   // добірки каталогу для головної, щоб не тягнути їх щоразу
@@ -117,10 +118,12 @@ export function renderHome() {
   const planned = list.filter(e => e.status === 'planned').sort(byUpd);
   const feature = watching[0] || top[0] || [...list].sort(byUpd)[0];
   const more = r => `<a class="more" href="#/${r}">${t('all')} ${icon('chevR')}</a>`;
-  app.innerHTML = heroHtml(feature) + hintHtml()
+  ensureSchedules(() => { const b = $('#home-agenda'); if (b) b.innerHTML = agendaStrip(); });
+  const pickBtn = `<button class="more" data-act="tonight">${icon('dice')}${t('pick.title')}</button>`;
+  app.innerHTML = heroHtml(feature) + hintHtml() + `<div id="home-agenda">${agendaStrip()}</div>`
     + (watching.length > 1 ? rail('continue', watching.map(e => entryCard(e)).join(''), { link: more('library') }) : '')
     + (top.length ? rail('top', top.map((e, i) => entryCard(e, { rank: i + 1 })).join(''), { ranked: true }) : '')
-    + (planned.length ? rail('planned', planned.slice(0, 20).map(e => entryCard(e)).join(''), { link: more('library') }) : '')
+    + (planned.length ? rail('planned', planned.slice(0, 20).map(e => entryCard(e)).join(''), { link: more('library') + pickBtn }) : '')
     + '<div id="home-catalog"></div>';
   drawHomeCatalog();
 }
@@ -173,6 +176,7 @@ export function renderLibrary() {
     <label class="field search">${icon('search')}<input id="lib-q" type="search" placeholder="${t('lib.search')}" autocomplete="off" aria-label="${t('lib.search.aria')}"></label>
     <div class="seg" id="lib-kind" role="tablist"></div>
     <span class="grow"></span>
+    <button class="btn" data-act="tonight">${icon('dice')}${t('pick.short')}</button>
     <div class="dd"><button class="btn" data-act="genres-toggle" aria-haspopup="true">${icon('filter')}${t('genres')}<b id="lib-gcount"></b></button>
       <div class="pop" id="lib-genres" hidden></div></div>
     <label class="field">${icon('sortDown')}<select id="lib-sort" aria-label="${t('sorting')}">${SORTS.map(v => `<option value="${v}">${t('sort.' + v)}</option>`).join('')}</select></label>
@@ -197,7 +201,8 @@ export function updateLibrary() {
   $('#lib-status').innerHTML = chip('all', t('all.statuses'), all.length)
     + STATUS_IDS.map(v => chip(v, `<i class="dot st-${v}"></i>${statusLabel(v)}`, n(e => e.status === v))).join('')
     + chip('rec', `${icon('starFill')}${t('badge.rec')}`, n(e => e.rec), 'rec')
-    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length ? `<button class="chip reset" data-act="reset-filters">${icon('close')}${t('reset.filters')}</button>` : '');
+    + listNames(all).map(l => `<button class="chip ${f.list === l ? 'on' : ''}" data-act="list-filter" data-v="${esc(l)}" aria-pressed="${f.list === l}">${icon('folder')}${esc(l)}<small>${n(e => (e.lists || []).includes(l))}</small></button>`).join('')
+    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length || f.list ? `<button class="chip reset" data-act="reset-filters">${icon('close')}${t('reset.filters')}</button>` : '');
   const genres = insights(all).genres;
   $('#lib-gcount').textContent = f.genres.length || '';
   $('#lib-genres').innerHTML = genres.length
@@ -291,7 +296,8 @@ export function renderStats() {
     `<div class="hbar"><span>${l}</span><i style="--w:${Math.max(2, v / max * 100)}%"></i><b>${v}</b></div>`).join(''); };
   const maxS = Math.max(1, ...s.scores), w = s.byStatus.watching || 0;
   app.innerHTML = `
-  <header class="page-head"><h1>${t('nav.stats')}</h1><span class="count">${t('stats.sub', { n: count('entry', s.total) })}</span></header>
+  <header class="page-head"><h1>${t('nav.stats')}</h1><span class="count">${t('stats.sub', { n: count('entry', s.total) })}</span><span class="grow"></span>
+    <button class="btn" data-act="wrapped">${icon('image')}${t('wrap.btn')}</button></header>
   <div class="tiles">
     <div class="tile"><span>${t('tile.watched')}</span><b>${hours}<small> ${t('h')}</small></b><em>${hours >= 48 ? t('tile.days', { d: fmtRating(hours / 24) }) : t('tile.start')}</em></div>
     <div class="tile"><span>${t('tile.episodes')}</span><b>${s.episodes}</b><em>${t('tile.watching', { n: count('title', w) })}</em></div>
@@ -313,17 +319,19 @@ export function renderStats() {
 
 // ── чужі рекомендації ─────────────────────────────────────────────
 export function renderRecs() {
-  const { name, items } = view.recs;
+  const { name, items, title } = view.recs;
+  const tm = taste(items);
   items.forEach(x => remember({ id: x.id, type: x.k === 'movie' ? 'movie' : 'series', kind: x.k, title: x.t, year: x.y, rec: x }));
   const lead = items[0];
   app.innerHTML = `
   <section class="hero recs-hero" data-img>
     ${lead ? `<img class="hero-bg" alt="" src="${backdrop(lead.id)}">` : ''}
-    <div class="hero-in"><span class="kicker">${t('recs.kicker')}</span>
-      <h1>${name ? t('recs.title.by', { name: esc(name) }) : t('recs.title')}</h1>
+    <div class="hero-in"><span class="kicker">${title ? (name ? t('recs.list.by', { name: esc(name) }) : t('recs.list')) : t('recs.kicker')}</span>
+      <h1>${title ? esc(title) : name ? t('recs.title.by', { name: esc(name) }) : t('recs.title')}</h1>
       <p class="hero-plot">${t('recs.text', { n: count('title', items.length) })}</p>
       <div class="hero-act"><a class="btn lg" href="./">${icon('library')}${t('my.shelf')}</a></div></div>
   </section>
+  ${tm.panel}
   <ul class="rec-list">${items.map((x, i) => {
     const have = store.get(x.id);
     return `<li class="rcard" data-id="${x.id}" data-act="preview" tabindex="0">
@@ -331,6 +339,7 @@ export function renderRecs() {
       <div class="rec-main"><h3>${esc(x.t)}</h3>
         <p class="row-sub">${esc([kindLabel(x.k), x.y].filter(Boolean).join(' · '))}${x.r ? ` · IMDb ${fmtRating(x.r)}` : ''}</p>
         ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
+        ${tasteBadge(tm.tags.get(x.id))}
         <button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : t('take')}</button></div>
       ${x.s ? `<div class="rec-score"><b>${x.s}</b><small>${t('author.score')}</small></div>` : ''}
     </li>`;

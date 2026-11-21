@@ -2,13 +2,13 @@
 // з каталогу, пошук-палітра та діалог поширення рекомендацій.
 import {
   STATUS_IDS, KIND_IDS, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtRuntime, genreName,
-  parseInput, nextEpisode, progressText, progressPct, seasonTotal, episodesWatched, episodesTotal, recItem, encodeRecs, filterSort,
+  parseInput, nextEpisode, progressText, progressPct, seasonTotal, episodesWatched, episodesTotal, recItem, encodeRecs, filterSort, listNames,
 } from './logic.js';
 import { t, tn, getLang } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
-import { $, layer, icon, ph, toast, ui, showOverlay, closeOverlay, remember, recall, confirmBox } from './ui.js';
+import { $, layer, icon, ph, toast, ui, showOverlay, closeOverlay, remember, recall, confirmBox, promptBox } from './ui.js';
 import { view } from './views.js';
 
 const S = store.settings;
@@ -127,7 +127,10 @@ function cardHtml(e) {
     <section><h3>${t('card.rec')}</h3>
       <button class="toggle ${e.rec ? 'on' : ''}" data-act="rec" aria-pressed="${e.rec}">${icon(e.rec ? 'starFill' : 'star')}
         <span><b>${e.rec ? t('rec.on') : t('rec.off')}</b><small>${e.rec ? t('rec.on.sub') : t('rec.off.sub')}</small></span><i></i></button>
-      ${e.rec ? `<input class="inp mt" type="text" data-field="recNote" maxlength="500" placeholder="${t('rec.note.ph')}" value="${esc(e.recNote)}">` : ''}
+      ${e.rec || e.lists?.length ? `<input class="inp mt" type="text" data-field="recNote" maxlength="500" placeholder="${t('rec.note.ph')}" value="${esc(e.recNote)}">` : ''}
+      <div class="lists"><span>${t('lists')}</span>${listNames(store.list()).map(l =>
+        `<button class="chip ${(e.lists || []).includes(l) ? 'on' : ''}" data-act="list-toggle" data-v="${esc(l)}" aria-pressed="${(e.lists || []).includes(l)}">${icon('folder')}${esc(l)}</button>`).join('')}
+        <button class="chip reset" data-act="list-new">${icon('plus')}${t('list.new')}</button></div>
     </section>
     <section><h3>${t('card.note')}</h3><textarea class="inp" data-field="note" rows="3" placeholder="${t('card.note.ph')}">${esc(e.note)}</textarea></section>
     <section><h3>${t('card.about')}</h3>${aboutHtml(m).trim() || `<p class="muted">${e.metaAt ? t('no.plot') : t('loading.plot')}</p>`}
@@ -204,6 +207,18 @@ export const cardActions = {
     toast(t('toast.removed', { title: e.title }), { label: t('restore'), action: () => store.restore(e) });
   },
   refresh: () => refreshMeta(ui.overlay.id, { loud: true }),
+  'list-toggle': v => {
+    const cur = store.get(ui.overlay.id).lists || [];
+    cardSave({ lists: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v] });
+  },
+  'list-new': async () => {
+    const id = ui.overlay.id;
+    const name = await promptBox({ title: t('list.new'), text: t('list.new.text'), placeholder: t('list.new.ph'), ok: t('list.create') });
+    if (!name || ui.overlay?.id !== id) return;
+    const cur = store.get(id).lists || [];
+    if (cur.length >= 8) return toast(t('list.limit'));
+    cardSave({ lists: [...new Set([...cur, name.slice(0, 40)])] });
+  },
 };
 
 // ── перегляд тайтла, якого ще немає на полиці ─────────────────────
@@ -344,20 +359,26 @@ export function pickResult(i) {
 export const dropUrl = () => { ui.overlay.url = ''; palNote(); };
 
 // ── поширення рекомендацій ────────────────────────────────────────
-export async function openShare() {
-  const items = store.list().filter(e => e.rec)
-    .sort((a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, getLang())).map(recItem);
+// list — назва добірки; порожньо — загальні рекомендації.
+export async function openShare(list = '') {
+  const all = store.list(), names = listNames(all);
+  const byScore = (a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, getLang());
+  const pool = l => (l ? all.filter(e => (e.lists || []).includes(l)) : all.filter(e => e.rec));
+  if (!list && !pool('').length && names.length) list = names[0];
+  const items = pool(list).sort(byScore).map(recItem);
   if (!items.length) return toast(t('share.none'), { ms: 4200 });
   const base = location.origin + location.pathname;
   let link, live = false;
   if (cloud.user) {
-    try { await cloud.publishNow(); link = `${base}#u=${cloud.user.uid}`; live = true; } catch { /* нижче — знімок */ }
+    try { await cloud.publishNow(); link = `${base}#u=${cloud.user.uid}${list ? '&l=' + encodeURIComponent(list) : ''}`; live = true; } catch { /* нижче — знімок */ }
   }
-  link ??= `${base}#r=${await encodeRecs(S.name, items)}`;
-  showOverlay({ type: 'share', link }, `
+  link ??= `${base}#r=${await encodeRecs(S.name, items, list)}`;
+  const tab = (l, label, n) => `<button class="chip ${l === list ? 'on' : ''}" data-act="share-list" data-v="${esc(l)}">${l ? icon('folder') : icon('starFill')}${esc(label)}<small>${n}</small></button>`;
+  showOverlay({ type: 'share', link, list }, `
     <div class="palette narrow" role="dialog" aria-label="${t('menu.share')}">
-      <div class="pal-head"><h2>${t('share.title')} <small>${items.length}</small></h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
+      <div class="pal-head"><h2>${list ? esc(list) : t('share.title')} <small>${items.length}</small></h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
       <div class="share">
+        ${names.length ? `<div class="share-tabs">${pool('').length ? tab('', t('share.title'), pool('').length) : ''}${names.map(l => tab(l, l, pool(l).length)).join('')}</div>` : ''}
         <div class="share-strip">${items.slice(0, 6).map(x => ph(x.id, x.t, 'small')).join('')}${items.length > 6 ? `<span class="morecount">+${items.length - 6}</span>` : ''}</div>
         <p><span class="badge static ${live ? 'ok' : ''}">${live ? t('share.live') : t('share.snap')}</span>
           ${live ? t('share.live.text') : t('share.snap.text') + (cloud.available ? ' ' + t('share.snap.signin') : '')}</p>

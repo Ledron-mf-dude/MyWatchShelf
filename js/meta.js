@@ -31,7 +31,9 @@ export async function search(q, signal) {
   const ql = bare(q);
   const rank = x => {
     const n = bare(x.name || '');
-    return n === ql ? 0 : n.startsWith(ql) ? 1 : n.includes(ql) ? 2 : 3;
+    // точний збіг навмисно не піднімаємо: «frieren» — це передусім відомий
+    // серіал «Frieren: Beyond…», а не однойменний маловідомий фільм
+    return n.startsWith(ql) ? 0 : n.includes(ql) ? 1 : 2;
   };
   const seen = new Set();
   return mixed.map((x, i) => ({ x, i, r: rank(x) }))

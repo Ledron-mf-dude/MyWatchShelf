@@ -260,6 +260,7 @@ export async function loadDiscover(reset) {
     const have = new Set(d.items.map(x => x.id));
     d.items.push(...batch.filter(x => !have.has(x.id)
       && (!anime || x.kind === 'anime')
+      && (!d.year || String(x.year).slice(0, 4) === String(d.year))   // добірка «за роком» у каталозі неточна
       && (!(d.year || anime) || !d.genre || x.meta.genres.includes(d.genre))));
   } catch (err) {
     if (d.key === key) d.error = true;

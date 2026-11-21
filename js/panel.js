@@ -306,7 +306,7 @@ async function runSearch(raw) {
   if (p.url) { o.url = safeUrl(p.url); palNote(); }
   o.sel = 0;
   if (!p.id && p.query.length < 2) {
-    if (p.url) $('#pal-q').value = '';
+    if (p.url) { $('#pal-q').value = ''; o.results = []; return drawPalette(t('pal.url.noguess')); }
     const mine = filterSort(store.list(), {}, 'updated', -1).slice(0, 4).map(e => ({ ...e, group: 'pal.recent' }));
     const hot = (view.home?.series || []).filter(x => !store.get(x.id)).slice(0, 6).map(x => ({ ...x, group: 'rail.popular' }));
     o.results = [...mine, ...hot];

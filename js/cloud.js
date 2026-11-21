@@ -95,7 +95,8 @@ function onUser(c, u) {
   unsub = c.fs.onSnapshot(c.fs.collection(c.db, 'users', u.uid, 'entries'), snap => {
     const incoming = [];
     snap.docChanges().forEach(ch => { if (ch.type !== 'removed') incoming.push(ch.doc.data()); });
-    store.applyRemote(incoming);
+    // зміна приїхала з іншого пристрою — рекомендації могли змінитись теж
+    if (store.applyRemote(incoming) && !first) schedulePublish();
     if (first) {
       // Перша зустріч: усе, що на пристрої свіжіше або чого в хмарі
       // немає (накопичене без входу чи без мережі), віддаємо нагору.

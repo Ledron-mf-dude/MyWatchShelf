@@ -195,7 +195,8 @@ const D = {
   'wrap.note': ['Totals for your whole list. Titles only — no links or notes.', 'Підсумок за всім списком. Лише назви — без посилань і нотаток.'], 'wrap.empty': ['Add a few titles first', 'Спершу додай кілька записів'],
   // добірки
   lists: ['Collections', 'Добірки'], 'list.new': ['New collection', 'Нова добірка'], 'list.create': ['Create', 'Створити'],
-  'list.new.text': ['A named list with its own link — for example, for a friend who is new to anime.', 'Іменований список із власним посиланням — наприклад, для друга, який тільки починає дивитись аніме.'],
+  'list.new.text': ['A named list with its own link — for example, for a friend who is new to anime. Collections are made for sharing: anyone who has a link to your lists can see the titles in them.', 'Іменований список із власним посиланням — наприклад, для друга, який тільки починає дивитись аніме. Добірки створені, щоб ними ділитись: назви в них бачить кожен, хто має посилання на твої списки.'],
+  'lists.note': ['Titles in collections are visible to anyone with your link — with your score and this comment, never your watch link or note.', 'Записи в добірках бачить кожен, хто має твоє посилання, — з оцінкою й цим коментарем, але без посилання «де дивлюсь» і нотатки.'],
   'list.new.ph': ['Anime for beginners', 'Аніме для новачків'], 'list.limit': ['A title can be in up to 8 collections', 'Запис може бути щонайбільше у 8 добірках'],
   'recs.list': ['Collection', 'Добірка'], 'recs.list.by': ['Collection by {name}', 'Добірка від {name}'],
   // помилки з глибини

@@ -131,6 +131,7 @@ function cardHtml(e) {
       <div class="lists"><span>${t('lists')}</span>${listNames(store.list()).map(l =>
         `<button class="chip ${(e.lists || []).includes(l) ? 'on' : ''}" data-act="list-toggle" data-v="${esc(l)}" aria-pressed="${(e.lists || []).includes(l)}">${icon('folder')}${esc(l)}</button>`).join('')}
         <button class="chip reset" data-act="list-new">${icon('plus')}${t('list.new')}</button></div>
+      ${e.lists?.length ? `<p class="muted small mt">${t('lists.note')}</p>` : ''}
     </section>
     <section><h3>${t('card.note')}</h3><textarea class="inp" data-field="note" rows="3" placeholder="${t('card.note.ph')}">${esc(e.note)}</textarea></section>
     <section><h3>${t('card.about')}</h3>${aboutHtml(m).trim() || `<p class="muted">${e.metaAt ? t('no.plot') : t('loading.plot')}</p>`}

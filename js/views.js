@@ -8,7 +8,7 @@ import { t, tn } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
-import { $, app, icon, ph, remember } from './ui.js';
+import { $, app, icon, ph, remember, dropdown, selects } from './ui.js';
 
 const S = store.settings;
 export const view = {
@@ -180,16 +180,15 @@ export function renderLibrary() {
     <button class="btn" data-act="tonight">${icon('dice')}${t('pick.short')}</button>
     <div class="dd"><button class="btn" data-act="genres-toggle" aria-haspopup="true">${icon('filter')}${t('genres')}<b id="lib-gcount"></b></button>
       <div class="pop" id="lib-genres" hidden></div></div>
-    <label class="field">${icon('sortDown')}<select id="lib-sort" aria-label="${t('sorting')}">${SORTS.map(v => `<option value="${v}">${t('sort.' + v)}</option>`).join('')}</select></label>
+    ${dropdown('lib-sort', S.sort, SORTS.map(v => [v, t('sort.' + v)]), 'sortDown', t('sorting'))}
     <button class="rb" data-act="dir" id="lib-dir" title="${t('sort.dir')}"></button>
     <button class="rb" data-act="view" id="lib-view" title="${t('view.toggle')}"></button>
   </div>
   <div class="chips" id="lib-status"></div>
   <div id="lib-list"></div>`;
   $('#lib-q').value = view.f.q;
-  $('#lib-sort').value = S.sort;
   $('#lib-q').addEventListener('input', e => { view.f.q = e.target.value; updateLibrary(); });
-  $('#lib-sort').addEventListener('change', e => { store.setSetting('sort', e.target.value); updateLibrary(); });
+  selects['lib-sort'] = v => { store.setSetting('sort', v); renderLibrary(); };
   updateLibrary();
 }
 export function updateLibrary() {
@@ -238,14 +237,12 @@ export function renderDiscover() {
     <div class="seg" id="disc-type" role="tablist">${['series', 'anime', 'movie'].map(v =>
       `<button class="${d.type === v ? 'on' : ''}" data-act="disc-type" data-v="${v}" role="tab" aria-selected="${d.type === v}">${t('kinds.' + v)}</button>`).join('')}</div>
     <span class="grow"></span>
-    <label class="field">${icon('filter')}<select id="disc-genre" aria-label="${t('genre')}"><option value="">${t('all.genres')}</option>${CATALOG_GENRES.map(g =>
-      `<option value="${g}" ${d.genre === g ? 'selected' : ''}>${esc(genreName(g))}</option>`).join('')}</select></label>
-    <label class="field">${icon('clock')}<select id="disc-year" aria-label="${t('year')}"><option value="">${t('any.year')}</option>${years.map(y =>
-      `<option ${String(d.year) === String(y) ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
+    ${dropdown('disc-genre', d.genre, [['', t('all.genres')], ...CATALOG_GENRES.map(g => [g, genreName(g)])], 'filter', t('genre'))}
+    ${dropdown('disc-year', d.year, [['', t('any.year')], ...years.map(y => [y, String(y)])], 'clock', t('year'))}
   </div>
   <div id="disc-list" class="grid"></div><div id="disc-more" class="center"></div>`;
-  $('#disc-genre').addEventListener('change', e => { d.genre = e.target.value; loadDiscover(true); });
-  $('#disc-year').addEventListener('change', e => { d.year = e.target.value; loadDiscover(true); });
+  selects['disc-genre'] = v => { d.genre = v; renderDiscover(); };
+  selects['disc-year'] = v => { d.year = v; renderDiscover(); };
   const key = [d.type, d.genre, d.year].join('|');
   if (d.key === key && d.items.length) drawDiscover(); else loadDiscover(true);
 }

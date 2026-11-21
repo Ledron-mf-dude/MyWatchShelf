@@ -59,6 +59,21 @@ document.addEventListener('error', e => {
   if (e.target.tagName === 'IMG') (e.target.closest('.ph') || e.target.closest('[data-img]'))?.classList.add('noimg');
 }, true);
 
+// ── власний випадаючий список ─────────────────────────────────────
+// Системний <select> не оформлюється — малюємо свій: кнопка зі значенням
+// і список варіантів. options: [[значення, підпис], …]. Що робити з
+// вибором, каже таблиця selects (за id).
+export const selects = {};
+export function dropdown(id, value, options, ic, aria) {
+  const is = v => String(v) === String(value);
+  const cur = options.find(o => is(o[0])) || options[0];
+  return `<div class="dd sel" data-sel="${id}">
+    <button class="field selbtn" data-act="sel-toggle" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(aria)}: ${esc(cur[1])}">${icon(ic)}<span>${esc(cur[1])}</span>${icon('chevD', 'caret')}</button>
+    <div class="pop options" role="listbox" aria-label="${esc(aria)}" hidden>${options.map(([v, l]) =>
+      `<button role="option" aria-selected="${is(v)}" class="${is(v) ? 'on' : ''}" data-act="sel-pick" data-v="${esc(v)}"><span>${esc(l)}</span>${is(v) ? icon('check') : ''}</button>`).join('')}</div>
+  </div>`;
+}
+
 // ── повідомлення внизу екрана, за потреби з дією («Скасувати») ───
 let toastTimer;
 export function toast(text, { ms = 2800, label = '', action = null } = {}) {

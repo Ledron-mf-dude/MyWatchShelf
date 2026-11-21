@@ -3,7 +3,7 @@ import { esc, decodeRecs } from './logic.js';
 import { t, tn, setLang, getLang, LANGS } from './i18n.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
-import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox } from './ui.js';
+import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox, selects } from './ui.js';
 import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
 import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl,
@@ -153,6 +153,15 @@ const idOf = el => el.closest('[data-id]')?.dataset.id || ui.overlay?.id;
 on({
   ...cardActions, ...pickActions, ...wrapActions,
   go: v => { location.hash = '#/' + v; },
+  'sel-toggle': (v, el) => {
+    const pop = $('.pop', el.closest('.dd')), open = pop.hidden;
+    closePops();
+    pop.hidden = !open;
+    el.setAttribute('aria-expanded', String(open));
+    if (open) { const cur = $('.on', pop) || $('button', pop); cur.scrollIntoView({ block: 'nearest' }); cur.focus({ preventScroll: true }); }
+    return 'keep';
+  },
+  'sel-pick': (v, el) => { selects[el.closest('.sel').dataset.sel]?.(v); },
   'share-list': v => openShare(v),
   'list-filter': v => { view.f.list = view.f.list === v ? '' : v; updateLibrary(); },
   close: closeOverlay,
@@ -226,12 +235,16 @@ document.addEventListener('click', ev => {
   const keep = actions[el.dataset.act]?.(el.dataset.v, el, ev);
   if (keep !== 'keep' && el.dataset.act !== 'menu') closePops();
 });
-function closePops() { $$('.pop').forEach(p => { p.hidden = true; }); }
+function closePops() { $$('.pop').forEach(p => { p.hidden = true; }); $$('.selbtn').forEach(b => b.setAttribute('aria-expanded', 'false')); }
 document.addEventListener('keydown', ev => {
   const typing = ev.target.matches?.('input,textarea,select');
   if (ev.key === 'Escape') { if (ui.overlay) closeOverlay(); else closePops(); }
   else if ((ev.key === '/' && !typing) || (ev.key.toLowerCase() === 'k' && (ev.ctrlKey || ev.metaKey))) { ev.preventDefault(); if (view.route !== 'recs') openPalette(); }
   else if (ev.key === 'Enter' && ev.target.matches?.('[data-act][tabindex]')) ev.target.click();
+  else if ((ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && ev.target.matches?.('.options button')) {
+    ev.preventDefault();
+    (ev.key === 'ArrowDown' ? ev.target.nextElementSibling : ev.target.previousElementSibling)?.focus();
+  }
 });
 
 // ── зміни даних ───────────────────────────────────────────────────

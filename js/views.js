@@ -130,7 +130,8 @@ export function renderHome() {
 function drawHomeCatalog() {
   const box = $('#home-catalog');
   if (!box) return;
-  const more = `<a class="more" href="#/discover">${t('nav.discover')} ${icon('chevR')}</a>`;
+  // посилання веде одразу на ту вкладку каталогу, з якої зібрано ряд
+  const more = type => `<a class="more" href="#/discover/${type}">${t('nav.discover')} ${icon('chevR')}</a>`;
   if (!view.home) {
     box.innerHTML = rail('popular', skeletons(8), { ranked: true });
     if (view.home === null) {
@@ -144,9 +145,9 @@ function drawHomeCatalog() {
   }
   if (view.home.error) { box.innerHTML = `<p class="muted pad">${t('catalog.down')}</p>`; return; }
   const h = view.home;
-  box.innerHTML = rail('popular', h.series.slice(0, 10).map((x, i) => catalogCard(x, { rank: i + 1 })).join(''), { ranked: true, link: more })
-    + (h.anime.length ? rail('anime', h.anime.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more }) : '')
-    + rail('movies', h.movies.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more });
+  box.innerHTML = rail('popular', h.series.slice(0, 10).map((x, i) => catalogCard(x, { rank: i + 1 })).join(''), { ranked: true, link: more('series') })
+    + (h.anime.length ? rail('anime', h.anime.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more('anime') }) : '')
+    + rail('movies', h.movies.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more('movie') });
 }
 
 // ── бібліотека ────────────────────────────────────────────────────

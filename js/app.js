@@ -119,7 +119,9 @@ async function route() {
     }
     return;
   }
-  const r = raw.replace(/^\//, '');
+  // #/discover/anime — каталог одразу на потрібній вкладці
+  const [r, sub] = raw.replace(/^\//, '').split('/');
+  if (r === 'discover' && ['series', 'anime', 'movie'].includes(sub) && view.disc.type !== sub) Object.assign(view.disc, { type: sub, genre: '', year: '' });
   view.route = RENDER[r] && r !== 'recs' ? r : 'home';
   view.recs = null;
   setTitle(); drawChrome(); draw();
@@ -203,7 +205,7 @@ on({
   dir: () => { store.setSetting('dir', -S.dir); updateLibrary(); },
   view: () => { store.setSetting('view', S.view === 'grid' ? 'list' : 'grid'); updateLibrary(); },
   // каталог
-  'disc-type': v => { view.disc.type = v; renderDiscover(); },
+  'disc-type': v => { view.disc.type = v; history.replaceState(null, '', '#/discover/' + v); renderDiscover(); },
   'disc-more': () => loadDiscover(false),
   // пошук і поширення
   pick: v => pickResult(+v),
@@ -233,7 +235,17 @@ document.addEventListener('keydown', ev => {
 });
 
 // ── зміни даних ───────────────────────────────────────────────────
+// Перемальовування після зміни даних не має зсувати людину з місця: вміст
+// замінюється цілком, сторінка на мить коротшає, і браузер скидає
+// прокрутку на початок. Тому запам'ятовуємо її й повертаємо.
 function refresh() {
+  const y = scrollY;
+  app.style.minHeight = app.offsetHeight + 'px';
+  redraw();
+  app.style.minHeight = '';
+  if (Math.abs(scrollY - y) > 1) scrollTo({ top: y, behavior: 'instant' });
+}
+function redraw() {
   if (view.route === 'library') updateLibrary();
   else if (view.route === 'discover') drawDiscover();
   else if (view.route === 'home') {

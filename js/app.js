@@ -129,7 +129,7 @@ async function route() {
 // ── дії ───────────────────────────────────────────────────────────
 function exportFile() {
   const blob = new Blob([JSON.stringify({ app: 'MyWatchShelf', version: 1, entries: store.raw() }, null, 1)], { type: 'application/json' });
-  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `kadr-${new Date().toISOString().slice(0, 10)}.json` });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `ovion-${new Date().toISOString().slice(0, 10)}.json` });
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   toast(t('toast.exported'));
 }

@@ -202,12 +202,12 @@ export const wrapActions = {
   wrapped: openWrapped,
   'wrap-save': async () => {
     const url = URL.createObjectURL(await wrapBlob());
-    Object.assign(document.createElement('a'), { href: url, download: 'kadr-stats.png' }).click();
+    Object.assign(document.createElement('a'), { href: url, download: 'ovion-stats.png' }).click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
     toast(t('wrap.saved'));
   },
   'wrap-share': async () => {
-    const file = new File([await wrapBlob()], 'kadr-stats.png', { type: 'image/png' });
+    const file = new File([await wrapBlob()], 'ovion-stats.png', { type: 'image/png' });
     if (navigator.canShare?.({ files: [file] })) navigator.share({ files: [file], title: t('wrap.title') }).catch(() => {});
     else toast(t('wrap.noshare'));
   },

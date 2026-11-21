@@ -6,7 +6,7 @@ export const setLang = l => { cur = l === 'uk' ? 1 : 0; };
 export const getLang = () => LANGS[cur][0];
 
 const D = {
-  brand: ['Kadr', 'Кадр'],
+  brand: ['Ovion', 'Ovion'],
   'brand.long': ['your watch tracker', 'трекер переглядів'],
   skip: ['Skip to content', 'До вмісту'],
   sections: ['Sections', 'Розділи'],

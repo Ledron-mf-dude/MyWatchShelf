@@ -1,7 +1,7 @@
 {
   "name": "mywatchshelf",
   "version": "2.2.0",
-  "description": "Kadr — трекер аніме, серіалів і фільмів без власного сервера",
+  "description": "Ovion — трекер аніме, серіалів і фільмів без власного сервера",
   "private": true,
   "type": "module",
   "scripts": {

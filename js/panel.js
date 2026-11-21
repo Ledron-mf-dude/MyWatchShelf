@@ -274,8 +274,10 @@ export function addFromPreview(status) {
     if (last) { patch.season = last; patch.episode = x.meta.seasons[last]; }
   }
   addItem(x, patch);
-  closeOverlay();
-  toast(t('toast.added.as', { title: x.title, status: statusLabel(status) }), { label: t('open'), action: () => openCard(x.id) });
+  // Не закриваємо, а одразу показуємо вже власну картку цього тайтла:
+  // після «Переглянуто» людина зазвичай хоче ще й поставити оцінку.
+  openCard(x.id);
+  toast(t('toast.added.as', { title: x.title, status: statusLabel(status) }));
 }
 
 // ── пошук-палітра: полиця й каталог в одному полі ─────────────────

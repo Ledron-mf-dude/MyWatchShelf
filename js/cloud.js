@@ -4,7 +4,7 @@
 //
 //   users/{uid}/entries/{imdbId}  — приватний список людини
 //   public/{uid}                  — її рекомендації, читати може будь-хто
-import { FIREBASE, GOOGLE_CLIENT_ID } from './config.js';
+import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
 import { recItem, cleanRecs } from './logic.js';
 
@@ -145,7 +145,7 @@ function signIn() {
   try { localStorage.setItem(STATE, state); } catch { throw new Error('браузер не дає зберегти дані — вхід неможливий у приватному режимі'); }
   const q = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: location.origin + location.pathname,
+    redirect_uri: location.origin === new URL(SITE_URL).origin ? SITE_URL : location.origin + location.pathname,
     response_type: 'id_token',
     scope: 'openid email profile',
     nonce: rnd(),

@@ -12,4 +12,8 @@ export const FIREBASE = {
 
 // Веб-клієнт Google для входу (той, що Firebase створив сам). Теж не
 // секрет. Адреса сайту має стояти серед його «Authorized redirect URIs».
+// Адреса, на яку Google повертає після входу. Має збігатися з дозволеною
+// в клієнті буква в букву, тому беремо її звідси, а не з рядка браузера:
+// сайт відкривається і як /mywatchshelf/, і як /MyWatchShelf/index.html.
+export const SITE_URL = 'https://ledron-mf-dude.github.io/MyWatchShelf/';
 export const GOOGLE_CLIENT_ID = '520582060325-j9lute0q05tdusso96qqnbso6ak2l39j.apps.googleusercontent.com';

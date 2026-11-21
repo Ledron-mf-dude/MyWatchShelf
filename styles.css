@@ -410,7 +410,8 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
   .palette.narrow{top:auto; bottom:0; height:auto; width:100%; border-radius:22px 22px 0 0; border-top:1px solid var(--line)}
   .pal-head kbd{display:none}
   .card-foot.fwrap .muted{flex-basis:100%} .card-foot.fwrap .grow{display:none} .card-foot.fwrap .btn{flex:1}
-  .pop.menu{position:fixed; left:12px; right:12px; top:auto; bottom:calc(84px + env(safe-area-inset-bottom))}
+  /* шапка з розмиттям сама стає «вікном» для position:fixed, тож меню лишаємо звичайним випадним */
+  .pop.menu{right:0; width:min(320px,calc(100vw - 24px)); max-height:calc(100vh - 170px); overflow-y:auto}
   #lib-genres{position:fixed; left:12px; right:12px; top:auto; bottom:calc(84px + env(safe-area-inset-bottom)); width:auto; max-width:none; max-height:50vh; overflow:auto}
 }
 @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important; scroll-behavior:auto !important} }

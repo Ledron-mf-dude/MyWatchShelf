@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Адмініструвати нікого не треба: кожен, хто ввійшов через Google,
+// читає й пише лише власний список. Рекомендації читає будь-хто за
+// посиланням, а змінює лише їхній автор.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid}/entries/{entryId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && entryId.matches('^tt[0-9]{6,10}$')
+        && request.resource.data.id == entryId;
+    }
+
+    match /public/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.items is list
+        && request.resource.data.items.size() <= 500;
+    }
+  }
+}

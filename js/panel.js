@@ -151,8 +151,21 @@ export function drawCard() {
   const e = store.get(o.id);
   if (!e) return closeOverlay();
   const scroll = $('.card-body', layer)?.scrollTop || 0;
+  // Сітка серій має власну прокрутку. Після натискання лишаємо її там,
+  // де людина натиснула; а при відкритті картки чи зміні сезону —
+  // підводимо до серії, на якій вона зупинилась.
+  const eps0 = $('.eps', layer), epsScroll = eps0?.scrollTop || 0, sameGrid = !!eps0 && o.season === e.season;
   $('.card', layer).innerHTML = cardHtml(e);
   $('.card-body', layer).scrollTop = scroll;
+  const eps = $('.eps', layer);
+  if (eps) {
+    if (sameGrid) eps.scrollTop = epsScroll;
+    else {
+      const cur = eps.querySelector('button.on:last-of-type') || [...eps.querySelectorAll('button.on')].pop();
+      if (cur) eps.scrollTop = Math.max(0, cur.offsetTop - eps.offsetTop - eps.clientHeight / 2);
+    }
+  }
+  o.season = e.season;
 }
 export function openCard(id) {
   const e = store.get(id);

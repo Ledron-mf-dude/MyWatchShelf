@@ -1,6 +1,6 @@
 // Екрани: головна, бібліотека, каталог, статистика, чужі рекомендації.
 import {
-  STATUS_IDS, KIND_IDS, CATALOG_GENRES, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtRuntime,
+  STATUS_IDS, KIND_IDS, CATALOG_GENRES, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtScore, fmtRuntime,
   genreName, progressText, progressPct, filterSort, insights, episodesWatched, episodesTotal, listNames,
 } from './logic.js';
 import { ensureSchedules, agendaStrip, taste, tasteBadge } from './extras.js';
@@ -29,7 +29,7 @@ export function entryCard(e, { rank = 0 } = {}) {
     ${rank ? `<span class="rank" aria-hidden="true">${rank}</span>` : ''}
     <div class="pc-body">
       <div class="pc-img">${ph(e.id, e.title, 'medium', 'fill')}
-        <span class="pc-top">${e.score ? `<b class="badge score">${icon('starFill')}${e.score}</b>` : ''}${e.rec ? `<b class="badge rec">${t('badge.rec')}</b>` : ''}</span>
+        <span class="pc-top">${e.score ? `<b class="badge score">${icon('starFill')}${fmtScore(e.score)}</b>` : ''}${e.rec ? `<b class="badge rec">${t('badge.rec')}</b>` : ''}</span>
         ${m.imdb ? `<span class="badge imdb">IMDb ${fmtRating(m.imdb)}</span>` : ''}
         <div class="pc-acts">
           ${url ? `<a class="rb solid" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${t('watch')}" aria-label="${t('watch')}">${icon('play')}</a>` : ''}
@@ -97,7 +97,7 @@ function heroHtml(e) {
       <span class="kicker">${e.status === 'watching' || e.status === 'paused' ? t('rail.continue') : t('hero.from.shelf')}</span>
       <h1>${esc(e.title)}</h1>
       <p class="hero-meta">${[kindLabel(e.kind), e.year, fmtRuntime(m.runtime)].filter(Boolean).map(esc).join('<i>·</i>')}
-        ${m.imdb ? `<b class="badge imdb static">IMDb ${fmtRating(m.imdb)}</b>` : ''}${e.score ? `<b class="badge score static">${icon('starFill')}${e.score}</b>` : ''}</p>
+        ${m.imdb ? `<b class="badge imdb static">IMDb ${fmtRating(m.imdb)}</b>` : ''}${e.score ? `<b class="badge score static">${icon('starFill')}${fmtScore(e.score)}</b>` : ''}</p>
       ${m.plot ? `<p class="hero-plot">${esc(m.plot)}</p>` : ''}
       ${e.type === 'series' ? `<div class="hero-prog"><i class="bar" style="--w:${pct}%"></i>
         <span>${esc(progressText(e) || t('not.started'))}${total ? ` · ${t('eps.of', { a: episodesWatched(e), b: total })}` : ''}</span></div>` : ''}
@@ -166,7 +166,7 @@ function rowHtml(e) {
       ${url ? `<a class="rb" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${t('watch')}" aria-label="${t('watch')}">${icon('play')}</a>` : ''}
       ${canPlus(e) ? `<button class="rb" data-act="plus" title="${t('next.ep')}">+1</button>` : ''}
     </div>
-    <div class="score ${e.score ? '' : 'none'}"><b>${e.score || '—'}</b><small>IMDb ${fmtRating(m.imdb) || '—'}</small></div>
+    <div class="score ${e.score ? '' : 'none'}"><b>${fmtScore(e.score) || '—'}</b><small>IMDb ${fmtRating(m.imdb) || '—'}</small></div>
   </li>`;
 }
 
@@ -310,7 +310,7 @@ export function renderStats() {
       <h2 class="mt">${t('panel.kind')}</h2>${bars(KIND_IDS.map(k => [t('kinds.' + k), s.byKind[k] || 0]))}</section>
     <section class="panel"><h2>${t('panel.gaps')}</h2>${s.gaps.length ? `<ul class="gaps">${s.gaps.map(({ e, d }) =>
       `<li data-id="${e.id}" data-act="open" tabindex="0">${ph(e.id, e.title, 'small')}<div><b>${esc(e.title)}</b>
-        <span>${t('gap.line', { a: e.score, b: fmtRating(e.meta.imdb) })}</span></div><em class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : '−'}${fmtRating(Math.abs(d)) || '0'}</em></li>`).join('')}</ul>`
+        <span>${t('gap.line', { a: fmtScore(e.score), b: fmtRating(e.meta.imdb) })}</span></div><em class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : '−'}${fmtRating(Math.abs(d)) || '0'}</em></li>`).join('')}</ul>`
       : `<p class="muted">${t('gaps.empty')}</p>`}</section>
   </div>`;
 }
@@ -339,7 +339,7 @@ export function renderRecs() {
         ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
         ${tasteBadge(tm.tags.get(x.id))}
         <button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : t('take')}</button></div>
-      ${x.s ? `<div class="rec-score"><b>${x.s}</b><small>${t('author.score')}</small></div>` : ''}
+      ${x.s ? `<div class="rec-score"><b>${fmtScore(x.s)}</b><small>${t('author.score')}</small></div>` : ''}
     </li>`;
   }).join('') || `<li class="empty">${icon('star')}<b>${t('recs.empty.title')}</b><p>${t('recs.empty.text')}</p></li>`}</ul>`;
 }

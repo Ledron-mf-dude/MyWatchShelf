@@ -1,7 +1,7 @@
 // Надбудови над основними екранами: календар нових серій, «що подивитись
 // сьогодні», збіг смаків із автором рекомендацій і картка-підсумок.
 import {
-  KIND_IDS, esc, safeUrl, fmtRating, fmtRuntime, genreName, kindLabel, insights, agenda, dayDiff,
+  KIND_IDS, esc, safeUrl, fmtRating, fmtScore, fmtRuntime, genreName, kindLabel, insights, agenda, dayDiff,
   pickCandidates, tasteMatch, matchTag,
 } from './logic.js';
 import { t, tn, getLang } from './i18n.js';
@@ -188,7 +188,7 @@ function drawWrapped(cv) {
   c.fillStyle = '#6A7470'; font(800, 28); c.fillText(t('wrap.top').toUpperCase(), 80, 930);
   top.forEach((e, i) => {
     const y = 995 + i * 72;
-    c.fillStyle = '#F2B84B'; font(800, 44); c.fillText(String(e.score), 80, y);
+    c.fillStyle = '#F2B84B'; font(800, 44); c.fillText(fmtScore(e.score), 80, y);
     c.fillStyle = '#EEF2EF'; font(700, 44); c.fillText(fit(e.title, 860), 150, y);
   });
   if (!top.length) { c.fillStyle = '#9BA5A0'; font(600, 36); c.fillText(t('score.none'), 80, 995); }

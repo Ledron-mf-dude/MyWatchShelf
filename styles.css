@@ -320,11 +320,12 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
 .stepper input{width:58px; border:0; outline:0; background:none; text-align:center; font-weight:800; font-size:16px; padding:0; -moz-appearance:textfield; appearance:textfield}
 .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none}
 .progress+p{margin-top:8px}
-.scores{display:grid; grid-template-columns:repeat(10,1fr); gap:5px}
+.scores{display:grid; grid-template-columns:repeat(11,1fr); gap:5px}
 .scores button{height:40px; padding:0; border:1px solid var(--line); border-radius:10px; background:var(--surface); font-weight:800; font-size:14px; color:var(--muted); transition:.12s}
 .scores button:hover{border-color:var(--accent); color:var(--text)}
 .scores button.fill{background:var(--accent-soft); border-color:transparent; color:var(--accent)}
 .scores button.on{background:var(--accent); color:var(--accent-ink)}
+.scores button.half{border-style:dashed; font-size:13px} .scores button.half.on{border-style:solid} .scores button:disabled{opacity:.4; cursor:default; pointer-events:none}
 .linkrow{display:flex; gap:8px}
 .toggle{display:flex; width:100%; align-items:center; gap:14px; padding:12px 14px; border:1px solid var(--line); border-radius:var(--r); background:var(--surface); text-align:left; transition:.15s}
 .toggle>.ic{width:22px; height:22px; color:var(--faint)}

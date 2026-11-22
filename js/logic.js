@@ -41,6 +41,9 @@ export function fmtRuntime(r) {
 
 export const fmtRating = x => (typeof x === 'number' && x > 0)
   ? (getLang() === 'uk' ? x.toFixed(1).replace('.', ',') : x.toFixed(1)) : '';
+// Власна оцінка: ціла — без дробу («9»), проміжна — з половинкою («9,5»).
+export const fmtScore = x => (typeof x === 'number' && x > 0)
+  ? (Number.isInteger(x) ? String(x) : fmtRating(x)) : '';
 
 // Що людина вставила в поле додавання: ID чи посилання IMDb, чуже посилання
 // (тоді з його хвоста робимо запит, а саме посилання лишаємо як «де дивлюсь»)
@@ -70,6 +73,12 @@ const int = (v, min, max) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min;
 };
 
+// Оцінка: 0 (немає) або 1…10 з кроком 0,5.
+const half = v => {
+  const n = Math.round(Number(v) * 2) / 2;
+  return Number.isFinite(n) && n >= 1 ? Math.min(10, n) : 0;
+};
+
 // Запис із чужих рук (хмара, імпорт, стара версія) зводимо до відомої форми.
 export function sanitize(e) {
   if (!e || !isId(e.id)) return null;
@@ -84,7 +93,7 @@ export function sanitize(e) {
     status: STATUS_IDS.includes(e.status) ? e.status : 'planned',
     season: int(e.season, 1, 999),
     episode: int(e.episode, 0, 99999),
-    score: int(e.score, 0, 10),
+    score: half(e.score),
     url: safeUrl(str(e.url, 2000)),
     note: str(e.note, 5000),
     rec: !!e.rec,
@@ -231,7 +240,7 @@ export function insights(list) {
   const rated = list.filter(e => e.score > 0);
   const count = fn => { const m = {}; for (const e of list) for (const k of [].concat(fn(e))) m[k] = (m[k] || 0) + 1; return m; };
   const genres = Object.entries(count(e => e.meta?.genres || [])).sort((a, b) => b[1] - a[1]);
-  const scores = Array.from({ length: 10 }, (_, i) => rated.filter(e => e.score === i + 1).length);
+  const scores = Array.from({ length: 10 }, (_, i) => rated.filter(e => Math.floor(e.score) === i + 1).length);
   const gaps = rated.filter(e => e.meta?.imdb).map(e => ({ e, d: e.score - e.meta.imdb }))
     .sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 5);
   return {
@@ -263,7 +272,7 @@ export function cleanRecs(data) {
       const l = (Array.isArray(x.l) ? x.l : []).map(v => str(v, 40)).filter(Boolean).slice(0, 8);
       return {
         id: x.id, k: KIND_IDS.includes(x.k) ? x.k : 'series', t: str(x.t, 300) || x.id,
-        y: str(x.y, 20), s: int(x.s, 0, 10), n: str(x.n, 500),
+        y: str(x.y, 20), s: half(x.s), n: str(x.n, 500),
         r: Number(x.r) > 0 ? Math.min(10, Number(x.r)) : 0,
         ...(x.p === 0 ? { p: 0 } : {}), ...(l.length ? { l } : {}),
       };

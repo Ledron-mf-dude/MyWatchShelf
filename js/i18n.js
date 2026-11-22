@@ -112,7 +112,7 @@ const D = {
   'card.aria': ['Title card', 'Картка запису'], trailer: ['trailer', 'трейлер'], cast: ['Cast', 'У ролях'],
   'card.where': ['Where I stopped', 'Де я зупинився'], 'show.ended': ['The show has ended', 'Серіал завершено'], 'show.ongoing': ['The show is still airing', 'Серіал ще виходить'],
   'eps.unknown': ['episode count for this season is unknown', 'кількість серій у цьому сезоні невідома'],
-  'card.score': ['My score', 'Моя оцінка'], 'score.none': ['not rated yet', 'ще не оцінено'],
+  'card.score': ['My score', 'Моя оцінка'], 'score.none': ['not rated yet', 'ще не оцінено'], 'score.half': ['Add half a point', 'Додати пів бала'],
   'score.1': ['appalling', 'жахливо'], 'score.2': ['horrible', 'дуже погано'], 'score.3': ['bad', 'погано'], 'score.4': ['weak', 'слабко'], 'score.5': ['average', 'середньо'],
   'score.6': ['fine', 'непогано'], 'score.7': ['good', 'добре'], 'score.8': ['very good', 'дуже добре'], 'score.9': ['great', 'чудово'], 'score.10': ['masterpiece', 'шедевр'],
   'card.link': ['Where I watch', 'Де дивлюсь'], 'card.link.ph': ['Link to the site or player', 'Посилання на сайт чи плеєр'],

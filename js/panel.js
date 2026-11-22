@@ -1,7 +1,7 @@
 // Усе, що відкривається поверх сторінки: картка запису, перегляд тайтла
 // з каталогу, пошук-палітра та діалог поширення рекомендацій.
 import {
-  STATUS_IDS, KIND_IDS, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtRuntime, genreName,
+  STATUS_IDS, KIND_IDS, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtScore, fmtRuntime, genreName,
   parseInput, nextEpisode, progressText, progressPct, seasonTotal, episodesWatched, episodesTotal, recItem, encodeRecs, filterSort, listNames,
 } from './logic.js';
 import { t, tn, getLang } from './i18n.js';
@@ -118,9 +118,10 @@ function cardHtml(e) {
     <section><div class="status-seg">${STATUS_IDS.map(v =>
       `<button class="st-${v} ${e.status === v ? 'on' : ''}" data-act="set-status" data-v="${v}" aria-pressed="${e.status === v}"><i class="dot st-${v}"></i>${statusLabel(v)}</button>`).join('')}</div></section>
     ${e.type === 'series' ? progressHtml(e) : ''}
-    <section><h3>${t('card.score')} <small>${e.score ? t('score.' + e.score) : t('score.none')}</small></h3>
+    <section><h3>${t('card.score')} <small>${e.score ? (Number.isInteger(e.score) ? '' : fmtScore(e.score) + ' · ') + t('score.' + Math.floor(e.score)) : t('score.none')}</small></h3>
       <div class="scores">${Array.from({ length: 10 }, (_, i) =>
-        `<button data-act="score" data-v="${i + 1}" class="${e.score >= i + 1 ? 'fill' : ''} ${e.score === i + 1 ? 'on' : ''}" aria-pressed="${e.score === i + 1}">${i + 1}</button>`).join('')}</div></section>
+        `<button data-act="score" data-v="${i + 1}" class="${e.score >= i + 1 ? 'fill' : ''} ${Math.floor(e.score) === i + 1 ? 'on' : ''}" aria-pressed="${Math.floor(e.score) === i + 1}">${i + 1}</button>`).join('')}
+        <button data-act="score-half" class="half ${e.score % 1 ? 'on' : ''}" aria-pressed="${!!(e.score % 1)}" aria-label="${t('score.half')}" title="${t('score.half')}" ${e.score >= 1 && e.score < 10 ? '' : 'disabled'}>+½</button></div></section>
     <section><h3>${t('card.link')}</h3>
       <div class="linkrow"><label class="field wide">${icon('link')}<input type="url" data-field="url" placeholder="${t('card.link.ph')}" value="${esc(e.url)}"></label>
         ${url ? `<a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${icon('play')}${t('watch')}</a>` : ''}</div></section>
@@ -200,6 +201,10 @@ export const cardActions = {
   },
   'set-kind': v => cardSave({ kind: v }),
   score: v => cardSave({ score: store.get(ui.overlay.id).score === +v ? 0 : +v }),
+  'score-half': () => {
+    const s = store.get(ui.overlay.id).score;
+    if (s >= 1 && s < 10) cardSave({ score: s % 1 ? Math.floor(s) : s + 0.5 });
+  },
   rec: () => cardSave({ rec: !store.get(ui.overlay.id).rec }),
   season: v => { const e = store.get(ui.overlay.id); if (+v !== e.season) cardSave({ season: +v, episode: 0 }); },
   episode: v => {
@@ -245,7 +250,7 @@ export async function openPreview(id) {
     const r = x.rec, ns = Object.keys(m.seasons || {}).length;
     $('.card', layer).innerHTML = `${headHtml(x, m)}
       <div class="card-body">
-        ${r?.s ? `<section class="author"><div class="rec-score"><b>${r.s}</b><small>${t('author.score')}</small></div>${r.n ? `<blockquote>${esc(r.n)}</blockquote>` : ''}</section>`
+        ${r?.s ? `<section class="author"><div class="rec-score"><b>${fmtScore(r.s)}</b><small>${t('author.score')}</small></div>${r.n ? `<blockquote>${esc(r.n)}</blockquote>` : ''}</section>`
           : r?.n ? `<section><blockquote>${esc(r.n)}</blockquote></section>` : ''}
         <section><h3>${t('card.about')}</h3>${aboutHtml(m).trim() || `<p class="muted">${loading ? t('loading.plot') : t('no.plot')}</p>`}
           ${ns ? `<p class="muted small">${ns} ${tn('season', ns)} · ${Object.values(m.seasons).reduce((a, b) => a + b, 0)} ${tn('episode', Object.values(m.seasons).reduce((a, b) => a + b, 0))}</p>` : ''}</section>

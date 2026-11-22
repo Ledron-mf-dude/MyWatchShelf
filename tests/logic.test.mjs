@@ -34,6 +34,9 @@ test('sanitize відкидає сміття й чистить посиланн�
   const e = sanitize({ id: 'tt1234567', title: 'A', url: 'javascript:alert(1)', score: 99, status: 'нема', updated: 5 });
   assert.equal(e.url, '');
   assert.equal(e.score, 10);
+  assert.equal(sanitize({ id: 'tt1234567', score: 9.5 }).score, 9.5);
+  assert.equal(sanitize({ id: 'tt1234567', score: 5.4 }).score, 5.5);
+  assert.equal(sanitize({ id: 'tt1234567', score: 0.4 }).score, 0);
   assert.equal(e.status, 'planned');
   assert.deepEqual(sanitize({ id: 'tt1234567', deleted: true, updated: 7, title: 'x' }), { id: 'tt1234567', deleted: true, updated: 7 });
 });

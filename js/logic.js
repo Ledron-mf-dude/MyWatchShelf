@@ -172,9 +172,18 @@ export function progressText(e) {
   return t('prog', { s: e.season || 1, e: `${e.episode || 0}${total ? '/' + total : ''}` });
 }
 
+// Один вибраний рік — це той самий рік; два — діапазон у будь-якому порядку.
+export const yearRange = (from, to) => {
+  const a = +(from || to) || 0, b = +(to || from) || 0;
+  return a ? [Math.min(a, b), Math.max(a, b)] : null;
+};
+
 export function filterSort(list, f, sort, dir) {
   const q = (f.q || '').trim().toLowerCase();
+  const yr = yearRange(f.from, f.to), min = +f.min || 0;
   const out = list.filter(e => {
+    if (yr) { const y = parseInt(e.year, 10); if (!(y >= yr[0] && y <= yr[1])) return false; }
+    if (min && !((e.meta?.imdb || 0) >= min)) return false;
     if (f.kind && f.kind !== 'all' && e.kind !== f.kind) return false;
     if (f.genres?.length && !f.genres.some(g => (e.meta?.genres || []).includes(g))) return false;
     if (f.list && !(e.lists || []).includes(f.list)) return false;

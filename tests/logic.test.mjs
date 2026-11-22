@@ -84,6 +84,14 @@ test('фільтр і сортування', () => {
   assert.deepEqual(filterSort(list, { kind: 'anime', status: 'all' }, 'score', -1).map(e => e.id), ['tt1']);
   assert.deepEqual(filterSort(list, { kind: 'all', status: 'rec' }, 'score', -1).map(e => e.id), ['tt1']);
   assert.deepEqual(filterSort(list, { kind: 'all', status: 'all' }, 'score', -1).map(e => e.id), ['tt2', 'tt1']);
+  const dated = [
+    { id: 'tt1', title: 'A', year: '2019–2021', meta: { imdb: 8.4 } },
+    { id: 'tt2', title: 'B', year: '2021', meta: { imdb: 6.9 } },
+    { id: 'tt3', title: 'C', year: '2023', meta: {} },
+  ];
+  assert.deepEqual(filterSort(dated, { from: '2021' }, 'title', 1).map(e => e.id), ['tt2']);
+  assert.deepEqual(filterSort(dated, { from: '2023', to: '2020' }, 'title', 1).map(e => e.id), ['tt2', 'tt3']);
+  assert.deepEqual(filterSort(dated, { min: '7' }, 'title', 1).map(e => e.id), ['tt1']);
   assert.deepEqual(filterSort(list, { kind: 'all', status: 'all' }, 'title', 1).map(e => e.id), ['tt2', 'tt1']);
   assert.deepEqual(filterSort(list, { q: 'фільм' }, 'updated', -1).map(e => e.id), ['tt2']);
 });

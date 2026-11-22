@@ -1,7 +1,7 @@
 // Оболонка застосунку для роботи без мережі. Спершу мережа (щоб оновлення
 // приїжджали одразу), а коли її немає — остання збережена копія.
 // Чужих адрес (каталог, постери, Firebase) не чіпаємо.
-const CACHE = 'mws-shell-v14';
+const CACHE = 'mws-shell-v15';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'js/app.js', 'js/i18n.js', 'js/ui.js', 'js/views.js', 'js/panel.js', 'js/extras.js', 'js/logic.js', 'js/meta.js', 'js/store.js', 'js/cloud.js', 'js/config.js'];
 

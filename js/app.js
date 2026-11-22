@@ -210,7 +210,7 @@ on({
   status: v => { view.f.status = v; updateLibrary(); },
   genre: v => { const g = view.f.genres, i = g.indexOf(v); if (i < 0) g.push(v); else g.splice(i, 1); updateLibrary(); return 'keep'; },
   'genres-toggle': () => { const p = $('#lib-genres'); p.hidden = !p.hidden; return 'keep'; },
-  'reset-filters': () => { Object.assign(view.f, { q: '', kind: 'all', status: 'all', genres: [], list: '' }); if ($('#lib-q')) $('#lib-q').value = ''; updateLibrary(); },
+  'reset-filters': () => { Object.assign(view.f, { q: '', kind: 'all', status: 'all', genres: [], list: '', from: '', to: '', min: '' }); if ($('#lib-list')) renderLibrary(); },
   dir: () => { store.setSetting('dir', -S.dir); updateLibrary(); },
   view: () => { store.setSetting('view', S.view === 'grid' ? 'list' : 'grid'); updateLibrary(); },
   // каталог

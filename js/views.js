@@ -1,7 +1,7 @@
 // Екрани: головна, бібліотека, каталог, статистика, чужі рекомендації.
 import {
   STATUS_IDS, KIND_IDS, CATALOG_GENRES, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtScore, fmtRuntime,
-  genreName, progressText, progressPct, filterSort, insights, episodesWatched, episodesTotal, listNames,
+  genreName, yearRange, progressText, progressPct, filterSort, insights, episodesWatched, episodesTotal, listNames,
 } from './logic.js';
 import { ensureSchedules, agendaStrip, taste, tasteBadge } from './extras.js';
 import { t, tn } from './i18n.js';
@@ -13,7 +13,7 @@ import { $, app, icon, ph, remember, dropdown, selects } from './ui.js';
 const S = store.settings;
 export const view = {
   route: 'home',
-  f: { q: '', kind: 'all', status: 'all', genres: [], list: '' },
+  f: { q: '', kind: 'all', status: 'all', genres: [], list: '', from: '', to: '', min: '' },
   disc: { type: 'series', genre: '', from: '', to: '', min: '', sort: 'pop', items: [], feeds: [], loading: false, more: true, error: '', key: '' },
   recs: null,
   home: null,   // добірки каталогу для головної, щоб не тягнути їх щоразу
@@ -170,16 +170,24 @@ function rowHtml(e) {
   </li>`;
 }
 
+const RATING_MINS = [9, 8.5, 8, 7.5, 7, 6];
 export function renderLibrary() {
+  const f = view.f, now = new Date().getFullYear();
+  // роки — від найстарішого запису в списку до поточного
+  const first = Math.min(now, ...store.list().map(e => parseInt(e.year, 10)).filter(y => y > 1900), +f.from || now, +f.to || now);
+  const years = Array.from({ length: now - first + 1 }, (_, i) => now - i);
   app.innerHTML = `
   <header class="page-head"><h1>${t('nav.library')}</h1><span class="count" id="lib-count"></span></header>
-  <div class="filters">
+  <div class="filters wide">
     <label class="field search">${icon('search')}<input id="lib-q" type="search" placeholder="${t('lib.search')}" autocomplete="off" aria-label="${t('lib.search.aria')}"></label>
     <div class="seg" id="lib-kind" role="tablist"></div>
     <span class="grow"></span>
     <button class="btn" data-act="tonight">${icon('dice')}${t('pick.short')}</button>
     <div class="dd"><button class="btn" data-act="genres-toggle" aria-haspopup="true">${icon('filter')}${t('genres')}<b id="lib-gcount"></b></button>
       <div class="pop" id="lib-genres" hidden></div></div>
+    ${dropdown('lib-from', f.from, [['', t('year.from')], ...years.map(y => [y, t('year.from.n', { n: y })])], 'clock', t('year.from'))}
+    ${dropdown('lib-to', f.to, [['', t('year.to')], ...years.map(y => [y, t('year.to.n', { n: y })])], 'clock', t('year.to'))}
+    ${dropdown('lib-min', f.min, [['', t('any.rating')], ...RATING_MINS.map(n => [n, t('rating.min', { n: fmtRating(n) })])], 'starFill', t('rating'))}
     ${dropdown('lib-sort', S.sort, SORTS.map(v => [v, t('sort.' + v)]), 'sortDown', t('sorting'))}
     <button class="rb" data-act="dir" id="lib-dir" title="${t('sort.dir')}"></button>
     <button class="rb" data-act="view" id="lib-view" title="${t('view.toggle')}"></button>
@@ -189,6 +197,7 @@ export function renderLibrary() {
   $('#lib-q').value = view.f.q;
   $('#lib-q').addEventListener('input', e => { view.f.q = e.target.value; updateLibrary(); });
   selects['lib-sort'] = v => { store.setSetting('sort', v); renderLibrary(); };
+  for (const k of ['from', 'to', 'min']) selects['lib-' + k] = v => { f[k] = v; renderLibrary(); };
   updateLibrary();
 }
 export function updateLibrary() {
@@ -202,7 +211,7 @@ export function updateLibrary() {
     + STATUS_IDS.map(v => chip(v, `<i class="dot st-${v}"></i>${statusLabel(v)}`, n(e => e.status === v))).join('')
     + chip('rec', `${icon('starFill')}${t('badge.rec')}`, n(e => e.rec), 'rec')
     + listNames(all).map(l => `<button class="chip ${f.list === l ? 'on' : ''}" data-act="list-filter" data-v="${esc(l)}" aria-pressed="${f.list === l}">${icon('folder')}${esc(l)}<small>${n(e => (e.lists || []).includes(l))}</small></button>`).join('')
-    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length || f.list ? `<button class="chip reset" data-act="reset-filters">${icon('close')}${t('reset.filters')}</button>` : '');
+    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length || f.list || f.from || f.to || f.min ? `<button class="chip reset" data-act="reset-filters">${icon('close')}${t('reset.filters')}</button>` : '');
   const genres = insights(all).genres;
   $('#lib-gcount').textContent = f.genres.length || '';
   $('#lib-genres').innerHTML = genres.length
@@ -230,10 +239,7 @@ export function updateLibrary() {
 // ── каталог ───────────────────────────────────────────────────────
 const discKey = d => [d.type, d.genre, d.from, d.to, d.min, d.sort].join('|');
 // Один вибраний рік — це той самий рік; два — діапазон у будь-якому порядку.
-const discYears = d => {
-  const a = +(d.from || d.to) || 0, b = +(d.to || d.from) || 0;
-  return a ? [Math.min(a, b), Math.max(a, b)] : null;
-};
+const discYears = d => yearRange(d.from, d.to);
 let discWatch = null;
 export function renderDiscover() {
   const d = view.disc;
@@ -248,7 +254,7 @@ export function renderDiscover() {
     ${dropdown('disc-genre', d.genre, [['', t('all.genres')], ...CATALOG_GENRES.map(g => [g, genreName(g)])], 'filter', t('genre'))}
     ${dropdown('disc-from', d.from, [['', t('year.from')], ...years.map(y => [y, t('year.from.n', { n: y })])], 'clock', t('year.from'))}
     ${dropdown('disc-to', d.to, [['', t('year.to')], ...years.map(y => [y, t('year.to.n', { n: y })])], 'clock', t('year.to'))}
-    ${dropdown('disc-min', d.min, [['', t('any.rating')], ...[9, 8.5, 8, 7.5, 7, 6].map(n => [n, t('rating.min', { n: fmtRating(n) })])], 'starFill', t('rating'))}
+    ${dropdown('disc-min', d.min, [['', t('any.rating')], ...RATING_MINS.map(n => [n, t('rating.min', { n: fmtRating(n) })])], 'starFill', t('rating'))}
     ${dropdown('disc-sort', d.sort, ['pop', 'rating', 'year'].map(v => [v, t('dsort.' + v)]), 'sortDown', t('sorting'))}
     ${active ? `<button class="chip reset" data-act="disc-reset">${icon('close')}${t('reset.filters')}</button>` : ''}
   </div>

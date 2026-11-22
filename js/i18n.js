@@ -45,6 +45,10 @@ const D = {
   'kind.anime': ['anime', 'аніме'], 'kind.series': ['series', 'серіал'], 'kind.movie': ['movie', 'фільм'],
   'kinds.anime': ['Anime', 'Аніме'], 'kinds.series': ['Series', 'Серіали'], 'kinds.movie': ['Movies', 'Фільми'],
   'all.kinds': ['All', 'Усе'], 'all.statuses': ['All statuses', 'Усі статуси'], 'all.genres': ['All genres', 'Усі жанри'], 'any.year': ['Any year', 'Будь-який рік'],
+  'year.from': ['From year', 'Від року'], 'year.to': ['To year', 'До року'], 'year.from.n': ['From {n}', 'Від {n}'], 'year.to.n': ['To {n}', 'До {n}'],
+  'any.rating': ['Any rating', 'Будь-який рейтинг'], 'rating.min': ['IMDb {n}+', 'IMDb {n}+'], rating: ['Rating', 'Рейтинг'],
+  'dsort.pop': ['Popular first', 'Спершу популярні'], 'dsort.rating': ['Top rated first', 'Спершу з вищим рейтингом'], 'dsort.year': ['Newest first', 'Спершу новіші'],
+  'pal.kind': ['Search in', 'Де шукати'],
   type: ['Type', 'Тип'], genre: ['Genre', 'Жанр'], genres: ['Genres', 'Жанри'], year: ['Year', 'Рік'],
   season: ['season', 'сезон'], episode: ['episode', 'серія'],
   'prog': ['season {s} · episode {e}', 'сезон {s} · серія {e}'],
@@ -84,7 +88,7 @@ const D = {
   'nothing.found': ['Nothing found', 'Нічого не знайшлось'], 'nothing.found.text': ['Try another query or reset the filters.', 'Спробуй інший запит або скинь фільтри.'],
   // каталог
   'disc.sub': ['popular right now', 'популярне просто зараз'],
-  'disc.empty.title': ['Nothing matches these filters', 'За цими фільтрами порожньо'], 'disc.empty.text': ['Try another genre or year.', 'Спробуй інший жанр чи рік.'],
+  'disc.empty.title': ['Nothing matches these filters', 'За цими фільтрами порожньо'], 'disc.empty.text': ['Try another genre, years or rating.', 'Спробуй інший жанр, роки чи рейтинг.'],
   'show.more': ['Show more', 'Показати ще'],
   // статистика
   'stats.empty.title': ['Nothing to count yet', 'Поки нема що рахувати'],

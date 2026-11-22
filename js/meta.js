@@ -13,14 +13,52 @@ async function getJson(url, signal) {
   return r.json();
 }
 
-export async function search(q, signal) {
+// Кеш відповідей каталогу: спершу пам'ять вкладки, далі сховище браузера
+// (Cache API), і лише потім мережа. Зберігаємо вже стиснуту до потрібного
+// форму — сира сторінка каталогу важить ~700 КБ, наша — кілька десятків.
+// Однакові запити, що летять одночасно, зливаються в один.
+const DATA_CACHE = 'mws-data-v1', mem = new Map();
+const store = typeof caches === 'undefined' ? null : caches.open(DATA_CACHE).catch(() => null);
+const keyUrl = key => 'https://cache.local/' + encodeURIComponent(key);
+async function cached(key, ttl, load) {
+  if (mem.has(key)) return mem.get(key);
+  const p = (async () => {
+    const c = await store;
+    try {
+      const hit = c && await c.match(keyUrl(key));
+      if (hit) { const j = await hit.json(); if (Date.now() - j.at < ttl) return j.v; }
+    } catch { /* зіпсований запис — беремо з мережі */ }
+    const v = await load();
+    c?.put(keyUrl(key), new Response(JSON.stringify({ at: Date.now(), v }), { headers: { 'content-type': 'application/json' } })).catch(() => {});
+    return v;
+  })();
+  mem.set(key, p);
+  p.catch(() => mem.delete(key));
+  return p;
+}
+// Раз на вкладку прибираємо записи, старші за дві доби.
+store?.then(async c => {
+  if (!c) return;
+  for (const req of await c.keys()) {
+    try { const j = await (await c.match(req)).json(); if (Date.now() - j.at > 48 * 3600e3) c.delete(req); } catch { c.delete(req); }
+  }
+}).catch(() => {});
+const HOUR = 3600e3;
+
+// kind: 'all' | 'anime' | 'series' | 'movie'. Для фільмів питаємо лише
+// каталог фільмів. Аніме від серіалу пошук не відрізняє (у видачі немає ні
+// жанрів, ні країни), тож для цих двох категорій дотягуємо довідку по
+// кожному знайденому запису — вона маленька й кешується.
+export async function search(q, signal, kind = 'all') {
   const enc = encodeURIComponent(q);
-  const lists = await Promise.all(['series', 'movie'].map(t =>
-    getJson(`${BASE}/catalog/${t}/top/search=${enc}.json`, signal)
-      .then(x => x.metas || [])
-      .catch(e => { if (e.name === 'AbortError') throw e; return null; })));
+  const types = kind === 'movie' ? ['movie'] : kind === 'series' ? ['series'] : ['series', 'movie'];
+  const lists = await Promise.all(types.map(t =>
+    cached(`s|${t}|${q.toLowerCase()}`, 24 * HOUR, () => getJson(`${BASE}/catalog/${t}/top/search=${enc}.json`)
+      .then(x => (x.metas || []).map(m => ({ id: m.id, imdb_id: m.imdb_id, type: m.type, name: m.name, releaseInfo: m.releaseInfo }))))
+      .catch(() => null)));
+  if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
   if (lists.every(l => l === null)) throw new Error(t('err.search'));
-  const [s, m] = lists.map(l => l || []);
+  const [s, m] = types.length === 2 ? lists.map(l => l || []) : types[0] === 'movie' ? [[], lists[0]] : [lists[0], []];
   const mixed = [];
   for (let i = 0; i < Math.max(s.length, m.length); i++) {
     if (s[i]) mixed.push(s[i]);
@@ -36,7 +74,7 @@ export async function search(q, signal) {
     return n.startsWith(ql) ? 0 : n.includes(ql) ? 1 : 2;
   };
   const seen = new Set();
-  return mixed.map((x, i) => ({ x, i, r: rank(x) }))
+  const found = mixed.map((x, i) => ({ x, i, r: rank(x) }))
     .sort((a, b) => a.r - b.r || a.i - b.i)
     .map(({ x }) => ({
       id: x.imdb_id || x.id,
@@ -44,8 +82,14 @@ export async function search(q, signal) {
       title: x.name || '',
       year: String(x.releaseInfo || ''),
     }))
-    .filter(x => isId(x.id) && x.title && !seen.has(x.id) && seen.add(x.id))
-    .slice(0, 14);
+    .filter(x => isId(x.id) && x.title && !seen.has(x.id) && seen.add(x.id));
+  if (kind !== 'anime' && kind !== 'series') return found.slice(0, 14);
+  const full = await Promise.all(found.slice(0, 30).map(x =>
+    cached(`m|${x.type}|${x.id}`, 24 * HOUR, () => fetchMeta(x.id, x.type)).catch(() => null)));
+  if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+  // запис, довідку якого не вдалося дістати, лишаємо серед серіалів, але не видаємо за аніме
+  return full.map((f, i) => f || (kind === 'series' ? found[i] : null))
+    .filter(x => x && (x.kind || x.type) === kind).slice(0, 14);
 }
 
 function normalize(m, type) {
@@ -81,31 +125,33 @@ function normalize(m, type) {
 // немає, це фільм.
 export async function fetchMeta(id, type, signal) {
   if (!isId(id)) throw new Error(t('err.badid'));
-  let m = null, t = type;
+  let m = null, ty = type;
   if (type !== 'movie') {
     m = (await getJson(`${BASE}/meta/series/${id}.json`, signal)).meta;
     if (!type && !(m?.videos?.length)) m = null;
-    t = 'series';
+    ty = 'series';
   }
   if (!m) {
     m = (await getJson(`${BASE}/meta/movie/${id}.json`, signal)).meta;
-    t = 'movie';
+    ty = 'movie';
   }
   if (!m || !m.name) throw new Error(t('err.notfound'));
-  return normalize(m, t);
+  return normalize(m, ty);
 }
 
 // Готові добірки каталогу: list — 'top' (популярне) або 'year' (тоді в
 // genre передається рік). Записи приходять одразу з довідковими даними.
-const catalogCache = new Map();
-export async function catalog({ type = 'series', list = 'top', genre = '', skip = 0 } = {}, signal) {
+// list: 'top' (популярне), 'imdbRating' (за оцінкою IMDb) або 'year' (тоді в
+// genre передається рік). Сторінка — 50 записів.
+export const PAGE = 50;
+export function catalog({ type = 'series', list = 'top', genre = '', skip = 0 } = {}) {
   const extra = [genre && `genre=${encodeURIComponent(genre)}`, skip && `skip=${skip}`].filter(Boolean).join('&');
-  const url = `${BASE}/catalog/${type}/${list}${extra ? '/' + extra : ''}.json`;
-  if (catalogCache.has(url)) return catalogCache.get(url);
-  const j = await getJson(url, signal);
-  const out = (j.metas || []).filter(m => isId(m.imdb_id || m.id) && m.name).map(m => normalize(m, type));
-  catalogCache.set(url, out);
-  return out;
+  const path = `/catalog/${type}/${list}${extra ? '/' + extra : ''}.json`;
+  return cached('c|' + path, 6 * HOUR, async () => {
+    const j = await getJson(BASE + path);
+    // n — скільки записів віддав каталог: за ним видно, чи це остання сторінка
+    return { n: (j.metas || []).length, items: (j.metas || []).filter(m => isId(m.imdb_id || m.id) && m.name).map(m => normalize(m, type)) };
+  });
 }
 
 // Дати виходу серій — для календаря. Тримаємо в пам'яті й у сховищі

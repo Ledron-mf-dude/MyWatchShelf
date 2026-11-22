@@ -286,12 +286,27 @@ export function addFromPreview(status) {
 }
 
 // ── пошук-палітра: полиця й каталог в одному полі ─────────────────
+// Категорія пошуку: «усе» або лише аніме / серіали / фільми. Тримається до
+// закриття вкладки, щоб не вибирати її щоразу.
+let palKindSaved = 'all';
+const palKinds = (cur = palKindSaved) => ['all', ...KIND_IDS].map(v =>
+  `<button class="${cur === v ? 'on' : ''}" data-act="pal-kind" data-v="${v}" role="tab" aria-selected="${cur === v}">${t(v === 'all' ? 'all.kinds' : 'kinds.' + v)}</button>`).join('');
+export function palKind(v) {
+  const o = ui.overlay;
+  if (o?.type !== 'palette') return;
+  o.kind = palKindSaved = v;
+  $('#pal-kinds').innerHTML = palKinds();
+  const input = $('#pal-q');
+  runSearch(input.value);
+  input.focus();
+}
 export function openPalette() {
-  showOverlay({ type: 'palette', results: [], url: '', abort: null, sel: 0 }, `
+  showOverlay({ type: 'palette', results: [], url: '', abort: null, sel: 0, kind: palKindSaved }, `
     <div class="palette" role="dialog" aria-label="${t('search.btn')}">
       <div class="pal-head">${icon('search')}
         <input id="pal-q" type="search" placeholder="${t('pal.ph')}" autocomplete="off" aria-label="${t('search')}">
         <kbd>Esc</kbd></div>
+      <div class="seg pal-kinds" id="pal-kinds" role="tablist" aria-label="${t('pal.kind')}">${palKinds()}</div>
       <div class="pal-note" id="pal-note"></div>
       <div class="pal-body" id="pal-body"></div>
     </div>`);
@@ -343,16 +358,18 @@ async function runSearch(raw) {
   o.sel = 0;
   if (!p.id && p.query.length < 2) {
     if (p.url) { $('#pal-q').value = ''; o.results = []; return drawPalette(t('pal.url.noguess')); }
-    const mine = filterSort(store.list(), {}, 'updated', -1).slice(0, 4).map(e => ({ ...e, group: 'pal.recent' }));
-    const hot = (view.home?.series || []).filter(x => !store.get(x.id)).slice(0, 6).map(x => ({ ...x, group: 'rail.popular' }));
+    const mine = filterSort(store.list(), { kind: o.kind }, 'updated', -1).slice(0, 4).map(e => ({ ...e, group: 'pal.recent' }));
+    const h = view.home || {};
+    const pool = { all: h.series, anime: h.anime, movie: h.movies, series: (h.series || []).filter(x => x.kind === 'series') }[o.kind] || [];
+    const hot = pool.filter(x => !store.get(x.id)).slice(0, 6).map(x => ({ ...x, group: 'rail.popular' }));
     o.results = [...mine, ...hot];
     return drawPalette(o.results.length ? '' : p.url ? t('pal.url.noguess') : t('pal.hint'));
   }
   const body = $('#pal-body');
   body.classList.add('busy');
   try {
-    const mine = p.id ? [] : filterSort(store.list(), { q: p.query }, 'updated', -1).slice(0, 5).map(e => ({ ...e, group: 'pal.mine' }));
-    const found = p.id ? [await catalog.fetchMeta(p.id, undefined, ac.signal)] : await catalog.search(p.query, ac.signal);
+    const mine = p.id ? [] : filterSort(store.list(), { q: p.query, kind: o.kind }, 'updated', -1).slice(0, 5).map(e => ({ ...e, group: 'pal.mine' }));
+    const found = p.id ? [await catalog.fetchMeta(p.id, undefined, ac.signal)] : await catalog.search(p.query, ac.signal, o.kind);
     if (ac.signal.aborted) return;
     if (p.url && !p.id) $('#pal-q').value = p.query;
     const ids = new Set(mine.map(e => e.id));

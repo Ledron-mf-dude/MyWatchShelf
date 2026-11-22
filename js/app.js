@@ -4,9 +4,9 @@ import { t, tn, setLang, getLang, LANGS } from './i18n.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
 import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox, selects } from './ui.js';
-import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
+import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
 import {
-  openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl,
+  openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl, palKind,
   cardActions, loadDemo,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
@@ -121,7 +121,7 @@ async function route() {
   }
   // #/discover/anime — каталог одразу на потрібній вкладці
   const [r, sub] = raw.replace(/^\//, '').split('/');
-  if (r === 'discover' && ['series', 'anime', 'movie'].includes(sub) && view.disc.type !== sub) Object.assign(view.disc, { type: sub, genre: '', year: '' });
+  if (r === 'discover' && ['series', 'anime', 'movie'].includes(sub) && view.disc.type !== sub) Object.assign(view.disc, { type: sub, genre: '', from: '', to: '', min: '', sort: 'pop' });
   view.route = RENDER[r] && r !== 'recs' ? r : 'home';
   view.recs = null;
   setTitle(); drawChrome(); draw();
@@ -216,6 +216,8 @@ on({
   // каталог
   'disc-type': v => { view.disc.type = v; history.replaceState(null, '', '#/discover/' + v); renderDiscover(); },
   'disc-more': () => loadDiscover(false),
+  'disc-reset': resetDiscover,
+  'pal-kind': palKind,
   // пошук і поширення
   pick: v => pickResult(+v),
   'drop-url': dropUrl,

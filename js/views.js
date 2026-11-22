@@ -14,7 +14,7 @@ const S = store.settings;
 export const view = {
   route: 'home',
   f: { q: '', kind: 'all', status: 'all', genres: [], list: '' },
-  disc: { type: 'series', genre: '', year: '', items: [], skip: 0, loading: false, more: true, error: '', key: '' },
+  disc: { type: 'series', genre: '', from: '', to: '', min: '', sort: 'pop', items: [], feeds: [], loading: false, more: true, error: '', key: '' },
   recs: null,
   home: null,   // добірки каталогу для головної, щоб не тягнути їх щоразу
 };
@@ -137,7 +137,7 @@ function drawHomeCatalog() {
     if (view.home === null) {
       view.home = undefined;   // «уже вантажимо»
       Promise.all([catalog.catalog({ type: 'series' }), catalog.catalog({ type: 'series', genre: 'Animation' }), catalog.catalog({ type: 'movie' })])
-        .then(([s, a, m]) => { view.home = { series: s, anime: a.filter(x => x.kind === 'anime'), movies: m }; })
+        .then(([s, a, m]) => { view.home = { series: s.items, anime: a.items.filter(x => x.kind === 'anime'), movies: m.items }; })
         .catch(() => { view.home = { error: true }; })
         .finally(() => { if (view.route === 'home') drawHomeCatalog(); });
     }
@@ -228,47 +228,97 @@ export function updateLibrary() {
 }
 
 // ── каталог ───────────────────────────────────────────────────────
+const discKey = d => [d.type, d.genre, d.from, d.to, d.min, d.sort].join('|');
+// Один вибраний рік — це той самий рік; два — діапазон у будь-якому порядку.
+const discYears = d => {
+  const a = +(d.from || d.to) || 0, b = +(d.to || d.from) || 0;
+  return a ? [Math.min(a, b), Math.max(a, b)] : null;
+};
+let discWatch = null;
 export function renderDiscover() {
   const d = view.disc;
-  const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i);
+  const years = Array.from({ length: 60 }, (_, i) => new Date().getFullYear() - i);
+  const active = d.genre || d.from || d.to || d.min || d.sort !== 'pop';
   app.innerHTML = `
   <header class="page-head"><h1>${t('nav.discover')}</h1><span class="count">${t('disc.sub')}</span></header>
-  <div class="filters">
+  <div class="filters wide">
     <div class="seg" id="disc-type" role="tablist">${['series', 'anime', 'movie'].map(v =>
       `<button class="${d.type === v ? 'on' : ''}" data-act="disc-type" data-v="${v}" role="tab" aria-selected="${d.type === v}">${t('kinds.' + v)}</button>`).join('')}</div>
     <span class="grow"></span>
     ${dropdown('disc-genre', d.genre, [['', t('all.genres')], ...CATALOG_GENRES.map(g => [g, genreName(g)])], 'filter', t('genre'))}
-    ${dropdown('disc-year', d.year, [['', t('any.year')], ...years.map(y => [y, String(y)])], 'clock', t('year'))}
+    ${dropdown('disc-from', d.from, [['', t('year.from')], ...years.map(y => [y, t('year.from.n', { n: y })])], 'clock', t('year.from'))}
+    ${dropdown('disc-to', d.to, [['', t('year.to')], ...years.map(y => [y, t('year.to.n', { n: y })])], 'clock', t('year.to'))}
+    ${dropdown('disc-min', d.min, [['', t('any.rating')], ...[9, 8.5, 8, 7.5, 7, 6].map(n => [n, t('rating.min', { n: fmtRating(n) })])], 'starFill', t('rating'))}
+    ${dropdown('disc-sort', d.sort, ['pop', 'rating', 'year'].map(v => [v, t('dsort.' + v)]), 'sortDown', t('sorting'))}
+    ${active ? `<button class="chip reset" data-act="disc-reset">${icon('close')}${t('reset.filters')}</button>` : ''}
   </div>
   <div id="disc-list" class="grid"></div><div id="disc-more" class="center"></div>`;
-  selects['disc-genre'] = v => { d.genre = v; renderDiscover(); };
-  selects['disc-year'] = v => { d.year = v; renderDiscover(); };
-  const key = [d.type, d.genre, d.year].join('|');
-  if (d.key === key && d.items.length) drawDiscover(); else loadDiscover(true);
+  for (const k of ['genre', 'from', 'to', 'min', 'sort']) selects['disc-' + k] = v => { d[k] = v; renderDiscover(); };
+  // дозавантаження під час прокрутки: кнопка «Показати ще» лишається запасним шляхом
+  discWatch?.disconnect();
+  if (typeof IntersectionObserver !== 'undefined') {
+    discWatch = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) discAuto(); }, { rootMargin: '800px' });
+    discWatch.observe($('#disc-more'));
+  }
+  if (d.key === discKey(d) && d.items.length) drawDiscover(); else loadDiscover(true);
+}
+export const resetDiscover = () => { Object.assign(view.disc, { genre: '', from: '', to: '', min: '', sort: 'pop' }); renderDiscover(); };
+function discAuto() {
+  const d = view.disc, el = $('#disc-more');
+  if (!el || view.route !== 'discover' || d.loading || d.error || !d.more) return;
+  if (el.getBoundingClientRect().top < innerHeight + 800) loadDiscover(false);
+}
+// Каталог віддає готові стрічки: «популярне» й «за оцінкою» (можна звузити
+// жанром) та «за роком» — окрема на кожен рік. Аніме, діапазон років і
+// поріг оцінки він не вміє, тож беремо потрібні стрічки й відсіюємо самі.
+// Аніме серед серіалів року — приблизно кожен десятий запис, тому тягнемо
+// сторінки кількома колами, доки не набереться екран або стрічки скінчаться.
+function discFeeds(d) {
+  const anime = d.type === 'anime', yr = discYears(d);
+  const types = d.type === 'movie' ? ['movie'] : anime ? ['series', 'movie'] : ['series'];
+  const feeds = [];
+  for (const type of types) {
+    if (yr) for (let y = yr[1]; y >= yr[0]; y--) feeds.push({ type, list: 'year', genre: String(y), skip: 0, done: false });
+    else feeds.push({ type, list: d.sort === 'rating' ? 'imdbRating' : 'top', genre: anime ? 'Animation' : d.genre, skip: 0, done: false });
+  }
+  return feeds;
 }
 export async function loadDiscover(reset) {
   const d = view.disc;
-  if (reset) { d.items = []; d.skip = 0; d.more = true; d.error = false; }
-  const key = d.key = [d.type, d.genre, d.year].join('|');
+  if (d.loading && !reset) return;
+  const key = discKey(d);
+  if (reset || d.key !== key) { d.items = []; d.feeds = discFeeds(d); d.more = true; }
+  d.key = key; d.error = false;
   d.loading = true; drawDiscover();
+  const anime = d.type === 'anime', yr = discYears(d), min = +d.min || 0;
+  const fits = x => (!anime || x.kind === 'anime')
+    && (!yr || (parseInt(x.year, 10) >= yr[0] && parseInt(x.year, 10) <= yr[1]))   // добірка «за роком» у каталозі неточна
+    && (!(yr || anime) || !d.genre || x.meta.genres.includes(d.genre))
+    && (!min || (x.meta.imdb || 0) >= min);
+  const order = { rating: (a, b) => (b.meta.imdb || 0) - (a.meta.imdb || 0), year: (a, b) => (parseInt(b.year, 10) || 0) - (parseInt(a.year, 10) || 0) }[d.sort];
+  const feeds = d.feeds;
   try {
-    const type = d.type === 'movie' ? 'movie' : 'series';
-    const anime = d.type === 'anime';
-    const batch = d.year
-      ? await catalog.catalog({ type, list: 'year', genre: d.year, skip: d.skip })
-      : await catalog.catalog({ type, genre: anime ? 'Animation' : d.genre, skip: d.skip });
-    if (d.key !== key) return;
-    d.more = batch.length >= 40;
-    d.skip += batch.length || 50;
-    const have = new Set(d.items.map(x => x.id));
-    d.items.push(...batch.filter(x => !have.has(x.id)
-      && (!anime || x.kind === 'anime')
-      && (!d.year || String(x.year).slice(0, 4) === String(d.year))   // добірка «за роком» у каталозі неточна
-      && (!(d.year || anime) || !d.genre || x.meta.genres.includes(d.genre))));
+    let added = 0;
+    for (let round = 0; round < 8 && added < 24; round++) {
+      // за коло — по сторінці з кожної стрічки, але не більше восьми запитів разом
+      const turn = feeds.filter(f => !f.done).sort((a, b) => a.skip - b.skip).slice(0, 8);
+      if (!turn.length) break;
+      const pages = await Promise.all(turn.map(f => catalog.catalog({ type: f.type, list: f.list, genre: f.genre, skip: f.skip })));
+      if (d.key !== key || d.feeds !== feeds) return;
+      const have = new Set(d.items.map(x => x.id));
+      turn.forEach((f, i) => {
+        f.skip += catalog.PAGE;
+        if (pages[i].n < catalog.PAGE) f.done = true;
+        for (const x of pages[i].items) if (!have.has(x.id) && fits(x)) { have.add(x.id); d.items.push(x); added++; }
+      });
+      if (order) d.items.sort(order);
+      d.more = feeds.some(f => !f.done);
+      drawDiscover();
+    }
   } catch (err) {
-    if (d.key === key) d.error = true;
+    if (d.key === key && d.feeds === feeds) d.error = true;
   } finally {
-    if (d.key === key) { d.loading = false; drawDiscover(); }
+    if (d.key === key && d.feeds === feeds) { d.loading = false; drawDiscover(); setTimeout(discAuto, 0); }
   }
 }
 export function drawDiscover() {

@@ -1,7 +1,7 @@
 // Оболонка застосунку для роботи без мережі. Спершу мережа (щоб оновлення
 // приїжджали одразу), а коли її немає — остання збережена копія.
 // Чужих адрес (каталог, постери, Firebase) не чіпаємо.
-const CACHE = 'mws-shell-v13';
+const CACHE = 'mws-shell-v14';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'js/app.js', 'js/i18n.js', 'js/ui.js', 'js/views.js', 'js/panel.js', 'js/extras.js', 'js/logic.js', 'js/meta.js', 'js/store.js', 'js/cloud.js', 'js/config.js'];
 
@@ -10,7 +10,7 @@ self.addEventListener('install', e => {
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+    .then(keys => Promise.all(keys.filter(k => k !== CACHE && !k.startsWith('mws-data-')).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {

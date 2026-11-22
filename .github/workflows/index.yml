@@ -1,0 +1,55 @@
+name: catalog index
+
+# Щодня збирає власний індекс каталогу (tools/index.mjs) і кладе його в
+# гілку data — окрему, без історії, щоб основна не розросталась. Сайт читає
+# файли звідти. Щопонеділка — повний обхід, в інші дні — лише останні 3 роки.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Повний обхід усіх років
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-index
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Попередній індекс
+        run: |
+          mkdir -p data
+          if git fetch --depth 1 origin data 2>/dev/null; then
+            git show FETCH_HEAD:series.json > data/series.json || true
+            git show FETCH_HEAD:movie.json > data/movie.json || true
+          fi
+      - name: Збірка
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.full }}" = "true" ]; then MODE=full
+          elif [ "$(date -u +%u)" = "1" ] || [ ! -s data/series.json ] || [ ! -s data/movie.json ]; then MODE=full
+          else MODE=recent; fi
+          echo "режим: $MODE"
+          if [ "$MODE" = "full" ]; then node tools/index.mjs --out data
+          else node tools/index.mjs --out data --since 3; fi
+      - name: Публікація в гілку data
+        run: |
+          cd data
+          git init -q -b data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add series.json movie.json anime.json
+          git commit -q -m "Індекс каталогу $(date -u +%F)"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data

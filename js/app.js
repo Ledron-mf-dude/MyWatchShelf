@@ -4,6 +4,7 @@ import { t, tn, setLang, getLang, LANGS } from './i18n.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
 import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox, selects } from './ui.js';
+import * as catalog from './meta.js';
 import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
 import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl, palKind,
@@ -210,7 +211,7 @@ on({
   status: v => { view.f.status = v; updateLibrary(); },
   genre: v => { const g = view.f.genres, i = g.indexOf(v); if (i < 0) g.push(v); else g.splice(i, 1); updateLibrary(); return 'keep'; },
   'genres-toggle': () => { const p = $('#lib-genres'); p.hidden = !p.hidden; return 'keep'; },
-  'reset-filters': () => { Object.assign(view.f, { q: '', kind: 'all', status: 'all', genres: [], list: '', from: '', to: '', min: '' }); if ($('#lib-list')) renderLibrary(); },
+  'reset-filters': () => { Object.assign(view.f, { q: '', kind: 'all', status: 'all', genres: [], list: '', from: '', to: '', min: '', mine: '' }); if ($('#lib-list')) renderLibrary(); },
   dir: () => { store.setSetting('dir', -S.dir); updateLibrary(); },
   view: () => { store.setSetting('view', S.view === 'grid' ? 'list' : 'grid'); updateLibrary(); },
   // каталог
@@ -238,6 +239,19 @@ document.addEventListener('click', ev => {
   if (keep !== 'keep' && el.dataset.act !== 'menu') closePops();
 });
 function closePops() { $$('.pop').forEach(p => { p.hidden = true; }); $$('.selbtn').forEach(b => b.setAttribute('aria-expanded', 'false')); }
+// Довідку тайтла з каталогу тягнемо, щойно на картку навели чи торкнулись:
+// поки людина натисне, опис і кількість серій уже лежатимуть у кеші.
+let warmTimer;
+document.addEventListener('pointerover', ev => {
+  const el = ev.target.closest?.('.pc[data-act="preview"]');
+  clearTimeout(warmTimer);
+  if (!el) return;
+  warmTimer = setTimeout(() => {
+    const x = recall(el.dataset.id);
+    if (x && (!x.meta || x.thin)) catalog.meta(x.id, x.type || (x.kind === 'movie' ? 'movie' : undefined)).catch(() => {});
+  }, ev.pointerType === 'mouse' ? 120 : 0);
+});
+
 document.addEventListener('keydown', ev => {
   const typing = ev.target.matches?.('input,textarea,select');
   if (ev.key === 'Escape') { if (ui.overlay) closeOverlay(); else closePops(); }

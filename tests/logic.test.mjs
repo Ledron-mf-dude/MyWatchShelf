@@ -92,6 +92,10 @@ test('фільтр і сортування', () => {
   assert.deepEqual(filterSort(dated, { from: '2021' }, 'title', 1).map(e => e.id), ['tt2']);
   assert.deepEqual(filterSort(dated, { from: '2023', to: '2020' }, 'title', 1).map(e => e.id), ['tt2', 'tt3']);
   assert.deepEqual(filterSort(dated, { min: '7' }, 'title', 1).map(e => e.id), ['tt1']);
+  const scored = [{ id: 'tt1', title: 'A', score: 9.5 }, { id: 'tt2', title: 'B', score: 7 }, { id: 'tt3', title: 'C', score: 0 }];
+  assert.deepEqual(filterSort(scored, { mine: '9' }, 'title', 1).map(e => e.id), ['tt1']);
+  assert.deepEqual(filterSort(scored, { mine: '7' }, 'title', 1).map(e => e.id), ['tt1', 'tt2']);
+  assert.deepEqual(filterSort(scored, { mine: 'none' }, 'title', 1).map(e => e.id), ['tt3']);
   assert.deepEqual(filterSort(list, { kind: 'all', status: 'all' }, 'title', 1).map(e => e.id), ['tt2', 'tt1']);
   assert.deepEqual(filterSort(list, { q: 'фільм' }, 'updated', -1).map(e => e.id), ['tt2']);
 });

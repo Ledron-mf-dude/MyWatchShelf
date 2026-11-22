@@ -15,5 +15,8 @@ export const FIREBASE = {
 // Адреса, на яку Google повертає після входу. Має збігатися з дозволеною
 // в клієнті буква в букву, тому беремо її звідси, а не з рядка браузера:
 // сайт відкривається і як /mywatchshelf/, і як /MyWatchShelf/index.html.
+// Звідки брати власний індекс каталогу (його щодня збирає tools/index.mjs
+// і кладе в гілку data). На localhost береться з теки data/ поруч.
+export const INDEX_URL = 'https://raw.githubusercontent.com/Ledron-mf-dude/MyWatchShelf/data/';
 export const SITE_URL = 'https://ledron-mf-dude.github.io/MyWatchShelf/';
 export const GOOGLE_CLIENT_ID = '520582060325-j9lute0q05tdusso96qqnbso6ak2l39j.apps.googleusercontent.com';

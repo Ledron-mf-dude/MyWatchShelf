@@ -44,7 +44,8 @@ export function addItem(item, patch = {}) {
   });
   if (!e) return null;
   if (item.meta) store.setMeta(item.id, item.meta);
-  else refreshMeta(item.id, { first: true, detect: !item.type });
+  // запис з індексу каталогу несе лише оцінку й жанри — решту дотягуємо
+  if (!item.meta || item.thin) refreshMeta(item.id, { first: true, detect: !item.type });
   return e;
 }
 
@@ -261,11 +262,11 @@ export async function openPreview(id) {
         <button class="btn primary" data-act="add-as" data-v="planned">${icon('plus')}${t('st.planned')}</button></footer>`;
   };
   showOverlay({ type: 'preview', id, abort: ac }, `<aside class="card" role="dialog" aria-label="${t('card.about')}"></aside>`);
-  draw(x.meta || {}, !x.meta);
-  if (!x.meta) {
+  draw(x.meta || {}, !x.meta || !!x.thin);
+  if (!x.meta || x.thin) {
     try {
-      const full = await catalog.fetchMeta(id, x.kind === 'movie' ? 'movie' : undefined, ac.signal);
-      remember({ ...x, type: full.type, meta: full.meta });
+      const full = await catalog.meta(id, x.type || (x.kind === 'movie' ? 'movie' : undefined));
+      remember({ ...x, type: full.type, kind: x.kind || full.kind, meta: full.meta, thin: false });
       if (ui.overlay?.abort === ac) draw(full.meta, false);
     } catch { if (ui.overlay?.abort === ac) draw({}, false); }
   }
@@ -369,12 +370,19 @@ async function runSearch(raw) {
   body.classList.add('busy');
   try {
     const mine = p.id ? [] : filterSort(store.list(), { q: p.query, kind: o.kind }, 'updated', -1).slice(0, 5).map(e => ({ ...e, group: 'pal.mine' }));
-    const found = p.id ? [await catalog.fetchMeta(p.id, undefined, ac.signal)] : await catalog.search(p.query, ac.signal, o.kind);
+    const ids = new Set(mine.map(e => e.id));
+    // видачу показуємо частинами: спершу те, що вже відомо, далі уточнення
+    const put = (found, last) => {
+      if (ac.signal.aborted) return;
+      const cur = o.results[o.sel]?.id;
+      o.results = [...mine, ...found.filter(x => !ids.has(x.id)).map(x => ({ ...x, group: 'nav.discover' }))];
+      o.sel = Math.max(0, o.results.findIndex(r => r.id === cur));
+      if (o.results.length || last) drawPalette(o.results.length ? '' : t('pal.none'));
+    };
+    const found = p.id ? [await catalog.fetchMeta(p.id, undefined, ac.signal)] : await catalog.search(p.query, ac.signal, o.kind, put);
     if (ac.signal.aborted) return;
     if (p.url && !p.id) $('#pal-q').value = p.query;
-    const ids = new Set(mine.map(e => e.id));
-    o.results = [...mine, ...found.filter(x => !ids.has(x.id)).map(x => ({ ...x, group: 'nav.discover' }))];
-    drawPalette(o.results.length ? '' : t('pal.none'));
+    put(found, true);
   } catch (err) {
     if (err.name !== 'AbortError') drawPalette(t('pal.fail', { e: err.message }));
   } finally {

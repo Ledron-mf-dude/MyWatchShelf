@@ -13,8 +13,8 @@ import { $, app, icon, ph, remember, dropdown, selects } from './ui.js';
 const S = store.settings;
 export const view = {
   route: 'home',
-  f: { q: '', kind: 'all', status: 'all', genres: [], list: '', from: '', to: '', min: '' },
-  disc: { type: 'series', genre: '', from: '', to: '', min: '', sort: 'pop', items: [], feeds: [], loading: false, more: true, error: '', key: '' },
+  f: { q: '', kind: 'all', status: 'all', genres: [], list: '', from: '', to: '', min: '', mine: '' },
+  disc: { type: 'series', genre: '', from: '', to: '', min: '', sort: 'pop', items: [], feeds: [], pool: null, live: false, loading: false, more: true, error: '', key: '' },
   recs: null,
   home: null,   // добірки каталогу для головної, щоб не тягнути їх щоразу
 };
@@ -188,6 +188,7 @@ export function renderLibrary() {
     ${dropdown('lib-from', f.from, [['', t('year.from')], ...years.map(y => [y, t('year.from.n', { n: y })])], 'clock', t('year.from'))}
     ${dropdown('lib-to', f.to, [['', t('year.to')], ...years.map(y => [y, t('year.to.n', { n: y })])], 'clock', t('year.to'))}
     ${dropdown('lib-min', f.min, [['', t('any.rating')], ...RATING_MINS.map(n => [n, t('rating.min', { n: fmtRating(n) })])], 'starFill', t('rating'))}
+    ${dropdown('lib-mine', f.mine, [['', t('mine.any')], ...[10, 9, 8, 7, 6, 5].map(n => [n, t(n === 10 ? 'mine.ten' : 'mine.min', { n })]), ['none', t('mine.none')]], 'star', t('card.score'))}
     ${dropdown('lib-sort', S.sort, SORTS.map(v => [v, t('sort.' + v)]), 'sortDown', t('sorting'))}
     <button class="rb" data-act="dir" id="lib-dir" title="${t('sort.dir')}"></button>
     <button class="rb" data-act="view" id="lib-view" title="${t('view.toggle')}"></button>
@@ -197,7 +198,7 @@ export function renderLibrary() {
   $('#lib-q').value = view.f.q;
   $('#lib-q').addEventListener('input', e => { view.f.q = e.target.value; updateLibrary(); });
   selects['lib-sort'] = v => { store.setSetting('sort', v); renderLibrary(); };
-  for (const k of ['from', 'to', 'min']) selects['lib-' + k] = v => { f[k] = v; renderLibrary(); };
+  for (const k of ['from', 'to', 'min', 'mine']) selects['lib-' + k] = v => { f[k] = v; renderLibrary(); };
   updateLibrary();
 }
 export function updateLibrary() {
@@ -211,7 +212,7 @@ export function updateLibrary() {
     + STATUS_IDS.map(v => chip(v, `<i class="dot st-${v}"></i>${statusLabel(v)}`, n(e => e.status === v))).join('')
     + chip('rec', `${icon('starFill')}${t('badge.rec')}`, n(e => e.rec), 'rec')
     + listNames(all).map(l => `<button class="chip ${f.list === l ? 'on' : ''}" data-act="list-filter" data-v="${esc(l)}" aria-pressed="${f.list === l}">${icon('folder')}${esc(l)}<small>${n(e => (e.lists || []).includes(l))}</small></button>`).join('')
-    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length || f.list || f.from || f.to || f.min ? `<button class="chip reset" data-act="reset-filters">${icon('close')}${t('reset.filters')}</button>` : '');
+    + (f.q || f.kind !== 'all' || f.status !== 'all' || f.genres.length || f.list || f.from || f.to || f.min || f.mine ? `<button class="chip reset" data-act="reset-filters">${icon('close')}${t('reset.filters')}</button>` : '');
   const genres = insights(all).genres;
   $('#lib-gcount').textContent = f.genres.length || '';
   $('#lib-genres').innerHTML = genres.length
@@ -246,7 +247,7 @@ export function renderDiscover() {
   const years = Array.from({ length: 60 }, (_, i) => new Date().getFullYear() - i);
   const active = d.genre || d.from || d.to || d.min || d.sort !== 'pop';
   app.innerHTML = `
-  <header class="page-head"><h1>${t('nav.discover')}</h1><span class="count">${t('disc.sub')}</span></header>
+  <header class="page-head"><h1>${t('nav.discover')}</h1><span class="count" id="disc-count">${t('disc.sub')}</span></header>
   <div class="filters wide">
     <div class="seg" id="disc-type" role="tablist">${['series', 'anime', 'movie'].map(v =>
       `<button class="${d.type === v ? 'on' : ''}" data-act="disc-type" data-v="${v}" role="tab" aria-selected="${d.type === v}">${t('kinds.' + v)}</button>`).join('')}</div>
@@ -289,19 +290,42 @@ function discFeeds(d) {
   }
   return feeds;
 }
+// Основний шлях — власний індекс: один файл на вкладку, далі фільтри й
+// сортування рахуються на місці по повному списку. Якщо індекс недоступний,
+// до кінця сеансу працюємо по-старому, стрічками каталогу (d.live).
+const DISC_STEP = 60;
 export async function loadDiscover(reset) {
   const d = view.disc;
   if (d.loading && !reset) return;
   const key = discKey(d);
-  if (reset || d.key !== key) { d.items = []; d.feeds = discFeeds(d); d.more = true; }
+  if (reset || d.key !== key) { d.items = []; d.pool = null; d.feeds = discFeeds(d); d.more = true; }
   d.key = key; d.error = false;
   d.loading = true; drawDiscover();
   const anime = d.type === 'anime', yr = discYears(d), min = +d.min || 0;
+  const order = { rating: (a, b) => (b.meta.imdb || 0) - (a.meta.imdb || 0), year: (a, b) => (parseInt(b.year, 10) || 0) - (parseInt(a.year, 10) || 0) }[d.sort];
+  if (!d.pool && !d.live) {
+    try {
+      const all = await catalog.index(d.type);
+      if (d.key !== key) return;
+      d.pool = all.filter(x => (!yr || (parseInt(x.year, 10) >= yr[0] && parseInt(x.year, 10) <= yr[1]))
+        && (!d.genre || x.meta.genres.includes(d.genre))
+        && (!min || (x.meta.imdb || 0) >= min));
+      if (order) d.pool.sort(order);   // без сортування лишається порядок індексу — за популярністю
+    } catch (err) {
+      if (d.key !== key) return;
+      d.live = true;
+    }
+  }
+  if (d.pool) {
+    d.items = d.pool.slice(0, d.items.length + DISC_STEP);
+    d.more = d.items.length < d.pool.length;
+    d.loading = false; drawDiscover(); setTimeout(discAuto, 0);
+    return;
+  }
   const fits = x => (!anime || x.kind === 'anime')
     && (!yr || (parseInt(x.year, 10) >= yr[0] && parseInt(x.year, 10) <= yr[1]))   // добірка «за роком» у каталозі неточна
     && (!(yr || anime) || !d.genre || x.meta.genres.includes(d.genre))
     && (!min || (x.meta.imdb || 0) >= min);
-  const order = { rating: (a, b) => (b.meta.imdb || 0) - (a.meta.imdb || 0), year: (a, b) => (parseInt(b.year, 10) || 0) - (parseInt(a.year, 10) || 0) }[d.sort];
   const feeds = d.feeds;
   try {
     let added = 0;
@@ -330,6 +354,7 @@ export async function loadDiscover(reset) {
 export function drawDiscover() {
   const box = $('#disc-list'), d = view.disc;
   if (!box) return;
+  $('#disc-count').textContent = d.pool ? count('title', d.pool.length) : t('disc.sub');
   box.innerHTML = d.items.map(x => catalogCard(x)).join('') + (d.loading ? skeletons(d.items.length ? 6 : 18) : '');
   $('#disc-more').innerHTML = d.error ? `<p class="muted">${t('catalog.down.retry')}</p><button class="btn" data-act="disc-more">${t('retry')}</button>`
     : !d.loading && !d.items.length ? `<div class="empty">${icon('compass')}<b>${t('disc.empty.title')}</b><p>${t('disc.empty.text')}</p></div>`

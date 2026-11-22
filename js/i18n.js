@@ -49,6 +49,7 @@ const D = {
   'any.rating': ['Any rating', 'Будь-який рейтинг'], 'rating.min': ['IMDb {n}+', 'IMDb {n}+'], rating: ['Rating', 'Рейтинг'],
   'dsort.pop': ['Popular first', 'Спершу популярні'], 'dsort.rating': ['Top rated first', 'Спершу з вищим рейтингом'], 'dsort.year': ['Newest first', 'Спершу новіші'],
   'pal.kind': ['Search in', 'Де шукати'],
+  'mine.any': ['Any score of mine', 'Будь-яка моя оцінка'], 'mine.min': ['My score {n}+', 'Моя оцінка {n}+'], 'mine.ten': ['My score 10', 'Моя оцінка 10'], 'mine.none': ['Not rated by me', 'Ще не оцінені'],
   type: ['Type', 'Тип'], genre: ['Genre', 'Жанр'], genres: ['Genres', 'Жанри'], year: ['Year', 'Рік'],
   season: ['season', 'сезон'], episode: ['episode', 'серія'],
   'prog': ['season {s} · episode {e}', 'сезон {s} · серія {e}'],

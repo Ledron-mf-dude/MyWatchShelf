@@ -30,6 +30,12 @@ export const poster = (id, size = 'small') =>
 export const backdrop = (id, size = 'medium') =>
   isId(id) ? `https://images.metahub.space/background/${size}/${id}/img` : '';
 
+// Аніме — анімація, у якої Японія стоїть першою серед країн. Просто «Японія
+// є в переліку» не годиться: так у аніме потрапляє пів каталогу Pixar і
+// Disney, де Японія вказана як країна спільного виробництва чи прокату.
+export const isAnime = (genres, country) =>
+  (Array.isArray(genres) ? genres : []).includes('Animation') && /^\s*japan/i.test(String(country || ''));
+
 export const CATALOG_GENRES = ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama',
   'Family', 'Fantasy', 'History', 'Horror', 'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western'];
 export function fmtRuntime(r) {
@@ -184,6 +190,9 @@ export function filterSort(list, f, sort, dir) {
   const out = list.filter(e => {
     if (yr) { const y = parseInt(e.year, 10); if (!(y >= yr[0] && y <= yr[1])) return false; }
     if (min && !((e.meta?.imdb || 0) >= min)) return false;
+    // власна оцінка: поріг «від N» або 'none' — лише ще не оцінені
+    if (f.mine === 'none') { if (e.score > 0) return false; }
+    else if (+f.mine && !((e.score || 0) >= +f.mine)) return false;
     if (f.kind && f.kind !== 'all' && e.kind !== f.kind) return false;
     if (f.genres?.length && !f.genres.some(g => (e.meta?.genres || []).includes(g))) return false;
     if (f.list && !(e.lists || []).includes(f.list)) return false;

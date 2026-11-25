@@ -292,8 +292,10 @@ const pullAll = () => {
   friends.list().filter(f => f.kind === 'live' && f.follow).forEach(pullRecs);
 };
 // Сховища змінюються й з хмари (інший пристрій): перемальовуємо один раз на
-// пачку змін. Самі обробники у сховища нічого не пишуть — лише читають і малюють.
-let started = false, queued = false, friendsChanged = false;
+// пачку змін. Обробники у свої сховища не пишуть. Єдиний запис під час малювання —
+// позначка «бачив» в renderFriends — іде з markingSeen і нового малювання не
+// викликає: інакше відповідь із годинником із майбутнього крутила б це по колу.
+let started = false, queued = false, friendsChanged = false, markingSeen = false;
 const pullMissing = () => { if (cloud.available) recsMissing(friends.raw(), socialCache.get().recs).forEach(pullRecs); };
 const later = () => {
   if (queued) return;
@@ -322,7 +324,7 @@ export const social = {
     pullAll();
     addEventListener('online', pullAll);
     friends.onChange(() => { friendsChanged = true; later(); });
-    prefs.onChange(later);
+    prefs.onChange(() => { if (!markingSeen) later(); });
     listdefs.onChange(later);
   },
 };
@@ -384,7 +386,10 @@ export function renderFriends() {
   const c = socialCache.get(), tb = tableOf(c);
   // Відкрили екран — усе, що було, вважаємо баченим (зберігаємо лише коли є що, а з
   // входом — коли налаштування вже приїхали з хмари; тоді екран перемалюється сам).
-  if (unseenCount(tb, c.replies, seenAt()) > 0 && ready('prefs')) prefs.save('seen', { seenAt: seenStamp(tb, c.replies, Date.now()) });
+  if (unseenCount(tb, c.replies, seenAt()) > 0 && ready('prefs')) {
+    markingSeen = true;
+    try { prefs.save('seen', { seenAt: seenStamp(tb, c.replies, Date.now()) }); } finally { markingSeen = false; }
+  }
   if (!tb.cols.some(x => x.id === fr.who)) fr.who = '';   // друга видалили
   const cols = fr.who ? tb.cols.filter(x => x.id === fr.who) : tb.cols;
   const rows = tb.rows.filter(r => (!fr.who || cellOf(r, fr.who)) && (fr.kind === 'all' || r.k === fr.kind));

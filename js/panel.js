@@ -449,7 +449,7 @@ export async function openShare(list = '') {
 const buildFound = f => filterSort(store.list(), f, 'score', -1);
 
 export function openBuild() {
-  showOverlay({ type: 'build', f: cleanListFilter({}), picked: new Set(), touched: false, name: '' },
+  showOverlay({ type: 'build', f: cleanListFilter({}), picked: new Set(), name: '' },
     `<div class="palette" role="dialog" aria-label="${t('build.title')}"></div>`);
   drawBuild();
 }
@@ -511,14 +511,12 @@ function buildSet(v) {
         : { [k]: x }),
   });
   o.picked = new Set(isEmptyFilter(o.f) ? [] : buildFound(o.f).map(e => e.id));
-  o.touched = false;
   drawBuild();
 }
 function buildTick(id) {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
   if (!o.picked.delete(id)) o.picked.add(id);
-  o.touched = true;
   drawBuild();
 }
 function buildSave() {
@@ -561,7 +559,11 @@ async function rebuild(name) {
 export const buildActions = { 'list-build': openBuild, 'build-set': buildSet, 'build-tick': buildTick, 'build-save': buildSave, 'list-rebuild': rebuild };
 
 // Остання мітка добірки знята (в картці чи тут) — її умови більше нічого не значать.
-store.onChange(() => {
+// Лише зміни людини на цьому пристрої й не під час першого злиття з хмарою:
+// інакше умови, що приїхали раніше за записи з міткою, стерлись би, а мітка
+// видалення поїхала б у хмару.
+store.onLocal((entry, what) => {
+  if (what !== 'user' || cloud.state === 'connecting') return;
   const names = new Set(listNames(store.list()));
   for (const d of listdefs.list()) if (!names.has(d.name)) listdefs.remove(d.id);
 });

@@ -6,13 +6,14 @@
 //   public/{uid}                  — її рекомендації, читати може будь-хто
 import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
+import { friends, listdefs, prefs } from './synced.js';
 import { recItem, cleanRecs } from './logic.js';
 import { t, getLang } from './i18n.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
 const FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
 
-let signingIn = false, sdkPromise = null, unsub = null, pubTimer = null, lastPub = '';
+let signingIn = false, sdkPromise = null, unsub = null, unsubs = [], pubTimer = null, lastPub = '';
 const subs = new Set();
 
 export const cloud = {
@@ -85,6 +86,7 @@ function init() {
     if (what === 'meta') pushMeta(entry); else push(entry);
     schedulePublish();
   });
+  for (const [name, s] of SYNCED) s.onLocal(rec => { if (cloud.user) pushRec(name, rec); });
   // Увійти могли в іншій вкладці (так буває в застосунку з головного
   // екрана): повернувшись сюди, підхоплюємо вже наявний вхід.
   const wake = () => {
@@ -106,6 +108,12 @@ async function push(entry) {
   try { const c = await sdk(); await c.fs.setDoc(ref(c, entry.id), plain(entry)); }
   catch (e) { console.warn('не записалось у хмару', e); set('error'); }
 }
+// друзі, фільтри добірок і налаштування — колекції поруч з entries
+const SYNCED = [['friends', friends], ['listdefs', listdefs], ['prefs', prefs]];
+async function pushRec(name, rec) {
+  try { const c = await sdk(); await c.fs.setDoc(c.fs.doc(c.db, 'users', cloud.user.uid, name, rec.id), plain(rec)); }
+  catch (e) { console.warn('не записалось у хмару', e); set('error'); }
+}
 async function pushMeta(entry) {
   try {
     const c = await sdk();
@@ -115,6 +123,7 @@ async function pushMeta(entry) {
 
 function onUser(c, u) {
   unsub?.(); unsub = null;
+  unsubs.forEach(f => f()); unsubs = [];
   if (!u) {
     // Поки токен від Google ще обмінюється на вхід, Firebase встигає
     // сказати «нікого немає» — це не привід показувати «Увійти».
@@ -133,6 +142,7 @@ function onUser(c, u) {
   if (owner && owner !== u.uid) {
     store.clear();
     store.setSetting('name', '');   // підпис рекомендацій теж був чужий
+    SYNCED.forEach(([, s]) => s.clear());
     try { localStorage.removeItem(PUBLISHED); } catch { /* нічого */ }
   }
   lastPub = '';
@@ -158,6 +168,23 @@ function onUser(c, u) {
     }
     set(navigator.onLine === false ? 'offline' : 'synced');
   }, err => { console.warn('синхронізація', err); set('error'); });
+  // ті самі правила для друзів, фільтрів добірок і налаштувань
+  for (const [name, s] of SYNCED) {
+    let firstRec = true;
+    unsubs.push(c.fs.onSnapshot(c.fs.collection(c.db, 'users', u.uid, name), snap => {
+      const incoming = [];
+      snap.docChanges().forEach(ch => { if (ch.type !== 'removed') incoming.push(ch.doc.data()); });
+      s.applyRemote(incoming);
+      if (firstRec) {
+        firstRec = false;
+        const remote = new Map(snap.docs.map(d => [d.id, d.data()]));
+        for (const e of s.raw()) {
+          const r = remote.get(e.id);
+          if (!r || (e.updated || 0) > (r.updated || 0)) pushRec(name, e);
+        }
+      }
+    }, err => { console.warn('синхронізація', name, err); set('error'); }));
+  }
 }
 
 function signIn() {

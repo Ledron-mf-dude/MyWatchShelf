@@ -291,3 +291,8 @@ test('добірки: чистка, перелік, фільтр, публічн
   assert.equal(back.title, 'Вечір');
   assert.equal(back.items[0].id, 'tt1234567');
 });
+
+test('cleanRecs пропускає open лише як true', () => {
+  assert.equal(cleanRecs({ items: [], open: true }).open, true);
+  assert.equal('open' in cleanRecs({ items: [], open: 'так' }), false);
+});

@@ -73,14 +73,14 @@ export function parseInput(raw) {
   return { query: s };
 }
 
-const str = (v, max) => (typeof v === 'string' ? v : '').slice(0, max);
+export const str = (v, max) => (typeof v === 'string' ? v : '').slice(0, max);
 const int = (v, min, max) => {
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min;
 };
 
 // Оцінка: 0 (немає) або 1…10 з кроком 0,5.
-const half = v => {
+export const half = v => {
   const n = Math.round(Number(v) * 2) / 2;
   return Number.isFinite(n) && n >= 1 ? Math.min(10, n) : 0;
 };
@@ -298,6 +298,7 @@ export function cleanRecs(data) {
     });
   const out = { name: str(data?.name, 80), items };
   if (data?.title) out.title = str(data.title, 40);
+  if (data?.open === true) out.open = true;   // список відкрито для оцінок друзів
   return out;
 }
 

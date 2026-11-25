@@ -1,6 +1,6 @@
 // Чиста логіка друзів і добірок за фільтром: без DOM і localStorage, тож
 // працює й під Node. synced.js бере звідси очищення записів.
-import { KIND_IDS, STATUS_IDS, filterSort } from './logic.js';
+import { KIND_IDS, STATUS_IDS, filterSort, isId, str, half } from './logic.js';
 
 export const PUBLIC_MAX = 500, LISTS_MAX = 8;
 
@@ -57,4 +57,43 @@ export function publicOver(entries, addIds) {
   const add = new Set(addIds);
   const total = entries.filter(e => isPub(e) || add.has(e.id)).length;
   return Math.max(0, total - PUBLIC_MAX);
+}
+
+// ── відповідь друга ───────────────────────────────────────────────
+// Один документ на друга: його оцінки й коментарі до тайтлів чужого списку.
+// Назва, тип і рік лежать у самому елементі, щоб власник бачив відповідь і без
+// тайтла у своїй полиці. Ключ — лише справжній id IMDb: інакше в документ
+// потрапить що завгодно.
+export function cleanReply(data) {
+  const raw = data?.items && typeof data.items === 'object' ? data.items : {};
+  const items = {};
+  for (const [id, x] of Object.entries(raw)) {
+    if (Object.keys(items).length >= 500) break;
+    if (!isId(id) || !x || typeof x !== 'object') continue;
+    const s = half(x.s), n = str(x.n, 500);
+    if (!s && !n) continue;   // без оцінки й слів відповіді немає
+    items[id] = {
+      s, n, at: Number.isFinite(x.at) ? x.at : 0, t: str(x.t, 300),
+      k: KIND_IDS.includes(x.k) ? x.k : 'series',
+      y: str(typeof x.y === 'number' ? String(x.y) : x.y, 20),   // рік міг прийти числом
+    };
+  }
+  const updated = Number(data?.updated);
+  return { name: str(data?.name, 80), items, updated: Number.isFinite(updated) ? updated : 0 };
+}
+
+// x — елемент рекомендацій ({ id, k, t, y }).
+export const replyItem = (x, s, n, now) => ({ s, n, at: now, t: x.t, k: x.k, y: x.y });
+
+// Чи показувати другові оцінювання: у знімку (без ownerUid) і на власному
+// посиланні оцінювати нікому; без входу — пропонуємо ввійти.
+export const replyMode = ({ ownerUid, meUid, signedIn }) =>
+  !ownerUid || ownerUid === meUid ? 'none' : signedIn ? 'rate' : 'signin';
+
+// Мої оцінки з полиці для тайтлів чужого списку («Надіслати мої оцінки»).
+export function shelfScores(entries, items) {
+  const have = new Set(items.map(x => x.id));
+  const out = {};
+  for (const e of entries) if (have.has(e.id) && e.score > 0) out[e.id] = e.score;
+  return out;
 }

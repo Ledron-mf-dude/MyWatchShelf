@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, replyItem, replyMode, shelfScores } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -69,4 +69,31 @@ test('cleanListDef: id мусить збігатися з назвою', () => {
   assert.deepEqual(cleanListDef(ok), { ...ok, f: cleanListFilter(ok.f) });
   assert.equal(cleanListDef({ ...ok, id: 'l_інше' }), null);
   assert.equal(cleanListDef({ id: 'x' }), null);
+});
+
+test('cleanReply чистить сміття й тримає межі', () => {
+  const big = Object.fromEntries(Array.from({ length: 600 }, (_, i) => ['tt' + String(1000000 + i), { s: 7 }]));
+  assert.equal(Object.keys(cleanReply({ items: big }).items).length, 500);
+  const r = cleanReply({ name: 'x'.repeat(200), updated: '5', items: {
+    tt0000001: { s: 99, n: 'y'.repeat(10000), t: 'A', k: 'нема', y: 2020, at: 3 },
+    'нема': { s: 5 }, tt0000002: { s: 0, n: '' }, tt0000003: 'рядок', tt0000004: { s: 0, n: 'лише слова' },
+  } });
+  assert.equal(r.name.length, 80);
+  assert.deepEqual(Object.keys(r.items), ['tt0000001', 'tt0000004']);
+  assert.deepEqual(r.items.tt0000001, { s: 10, n: 'y'.repeat(500), at: 3, t: 'A', k: 'series', y: '2020' });
+  assert.deepEqual(cleanReply(null), { name: '', items: {}, updated: 0 });
+});
+test('replyItem збирає елемент відповіді з рекомендації', () => {
+  assert.deepEqual(replyItem({ id: 'tt0000001', k: 'movie', t: 'Фільм', y: '2001' }, 7.5, 'ок', 42),
+    { s: 7.5, n: 'ок', at: 42, t: 'Фільм', k: 'movie', y: '2001' });
+});
+test('replyMode: власне посилання і знімок — без оцінювання', () => {
+  assert.equal(replyMode({ ownerUid: '', meUid: 'a', signedIn: true }), 'none');
+  assert.equal(replyMode({ ownerUid: 'a', meUid: 'a', signedIn: true }), 'none');
+  assert.equal(replyMode({ ownerUid: 'a', meUid: '', signedIn: false }), 'signin');
+  assert.equal(replyMode({ ownerUid: 'a', meUid: 'b', signedIn: true }), 'rate');
+});
+test('shelfScores бере лише оцінені тайтли зі списку', () => {
+  const mine = [E('tt0000001', { score: 8.5 }), E('tt0000002'), E('tt0000009', { score: 6 })];
+  assert.deepEqual(shelfScores(mine, [{ id: 'tt0000001' }, { id: 'tt0000002' }, { id: 'tt0000003' }]), { tt0000001: 8.5 });
 });

@@ -8,7 +8,7 @@ import { t, tn } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
-import { replyBox, othersLine, replyBar } from './friends.js';
+import { replyBox, othersLine, replyBar, keepButton } from './friends.js';
 import { $, app, icon, ph, remember, dropdown, selects } from './ui.js';
 
 const S = store.settings;
@@ -409,7 +409,7 @@ export function renderRecs() {
     <div class="hero-in"><span class="kicker">${title ? (name ? t('recs.list.by', { name: esc(name) }) : t('recs.list')) : t('recs.kicker')}</span>
       <h1>${title ? esc(title) : name ? t('recs.title.by', { name: esc(name) }) : t('recs.title')}</h1>
       <p class="hero-plot">${t('recs.text', { n: count('title', items.length) })}</p>
-      <div class="hero-act"><a class="btn lg" href="./">${icon('library')}${t('my.shelf')}</a></div></div>
+      <div class="hero-act"><a class="btn lg" href="./">${icon('library')}${t('my.shelf')}</a>${keepButton(view.recs)}</div></div>
   </section>
   ${tm.panel}
   ${replyBar(view.recs)}

@@ -11,7 +11,7 @@ import {
   cardActions, buildActions, loadDemo,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
-import { replyActions, loadReplyState } from './friends.js';
+import { replyActions, friendActions, loadReplyState, social } from './friends.js';
 
 const S = store.settings;
 const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['discover', 'compass'], ['stats', 'chart']];
@@ -159,7 +159,7 @@ function importFile() {
 const idOf = el => el.closest('[data-id]')?.dataset.id || ui.overlay?.id;
 
 on({
-  ...cardActions, ...buildActions, ...pickActions, ...wrapActions, ...replyActions,
+  ...cardActions, ...buildActions, ...pickActions, ...wrapActions, ...replyActions, ...friendActions,
   go: v => { location.hash = '#/' + v; },
   'sel-toggle': (v, el) => {
     const pop = $('.pop', el.closest('.dd')), open = pop.hidden;
@@ -319,6 +319,8 @@ addEventListener('error', () => toast(t('toast.error'), { ms: 5000 }));
 applyTheme();
 applyLang();
 cloud.init();
+// відповіді друзів не мають смикати сторінку під відкритою карткою
+social.start(() => { if (ui.overlay) ui.dirty = true; else refresh(); });
 addEventListener('hashchange', route);
 route();
 // вхід міг не вдатися ще до того, як сторінка намалювалась — скажемо про це

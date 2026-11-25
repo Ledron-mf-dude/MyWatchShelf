@@ -3,9 +3,10 @@
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
 import { esc, fmtScore } from './logic.js';
-import { replyItem, replyMode, shelfScores } from './social.js';
+import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors } from './social.js';
 import { t } from './i18n.js';
 import { store } from './store.js';
+import { friends, socialCache } from './synced.js';
 import { cloud } from './cloud.js';
 import { icon, toast, promptBox, confirmBox } from './ui.js';
 
@@ -181,6 +182,65 @@ document.addEventListener('input', ev => {
   if (!needsAsk()) timers.set(id, setTimeout(() => flushNote(id), 500));
 });
 document.addEventListener('change', ev => { const id = noteId(ev); if (id) flushNote(id); });
+
+// ── запам'ятати друга ─────────────────────────────────────────────
+// Живе посилання — за uid, знімок — за відбитком підпису й тайтлів. Видалений
+// друг (мітка видалення) для get() не існує, тож кнопка повертається, а save
+// його воскрешає.
+const nameOf = recs => (recs.name || '').slice(0, 80);
+const friendId = recs => (recs.uid || snapId(nameOf(recs), recs.items));
+export function keepButton(recs) {
+  if (!recs || (recs.uid && recs.uid === meUid()) || friends.get(friendId(recs))) return '';
+  return `<button class="btn lg" data-act="friend-keep">${icon('user')}${t('fr.keep')}</button>`;
+}
+
+const cacheRecs = (id, items) => socialCache.set({ recs: { ...socialCache.get().recs, [id]: items } });
+// Помилка не зупиняє решту; null (публічного документа немає) кеш не стирає.
+const pullRecs = f => cloud.loadPublic(f.uid).then(r => { if (r) cacheRecs(f.id, r.items); }).catch(e => console.warn('рекомендації друга', e));
+
+export const friendActions = {
+  'friend-keep': () => {
+    if (!cur || friends.get(friendId(cur))) return;
+    const id = friendId(cur), name = nameOf(cur), added = Date.now();
+    if (cur.uid) {
+      friends.save(id, { uid: id, name, kind: 'live', follow: true, added });
+      cacheRecs(id, cur.items);
+      pullRecs({ id, uid: id });   // на сторінці могла бути лише одна добірка — беремо весь список
+    } else friends.save(id, { name, kind: 'snap', follow: true, items: cur.items, added });
+    redraw();
+  },
+};
+
+// ── відповіді, кеш і оновлення ────────────────────────────────────
+let unwatch = null, watching = '', socialRedraw = () => {};
+function onReplies(map) {
+  socialCache.set({ replies: map });
+  for (const uid of newReplyAuthors(friends.raw(), map)) friends.save(uid, { uid, name: map[uid].name, kind: 'live', follow: false, added: Date.now() });
+  socialRedraw();
+}
+// watchReplies мовчки нічого не робить без cloud.user і сам не підписується
+// після входу — тож слідкуємо за uid і підписуємось наново при кожній зміні.
+function syncWatch() {
+  const uid = meUid();
+  if (uid === watching) return;
+  unwatch?.(); unwatch = null; watching = uid;
+  if (uid) unwatch = cloud.watchReplies(map => { if (watching === uid) onReplies(map); });
+}
+const pullAll = () => friends.list().filter(f => f.kind === 'live' && f.follow).forEach(pullRecs);
+
+export const social = {
+  table: () => {
+    const c = socialCache.get();
+    return friendTable({ entries: store.list(), friends: friends.raw(), replies: c.replies, recs: c.recs });
+  },
+  start(redrawFn) {
+    socialRedraw = redrawFn;
+    cloud.onChange(syncWatch);
+    syncWatch();
+    pullAll();
+    addEventListener('online', pullAll);
+  },
+};
 
 export const replyActions = {
   'reply-box': () => 'keep',

@@ -4,7 +4,8 @@
 // даних і без DOM — тож працює й під Node. Хмара тут не імпортується:
 // вона сама підписується через onLocal і кличе applyRemote.
 
-import { cleanListDef, cleanPrefs, cleanFriend, defId } from './social.js';
+import { cleanListDef, cleanPrefs, cleanFriend, cleanReply, defId } from './social.js';
+import { cleanRecs } from './logic.js';
 
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key)) ?? {}; } catch { return {}; }
@@ -70,6 +71,23 @@ export function makeSynced(name, clean) {
 }
 
 export { defId };
+
+// Локальний кеш для екрана друзів без мережі: відповіді на мій список
+// ({ uid → відповідь }) і рекомендації друзів ({ id друга → тайтли }). У хмару
+// не йде, тож це не makeSynced; живе тут, щоб cloud.js міг стерти його при
+// зміні власника пристрою без циклу імпорту. Читання проходить очищення.
+const CACHE_KEY = 'mws.social.cache.v1';
+export const socialCache = {
+  get() {
+    const raw = load(CACHE_KEY), replies = {}, recs = {};
+    for (const [k, v] of Object.entries(raw.replies && typeof raw.replies === 'object' ? raw.replies : {})) replies[k] = cleanReply(v);
+    for (const [k, v] of Object.entries(raw.recs && typeof raw.recs === 'object' ? raw.recs : {})) recs[k] = cleanRecs({ items: v }).items;
+    return { replies, recs };
+  },
+  // patch ({ replies } і/або { recs }) замінює відповідну частину цілком
+  set(patch) { persist(CACHE_KEY, { ...socialCache.get(), ...patch }); },
+  clear() { try { localStorage.removeItem(CACHE_KEY); } catch { /* нічого */ } },
+};
 
 export const friends = makeSynced('friends', cleanFriend);
 export const listdefs = makeSynced('listdefs', cleanListDef);

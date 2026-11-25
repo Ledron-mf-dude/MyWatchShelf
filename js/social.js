@@ -129,6 +129,10 @@ export const seenAtOf = (seen, social) => (seen ? seen.seenAt : social?.seenAt) 
 // чи застарілого пристрою виграв би за часом і затер справжній.
 export const canWrite = (signedIn, synced) => !signedIn || !!synced;
 
+// Чи публікувати список відкритим для оцінок одне одного: лише коли налаштування
+// вже приїхали з хмари й перемикач справді ввімкнено.
+export const publishOpen = (prefsSynced, socialRec) => !!prefsSynced && socialRec?.open === true;
+
 // ── друзі ─────────────────────────────────────────────────────────
 // Запис сховища friends: живий друг (kind 'live', id === uid) або знімок
 // чужого списку з посилання (kind 'snap', items — очищений масив). lists —

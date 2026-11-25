@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyPatch, replyWrite, recsMissing, recsFor, needsKeep, addList, seenAtOf, canWrite } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyPatch, replyWrite, recsMissing, publishOpen, recsFor, needsKeep, addList, seenAtOf, canWrite } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -138,6 +138,13 @@ test('seenAtOf: власний запис seen, а без нього — ста�
   assert.equal(seenAtOf(null, { id: 'social', open: true, seenAt: 5 }), 5);
   assert.equal(seenAtOf(null, { id: 'social', open: true }), 0);
   assert.equal(seenAtOf(null, null), 0);
+});
+test('publishOpen: відкритим публікуємо лише після синхронізації налаштувань', () => {
+  assert.equal(publishOpen(false, { id: 'social', open: true }), false);
+  assert.equal(publishOpen(true, { id: 'social', open: true }), true);
+  assert.equal(publishOpen(true, { id: 'social', open: false }), false);
+  assert.equal(publishOpen(true, null), false);
+  assert.equal(publishOpen(true, { id: 'social', open: 1 }), false);
 });
 test('canWrite: без входу — завжди, з входом — лише після першої синхронізації', () => {
   assert.equal(canWrite(false, false), true);

@@ -8,7 +8,7 @@ import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs, socialCache } from './synced.js';
 import { recItem, cleanRecs } from './logic.js';
-import { cleanReply, returnHash, isUid, replyWrite } from './social.js';
+import { cleanReply, returnHash, isUid, replyWrite, publishOpen } from './social.js';
 import { t, getLang } from './i18n.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
@@ -202,6 +202,8 @@ function onUser(c, u) {
         if (!r || (e.updated || 0) > (r.updated || 0)) pushRec(name, e);
       }
       done.add(name);
+      // Локальне могло збігтися з хмарою (onChange мовчить) — а доти список ішов закритим.
+      if (name === 'prefs') schedulePublish();
       subs.forEach(fn => fn());   // стан той самий, але cloud.synced(name) тепер true
     }, err => console.warn('синхронізація', name, err)));
   }
@@ -238,7 +240,9 @@ function recsPayload() {
   // без її волі в публічний документ не потрапляє.
   const payload = { name: store.settings.name || '', items };
   // Оцінки друзям відкриті лише за згодою власника (prefs.social.open).
-  if (prefs.get('social')?.open) payload.open = true;
+  // До першого знімка налаштувань із хмари публікуємо закритим: локальний перемикач
+  // може бути застарілим, а помилитись краще в бік приватності.
+  if (publishOpen(cloud.synced('prefs'), prefs.get('social'))) payload.open = true;
   return payload;
 }
 const wasPublished = () => { try { return localStorage.getItem(PUBLISHED) === cloud.user?.uid; } catch { return false; } };

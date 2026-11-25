@@ -96,7 +96,7 @@ async function mayReply() {
   const key = rs.key;
   if (!rs.ready) return false;
   if (!store.settings.name) {
-    const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: cloud.user?.name || '', placeholder: t('name.ph') });
+    const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: store.settings.name || '', placeholder: t('name.ph') });
     if (!v) return false;
     store.setSetting('name', v.slice(0, 80));
     cloud.publishNow().catch(() => {});

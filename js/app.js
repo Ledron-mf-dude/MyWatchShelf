@@ -8,7 +8,7 @@ import * as catalog from './meta.js';
 import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
 import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl, palKind,
-  cardActions, buildActions, loadDemo,
+  cardActions, buildActions, loadDemo, flushCard,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
 import { replyActions, friendActions, loadReplyState, social, renderFriends } from './friends.js';
@@ -332,7 +332,7 @@ social.start(() => {
   if (!ui.overlay) return refresh();
   ui.dirty = true;
   // відкрита картка показує оцінки друзів — оновлюємо її, не вириваючи поле з-під пальців
-  if (ui.overlay.type === 'card' && !(document.activeElement && layer.contains(document.activeElement) && document.activeElement.matches('input,textarea'))) drawCard();
+  if (ui.overlay.type === 'card' && !(document.activeElement && layer.contains(document.activeElement) && document.activeElement.matches('input,textarea'))) { flushCard(); drawCard(); }
 });
 addEventListener('hashchange', route);
 route();

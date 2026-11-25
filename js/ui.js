@@ -96,7 +96,7 @@ export const remember = item => { if (item?.id) seen.set(item.id, item); return 
 export const recall = id => seen.get(id);
 
 // ── шар поверх сторінки (картка, пошук, діалог поширення) ────────
-export const ui = { overlay: null, dirty: false, afterClose: null };
+export const ui = { overlay: null, dirty: false, afterClose: null, cardExtra: null };
 export function showOverlay(o, html) {
   ui.overlay?.onClose?.();
   ui.overlay?.abort?.abort();

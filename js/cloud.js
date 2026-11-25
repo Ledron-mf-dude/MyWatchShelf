@@ -8,7 +8,7 @@ import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs, socialCache } from './synced.js';
 import { recItem, cleanRecs } from './logic.js';
-import { cleanReply, returnHash, isUid, replyDoc } from './social.js';
+import { cleanReply, returnHash, isUid, replyWrite } from './social.js';
 import { t, getLang } from './i18n.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
@@ -272,13 +272,17 @@ async function loadPublic(uid) {
 // uid потрапляє в шлях Firestore: пропускаємо лише звичайні ідентифікатори.
 const needUid = (...u) => { if (!u.every(isUid)) throw new Error('uid'); };
 const replyRef = (c, owner, friend) => c.fs.doc(c.db, 'public', owner, 'replies', friend);
-async function sendReply(ownerUid, reply) {
+// patch — { set: { ttID: елемент }, del: [ttID] }: пишемо з об'єднанням лише
+// змінені тайтли, тож друга вкладка чи пристрій з тією самою відповіддю не
+// затирає оцінок, поставлених тут. Правила перевіряють уже об'єднаний документ.
+async function sendReply(ownerUid, patch) {
   if (!cloud.user) throw new Error(t('err.nocloud'));
   needUid(ownerUid, cloud.user.uid);
   // Підпис — завжди той, що людина вписала сама (як у рекомендаціях): ні ім'я
   // з Google-акаунта, ні надіслане викликачем у відповідь не потрапляє.
-  const c = await sdk(), doc = replyDoc(reply, store.settings.name, Date.now());
-  await c.fs.setDoc(replyRef(c, ownerUid, cloud.user.uid), plain(doc));
+  // Без plain(): воно стерло б мітку видалення; елементи вже очищені до простих значень.
+  const c = await sdk(), doc = replyWrite(patch, store.settings.name, Date.now(), c.fs.deleteField());
+  if (doc) await c.fs.setDoc(replyRef(c, ownerUid, cloud.user.uid), doc, { merge: true });
 }
 async function loadReply(ownerUid, friendUid) {
   needUid(ownerUid, friendUid);

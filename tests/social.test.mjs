@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc, recsMissing, seenAtOf, canWrite } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyPatch, replyWrite, recsMissing, seenAtOf, canWrite } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -225,13 +225,39 @@ test('isUid: лише звичайні ідентифікатори', () => {
   for (const bad of ['', 'a/b', 'a'.repeat(129), null, 5]) assert.equal(isUid(bad), false);
   assert.equal(isUid('a'.repeat(128)), true);
 });
-test('replyDoc: підпис завжди заданий, чужого імені немає', () => {
-  const d = replyDoc({ name: 'Google Name', items: { tt0000001: { s: 7, n: 'ок', t: 'Ф', k: 'movie', y: '2001' }, bad: { s: 5 } } }, 'Підпис', 5);
-  assert.deepEqual(Object.keys(d).sort(), ['items', 'name', 'updated']);
-  assert.equal(d.name, 'Підпис');
-  assert.equal(d.updated, 5);
-  assert.deepEqual(Object.keys(d.items), ['tt0000001']);
-  assert.equal(replyDoc({ items: {} }, 'x'.repeat(100), 1).name.length, 80);
+test('replyPatch: у set — нове й змінене, у del — прибране, решту не чіпаємо', () => {
+  const it = (s, n = '') => ({ s, n, at: 1, t: 'A', k: 'movie', y: '2001' });
+  const prev = { tt0000001: it(7), tt0000002: it(8), tt0000003: it(5) };
+  const next = { tt0000001: it(7), tt0000002: it(9), tt0000004: it(6, 'ок'), bad: it(5), tt0000005: { s: 0, n: '' } };
+  const p = replyPatch(prev, next);
+  assert.deepEqual(Object.keys(p.set), ['tt0000002', 'tt0000004']);
+  assert.deepEqual(p.set.tt0000004, it(6, 'ок'));
+  assert.deepEqual(p.del, ['tt0000003']);
+  assert.deepEqual(replyPatch(prev, prev), { set: {}, del: [] });
+  assert.deepEqual(replyPatch(null, null), { set: {}, del: [] });
+  // елементи чистяться так само, як у cleanReply
+  const dirty = { tt0000001: { s: 99, n: 'y'.repeat(600), k: 'нема', y: 2020, at: 3 } };
+  assert.deepEqual(replyPatch({}, dirty).set, cleanReply({ items: dirty }).items);
+  // службові слова як ключі не стають ні записом, ні видаленням
+  assert.deepEqual(replyPatch({}, JSON.parse('{"__proto__":{"s":5},"constructor":{"s":5}}')), { set: {}, del: [] });
+  assert.deepEqual(replyPatch(JSON.parse('{"constructor":{"s":5},"bad":{"s":5}}'), {}), { set: {}, del: [] });
+});
+test('replyWrite: підпис заданий викликачем, видалене — міткою, чужого імені немає', () => {
+  const DEL = Symbol('del');
+  const w = replyWrite({ name: 'Google Name', set: { tt0000001: { s: 7, n: 'ок', t: 'Ф', k: 'movie', y: '2001', at: 2 }, bad: { s: 5 } }, del: ['tt0000002', 'нема', '__proto__', 5] }, 'Підпис', 5, DEL);
+  assert.deepEqual(Object.keys(w).sort(), ['items', 'name', 'updated']);
+  assert.equal(w.name, 'Підпис');
+  assert.equal(w.updated, 5);
+  assert.deepEqual(Object.keys(w.items), ['tt0000001', 'tt0000002']);
+  assert.deepEqual(w.items.tt0000001, { s: 7, n: 'ок', at: 2, t: 'Ф', k: 'movie', y: '2001' });
+  assert.equal(w.items.tt0000002, DEL);
+  assert.equal(replyWrite({ set: {}, del: ['tt0000002'] }, 'x'.repeat(100), 1, DEL).name.length, 80);
+  // порожня різниця — писати нічого: порожня мапа items при об'єднанні стерла б усю відповідь
+  assert.equal(replyWrite({ set: {}, del: [] }, 'x', 1, DEL), null);
+  assert.equal(replyWrite({ set: { bad: { s: 5 } }, del: ['нема'] }, 'x', 1, DEL), null);
+  assert.equal(replyWrite(null, 'x', 1, DEL), null);
+  // тайтл і в set, і в del: перемагає запис (видалення не стирає щойно поставлену оцінку)
+  assert.deepEqual(replyWrite({ set: { tt0000001: { s: 7 } }, del: ['tt0000001'] }, '', 1, DEL).items.tt0000001.s, 7);
 });
 
 test('cleanFriend: службові слова й сміття як ідентифікатор', () => {

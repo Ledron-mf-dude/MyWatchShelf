@@ -218,9 +218,24 @@ export const seenStamp = (table, replies, now) =>
 // uid потрапляє в шлях Firestore: пропускаємо лише звичайні ідентифікатори.
 export const isUid = v => typeof v === 'string' && /^[\w-]{1,128}$/.test(v);
 
-// Документ відповіді для запису: підпис задає викликач (завжди той, що людина
-// вписала сама), а не те, що прийшло у reply.
-export function replyDoc(reply, name, now) {
-  const { items } = cleanReply({ items: reply?.items });
+// Що змінилося у відповіді відносно останнього підтвердженого хмарою стану:
+// у хмару йдуть лише ці тайтли, тож інша вкладка чи пристрій із тією самою
+// відповіддю не втрачає оцінок, поставлених там. Елементи чистяться як у cleanReply.
+export function replyPatch(prevItems, nextItems) {
+  const a = cleanReply({ items: prevItems }).items, b = cleanReply({ items: nextItems }).items;
+  const set = {};
+  for (const [id, x] of Object.entries(b)) if (!Object.hasOwn(a, id) || JSON.stringify(a[id]) !== JSON.stringify(x)) set[id] = x;
+  return { set, del: Object.keys(a).filter(id => !Object.hasOwn(b, id)) };
+}
+
+// Об'єкт для запису з об'єднанням (merge): підпис задає викликач (завжди той, що
+// людина вписала сама), а не те, що прийшло у patch; DEL — мітка видалення поля
+// (у хмарі це deleteField()), її теж дає викликач, щоб логіка лишалась чистою.
+// Порожня різниця → null, писати нічого: порожня мапа items при об'єднанні
+// означала б «заміни всі оцінки порожнім» і стерла б відповідь цілком.
+export function replyWrite(patch, name, now, DEL) {
+  const { items } = cleanReply({ items: patch?.set });
+  for (const id of Array.isArray(patch?.del) ? patch.del : []) if (isId(id) && !Object.hasOwn(items, id)) items[id] = DEL;
+  if (!Object.keys(items).length) return null;
   return { name: str(name, 80), items, updated: now };
 }

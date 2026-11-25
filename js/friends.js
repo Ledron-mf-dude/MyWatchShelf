@@ -3,7 +3,7 @@
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, FRIENDS_MAX } from './social.js';
+import { replyItem, replyMode, replyPatch, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs, socialCache } from './synced.js';
@@ -14,7 +14,8 @@ import { $, app, layer, ui, icon, ph, remember, showOverlay, toast, promptBox, c
 const blank = () => ({ name: '', items: {} });
 // key — чия відповідь і на чиєму списку: коли змінюється (інший список, вхід,
 // вихід), стан скидається. ready — власну відповідь уже завантажено; поки ні,
-// оцінювати не можна: запис нижче перезаписує документ цілком.
+// оцінювати не можна: не знаємо, що вже стоїть. saved — останній підтверджений
+// хмарою стан цієї вкладки: у хмару йде лише різниця з ним.
 const rs = { key: '', owner: '', ready: false, mine: blank(), saved: {}, others: {}, confirmed: false };
 let cur = null, redraw = () => {}, wasKey = null, chain = Promise.resolve();
 const timers = new Map();   // id тайтла → таймер збереження коментаря
@@ -130,7 +131,9 @@ function send() {
   const key = rs.key, owner = rs.owner, sent = structuredClone(rs.mine.items);
   chain = chain.then(() => {
     if (rs.key !== key) return false;
-    return cloud.sendReply(owner, { items: sent }).then(() => { if (rs.key === key) rs.saved = sent; return true; });
+    // Різницю рахуємо, коли дійшла черга: rs.saved тоді вже містить усе, що
+    // підтвердили попередні записи (інакше «поставив і одразу зняв» не дійшло б як зняття).
+    return cloud.sendReply(owner, replyPatch(rs.saved, sent)).then(() => { if (rs.key === key) rs.saved = sent; return true; });
   }).catch(e => {
     if (rs.key === key) {
       rs.mine.items = structuredClone(rs.saved);

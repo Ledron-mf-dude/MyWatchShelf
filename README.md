@@ -43,6 +43,8 @@
 │ цього пристрою            │◀─── вхід через Google ────────────────▶ Google + Firebase Auth
 │                           │◀──▶ users/{uid}/entries/{ttID} ───────▶ Firestore
 │                           │───▶ public/{uid} (рекомендації) ──────▶ Firestore
+│                           │◀──▶ users/{uid}/friends|listdefs|prefs ▶ Firestore
+│                           │◀──▶ public/{owner}/replies/{friend} ──▶ Firestore
 └───────────────────────────┘
 ```
 
@@ -54,7 +56,11 @@
 * **Список живе в браузері**, тож усе працює одразу — без входу й без мережі.
 * **Синхронізація** — за бажанням: «Увійти через Google». Записи лягають у
   Firestore, у гілку цієї людини. Правила (`firestore.rules`) пускають кожного
-  лише до свого; рекомендації читає будь-хто за посиланням.
+  лише до свого; рекомендації читає будь-хто за посиланням. Друзі, фільтри
+  добірок і налаштування (`users/{uid}/friends`, `listdefs`, `prefs`) — лише
+  власника. Відповіді друзів лежать у `public/{owner}/replies/{friend}`: пише
+  лише сам друг, читають власник, друг і (якщо власник поставив `open`) кожен,
+  хто ввійшов.
 * **Вхід** — звичайним переходом сторінки до Google і назад (без спливних
   вікон), тому працює і в мобільних браузерах, і в застосунку з головного
   екрана.
@@ -123,7 +129,8 @@ npm test                       # тести чистої логіки (Node 20+,
 1. Форкни репозиторій і ввімкни GitHub Pages (гілка `main`, корінь).
 2. Створи безкоштовний проєкт у [Firebase](https://console.firebase.google.com):
    Authentication → Google, Firestore Database; у Authentication → Settings →
-   Authorized domains додай свій `<нік>.github.io`; правила — з `firestore.rules`.
+   Authorized domains додай свій `<нік>.github.io`; правила — з `firestore.rules` (після оновлення застосунку вставляй їх у консоль
+   знову: нові шляхи без них не працюватимуть).
 3. Веб-конфіг проєкту й ID веб-клієнта Google встав у `js/config.js`.
 4. У Google Cloud Console → Credentials → «Web client (auto created by Google
    Service)» додай адресу сайту в **Authorized redirect URIs**.

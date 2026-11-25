@@ -17,7 +17,25 @@ service cloud.firestore {
       allow read: if true;
       allow write: if request.auth != null && request.auth.uid == uid
         && request.resource.data.items is list
-        && request.resource.data.items.size() <= 500;
+        && request.resource.data.items.size() <= 500
+        && request.resource.data.get('open', false) is bool;
+    }
+
+    // Друзі, фільтри добірок і налаштування — приватні, лише власник.
+    match /users/{uid}/{coll}/{docId} {
+      allow read, write: if request.auth != null && request.auth.uid == uid
+        && coll in ['friends', 'listdefs', 'prefs'];
+    }
+
+    // Відповіді друга на чужі рекомендації: читає власник, сам друг, а коли
+    // власник відкрив список (open) — будь-хто, хто ввійшов; пише лише друг.
+    match /public/{owner}/replies/{friend} {
+      allow read: if request.auth != null && (request.auth.uid == owner || request.auth.uid == friend
+        || get(/databases/$(database)/documents/public/$(owner)).data.get('open', false) == true);
+      allow create, update: if request.auth != null && request.auth.uid == friend && friend != owner
+        && request.resource.data.items is map && request.resource.data.items.size() <= 500
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80;
+      allow delete: if request.auth != null && (request.auth.uid == owner || request.auth.uid == friend);
     }
   }
 }

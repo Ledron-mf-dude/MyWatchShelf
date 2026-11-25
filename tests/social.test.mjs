@@ -81,7 +81,17 @@ test('cleanReply чистить сміття й тримає межі', () => {
   assert.equal(r.name.length, 80);
   assert.deepEqual(Object.keys(r.items), ['tt0000001', 'tt0000004']);
   assert.deepEqual(r.items.tt0000001, { s: 10, n: 'y'.repeat(500), at: 3, t: 'A', k: 'series', y: '2020' });
+  assert.equal(r.items.tt0000004.t, 'tt0000004');   // порожня назва → id, щоб таблиця не мала порожніх рядків
   assert.deepEqual(cleanReply(null), { name: '', items: {}, updated: 0 });
+});
+test('cleanReply: вороже введення не ламає прототип, оцінки й масив', () => {
+  const evil = cleanReply(JSON.parse('{"items":{"__proto__":{"s":5},"constructor":{"s":5}}}'));
+  assert.deepEqual(Object.keys(evil.items), []);
+  assert.equal({}.s, undefined);   // Object.prototype не забруднено
+  const sc = v => cleanReply({ items: { tt0000001: { s: v, n: 'ок' } } }).items.tt0000001.s;
+  assert.equal(sc(NaN), 0); assert.equal(sc(-3), 0); assert.equal(sc('8'), 8);
+  assert.equal(sc(0.7), 0); assert.equal(sc(7.3), 7.5); assert.equal(sc(null), 0); assert.equal(sc('abc'), 0);
+  assert.deepEqual(cleanReply({ items: [{ s: 5, id: 'tt0000001' }] }).items, {});
 });
 test('replyItem збирає елемент відповіді з рекомендації', () => {
   assert.deepEqual(replyItem({ id: 'tt0000001', k: 'movie', t: 'Фільм', y: '2001' }, 7.5, 'ок', 42),

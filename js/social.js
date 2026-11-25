@@ -67,16 +67,18 @@ export function publicOver(entries, addIds) {
 export function cleanReply(data) {
   const raw = data?.items && typeof data.items === 'object' ? data.items : {};
   const items = {};
+  let count = 0;
   for (const [id, x] of Object.entries(raw)) {
-    if (Object.keys(items).length >= 500) break;
+    if (count >= 500) break;
     if (!isId(id) || !x || typeof x !== 'object') continue;
     const s = half(x.s), n = str(x.n, 500);
     if (!s && !n) continue;   // без оцінки й слів відповіді немає
     items[id] = {
-      s, n, at: Number.isFinite(x.at) ? x.at : 0, t: str(x.t, 300),
+      s, n, at: Number.isFinite(x.at) ? x.at : 0, t: str(x.t, 300) || id,   // як у cleanRecs: без назви — id
       k: KIND_IDS.includes(x.k) ? x.k : 'series',
       y: str(typeof x.y === 'number' ? String(x.y) : x.y, 20),   // рік міг прийти числом
     };
+    count++;
   }
   const updated = Number(data?.updated);
   return { name: str(data?.name, 80), items, updated: Number.isFinite(updated) ? updated : 0 };

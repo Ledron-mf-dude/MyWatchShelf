@@ -8,7 +8,7 @@ import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs } from './synced.js';
 import { recItem, cleanRecs } from './logic.js';
-import { cleanReply, returnHash } from './social.js';
+import { cleanReply, returnHash, isUid, replyDoc } from './social.js';
 import { t, getLang } from './i18n.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
@@ -257,16 +257,15 @@ async function loadPublic(uid) {
 
 // ── відповіді друзів: public/{власник}/replies/{друг} ──────────────
 // uid потрапляє в шлях Firestore: пропускаємо лише звичайні ідентифікатори.
-const uidOk = u => typeof u === 'string' && /^[\w-]{1,128}$/.test(u);
-const needUid = (...u) => { if (!u.every(uidOk)) throw new Error('uid'); };
+const needUid = (...u) => { if (!u.every(isUid)) throw new Error('uid'); };
 const replyRef = (c, owner, friend) => c.fs.doc(c.db, 'public', owner, 'replies', friend);
 async function sendReply(ownerUid, reply) {
   if (!cloud.user) throw new Error(t('err.nocloud'));
   needUid(ownerUid, cloud.user.uid);
   // Підпис — завжди той, що людина вписала сама (як у рекомендаціях): ні ім'я
   // з Google-акаунта, ні надіслане викликачем у відповідь не потрапляє.
-  const c = await sdk(), { name, items } = cleanReply({ items: reply?.items, name: store.settings.name });
-  await c.fs.setDoc(replyRef(c, ownerUid, cloud.user.uid), plain({ name, items, updated: Date.now() }));
+  const c = await sdk(), doc = replyDoc(reply, store.settings.name, Date.now());
+  await c.fs.setDoc(replyRef(c, ownerUid, cloud.user.uid), plain(doc));
 }
 async function loadReply(ownerUid, friendUid) {
   needUid(ownerUid, friendUid);

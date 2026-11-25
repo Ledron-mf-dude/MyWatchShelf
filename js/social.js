@@ -177,3 +177,13 @@ export function newReplyAuthors(friends, replies) {
 // Скільки видимих друзів відповіли після останнього перегляду таблиці.
 export const unseenCount = (table, replies, seenAt) =>
   table.cols.filter(c => (replies[c.id]?.updated || 0) > seenAt).length;
+
+// uid потрапляє в шлях Firestore: пропускаємо лише звичайні ідентифікатори.
+export const isUid = v => typeof v === 'string' && /^[\w-]{1,128}$/.test(v);
+
+// Документ відповіді для запису: підпис задає викликач (завжди той, що людина
+// вписала сама), а не те, що прийшло у reply.
+export function replyDoc(reply, name, now) {
+  const { items } = cleanReply({ items: reply?.items });
+  return { name: str(name, 80), items, updated: now };
+}

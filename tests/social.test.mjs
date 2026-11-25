@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, replyItem, replyMode, shelfScores, returnHash, cleanPrefs } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -170,4 +170,18 @@ test('unseenCount рахує лише свіжіші за останній пе�
   const tb = friendTable({ entries: [], friends, replies, recs: {} });
   assert.equal(unseenCount(tb, replies, 5), 1);
   assert.equal(unseenCount(tb, replies, 10), 0);
+});
+
+test('isUid: лише звичайні ідентифікатори', () => {
+  assert.equal(isUid('abc_DEF-123'), true);
+  for (const bad of ['', 'a/b', 'a'.repeat(129), null, 5]) assert.equal(isUid(bad), false);
+  assert.equal(isUid('a'.repeat(128)), true);
+});
+test('replyDoc: підпис завжди заданий, чужого імені немає', () => {
+  const d = replyDoc({ name: 'Google Name', items: { tt0000001: { s: 7, n: 'ок', t: 'Ф', k: 'movie', y: '2001' }, bad: { s: 5 } } }, 'Підпис', 5);
+  assert.deepEqual(Object.keys(d).sort(), ['items', 'name', 'updated']);
+  assert.equal(d.name, 'Підпис');
+  assert.equal(d.updated, 5);
+  assert.deepEqual(Object.keys(d.items), ['tt0000001']);
+  assert.equal(replyDoc({ items: {} }, 'x'.repeat(100), 1).name.length, 80);
 });

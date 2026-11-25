@@ -13,7 +13,7 @@ const blank = () => ({ name: '', items: {} });
 // key — чия відповідь і на чиєму списку: коли змінюється (інший список, вхід,
 // вихід), стан скидається. ready — власну відповідь уже завантажено; поки ні,
 // оцінювати не можна: запис нижче перезаписує документ цілком.
-const rs = { key: '', owner: '', ready: false, mine: blank(), others: {}, confirmed: false };
+const rs = { key: '', owner: '', ready: false, mine: blank(), saved: {}, others: {}, confirmed: false };
 let cur = null, redraw = () => {}, wasKey = null, chain = Promise.resolve();
 const timers = new Map();   // id тайтла → таймер збереження коментаря
 
@@ -72,7 +72,7 @@ export function loadReplyState(recs, redrawFn) {
   flushNotes();   // недописаний коментар піде ще у стару відповідь
   const first = wasKey === null;
   wasKey = key;
-  Object.assign(rs, { key, owner: recs?.uid || '', ready: false, mine: blank(), others: {}, confirmed: false });
+  Object.assign(rs, { key, owner: recs?.uid || '', ready: false, mine: blank(), saved: {}, others: {}, confirmed: false });
   if (!first) redraw();
   if (modeOf(recs) !== 'rate') return;
   const me = meUid();
@@ -82,7 +82,7 @@ export function loadReplyState(recs, redrawFn) {
     recs.open ? cloud.loadReplies(rs.owner).catch(e => { console.warn('оцінки друзів', e); return {}; }) : {},
   ]).then(([mine, others]) => {
     if (rs.key !== key) return;
-    Object.assign(rs, { ready: true, mine: mine || blank(), others });
+    Object.assign(rs, { ready: true, mine: mine || blank(), saved: structuredClone((mine || blank()).items), others });
     redraw();
   }).catch(e => { if (rs.key === key) toast(t('toast.reply.fail', { e: e?.message || '' }), { ms: 5000 }); });
 }
@@ -112,14 +112,25 @@ function apply(id, s, n) {
   else delete rs.mine.items[id];
   return prev;
 }
-// Надсилаємо чергою, щоб відповіді не обганяли одна одну. Не вдалося —
-// повертаємо в стані те, що було, і перемальовуємо: на екрані не лишається
-// оцінка, якої немає в хмарі.
-function send(prev) {
+// Без мережі не надсилаємо взагалі: запис завис би в черзі, а на екрані
+// висіла б оцінка, якої в хмарі немає. Стан при цьому не міняємо.
+const offline = () => {
+  if (navigator.onLine !== false) return false;
+  toast(t('toast.reply.offline'), { ms: 5000 });
+  return true;
+};
+// Надсилаємо чергою, щоб відповіді не обганяли одна одну. rs.saved — останній
+// підтверджений хмарою стан: не вдалося — повертаємо його і перемальовуємо все,
+// тож на екрані не лишається оцінка, якої немає в хмарі (які б збої не йшли підряд).
+function send() {
   const key = rs.key, owner = rs.owner;
-  chain = chain.then(() => cloud.sendReply(owner, { items: rs.mine.items })).then(() => true, e => {
+  chain = chain.then(() => {
+    const sent = structuredClone(rs.mine.items);
+    return cloud.sendReply(owner, { items: sent }).then(() => { if (rs.key === key) rs.saved = sent; return true; });
+  }).catch(e => {
     if (rs.key === key) {
-      for (const [id, p] of Object.entries(prev)) { if (p) rs.mine.items[id] = p; else delete rs.mine.items[id]; paint(id); }
+      rs.mine.items = structuredClone(rs.saved);
+      document.querySelectorAll('.rcard[data-id]').forEach(el => paint(el.dataset.id));
       paintBar();
     }
     toast(t('toast.reply.fail', { e: e?.message || '' }), { ms: 5000 });
@@ -134,22 +145,23 @@ async function setScore(el, pick) {
   const key = rs.key, input = el.closest('.reply').querySelector('[data-reply-note]');
   const n = input ? input.value.trim() : rs.mine.items[id]?.n || '';
   clearTimeout(timers.get(id)); timers.delete(id);
-  if (!await mayReply() || rs.key !== key) return;
+  if (!await mayReply() || rs.key !== key || offline()) return;
   const s = pick(rs.mine.items[id]?.s || 0);
-  const prev = { [id]: apply(id, s, n) };
+  apply(id, s, n);
   paint(id); paintBar();
-  if (!await send(prev)) return;
-  // На полиці оцінку міняємо лише там, де тайтл уже є; нових записів не створюємо.
-  if (store.get(id)) { flushNotes(); store.save(id, { score: s }); }
+  if (!await send()) return;
+  // На полиці оцінку міняємо лише там, де тайтл уже є, і лише ставимо: знята
+  // тут оцінка не стирає власну оцінку з полиці. Нових записів не створюємо.
+  if (s > 0 && store.get(id)) { flushNotes(); store.save(id, { score: s }); }
 }
 
 async function saveNote(id, text) {
   if (!cur || !xOf(id) || !rs.ready) return;
   const key = rs.key, n = text.trim().slice(0, 500);
   if ((rs.mine.items[id]?.n || '') === n) return;
-  if (!await mayReply() || rs.key !== key) return;
-  const s = rs.mine.items[id]?.s || 0;
-  send({ [id]: apply(id, s, n) });
+  if (!await mayReply() || rs.key !== key || offline()) return;
+  apply(id, rs.mine.items[id]?.s || 0, n);
+  send();
 }
 function flushNote(id) {
   clearTimeout(timers.get(id)); timers.delete(id);
@@ -179,10 +191,10 @@ export const replyActions = {
   'rate-all': async () => {
     if (!cur || !rs.ready) return;
     const key = rs.key, ids = missing(cur);
-    if (!ids.length || !await mayReply() || rs.key !== key) return;
-    const sc = shelfScores(store.list(), cur.items), prev = {};
-    for (const id of ids) prev[id] = apply(id, sc[id], rs.mine.items[id]?.n || '');
+    if (!ids.length || !await mayReply() || rs.key !== key || offline()) return;
+    const sc = shelfScores(store.list(), cur.items);
+    for (const id of ids) apply(id, sc[id], rs.mine.items[id]?.n || '');
     ids.forEach(paint); paintBar();
-    if (await send(prev)) toast(t('toast.reply.sent', { n: ids.length }));
+    if (await send()) toast(t('toast.reply.sent', { n: ids.length }));
   },
 };

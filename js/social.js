@@ -1,8 +1,8 @@
 // Чиста логіка друзів і добірок за фільтром: без DOM і localStorage, тож
 // працює й під Node. synced.js бере звідси очищення записів.
-import { KIND_IDS, STATUS_IDS, filterSort, isId, str, half } from './logic.js';
+import { KIND_IDS, STATUS_IDS, filterSort, isId, str, half, cleanRecs } from './logic.js';
 
-export const PUBLIC_MAX = 500, LISTS_MAX = 8;
+export const PUBLIC_MAX = 500, LISTS_MAX = 8, FRIENDS_MAX = 100;
 
 // Назва добірки йде в id документа Firestore: «/» і крапки там небезпечні
 // (шлях, «.» і «..»), тому префікс і кодування. Живе тут, а не в synced.js,
@@ -110,3 +110,70 @@ export function cleanPrefs(r) {
   if (r?.id !== 'social') return null;
   return { id: 'social', open: !!r.open, seenAt: Number.isFinite(r.seenAt) ? r.seenAt : 0, updated: Number.isFinite(r.updated) ? r.updated : 0 };
 }
+
+// ── друзі ─────────────────────────────────────────────────────────
+// Запис сховища friends: живий друг (kind 'live', id === uid) або знімок
+// чужого списку з посилання (kind 'snap', items — очищений масив). Мітки
+// видалення ідуть повз очищення (synced.js).
+export function cleanFriend(r) {
+  const id = typeof r?.id === 'string' ? r.id.trim().slice(0, 128) : '';
+  if (!id) return null;
+  const snap = r.kind === 'snap';
+  const num = v => (Number.isFinite(v) ? v : 0);
+  const out = {
+    id, uid: snap ? '' : id, name: str(r.name, 80).trim(), kind: snap ? 'snap' : 'live',
+    follow: !!r.follow, added: num(r.added), updated: num(r.updated),
+  };
+  if (snap) out.items = cleanRecs({ items: r.items }).items;
+  return out;
+}
+
+// Стабільний id знімка: FNV-1a від підпису й відсортованих id тайтлів, тож
+// той самий список із того самого посилання не дублюється.
+export function snapId(name, items) {
+  let h = 0x811c9dc5;
+  for (const ch of name + '|' + items.map(x => x.id).sort().join(',')) {
+    h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  }
+  return 's' + h.toString(16).padStart(8, '0');
+}
+
+// Живі друзі за порядком додавання; `friends` — raw() сховища, тож мітки
+// видалення відсіюємо тут.
+const liveFriends = friends => friends.filter(f => !f.deleted).sort((a, b) => a.added - b.added);
+
+// Таблиця «тайтл × друзі». Оцінка з відповіді друга важить більше за його
+// рекомендацію; рекомендації читаємо лише в тих, за ким стежимо (або зі знімка).
+export function friendTable({ entries, friends, replies, recs }) {
+  const all = liveFriends(friends), shown = all.slice(0, FRIENDS_MAX);
+  const mine = new Map(entries.map(e => [e.id, e]));
+  const cols = shown.map(f => ({ id: f.id, name: replies[f.uid]?.name || f.name }));
+  const rows = new Map();
+  for (const f of shown) {
+    const reply = f.kind === 'live' ? replies[f.uid]?.items || {} : {};
+    const rec = new Map(f.follow || f.kind === 'snap' ? (recs[f.id] ?? f.items ?? []).map(x => [x.id, x]) : []);
+    for (const id of new Set([...Object.keys(reply), ...rec.keys()])) {
+      const a = reply[id], b = rec.get(id), e = mine.get(id), src = a || b;
+      const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || 0, have: !!e, cells: {}, avg: 0, n: 0 };
+      row.cells[f.id] = { s: a?.s || b?.s || 0, n: a?.n || b?.n || '', rec: !!b };
+      rows.set(id, row);
+    }
+  }
+  for (const r of rows.values()) {
+    const sc = Object.values(r.cells).map(c => c.s).filter(s => s > 0);
+    r.n = sc.length;
+    r.avg = sc.length ? Math.round(sc.reduce((a, s) => a + s, 0) / sc.length * 10) / 10 : 0;
+  }
+  return { cols, hidden: all.length - shown.length, rows: [...rows.values()].sort((a, b) => b.avg - a.avg || a.t.localeCompare(b.t)) };
+}
+
+// Автори відповідей, яких у сховищі ще не було: мітка видалення теж «є»,
+// інакше видалений друг повертався б, щойно відповість знову.
+export function newReplyAuthors(friends, replies) {
+  const known = new Set(friends.map(f => f.id));
+  return Object.keys(replies).filter(uid => !known.has(uid));
+}
+
+// Скільки видимих друзів відповіли після останнього перегляду таблиці.
+export const unseenCount = (table, replies, seenAt) =>
+  table.cols.filter(c => (replies[c.id]?.updated || 0) > seenAt).length;

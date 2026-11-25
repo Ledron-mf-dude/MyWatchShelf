@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, replyItem, replyMode, shelfScores, returnHash, cleanPrefs } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, replyItem, replyMode, shelfScores, returnHash, cleanPrefs } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -126,4 +126,48 @@ test('cleanPrefs лишає лише відомі поля й приводить
   assert.equal(cleanPrefs({ id: 'social', open: 0 }).open, false);
   assert.equal(cleanPrefs({ id: 'other', open: true }), null);
   assert.equal(cleanPrefs(null), null);
+});
+
+const F = (id, o = {}) => cleanFriend({ id, uid: id, name: id, kind: 'live', follow: false, added: 1, updated: 1, ...o });
+const R = (name, items) => cleanReply({ name, updated: 10, items });
+test('friendTable: відповідь має перевагу, ★ — з рекомендацій, одна людина — один стовпець', () => {
+  const tb = friendTable({
+    entries: [E('tt0000001', { score: 10 })],
+    friends: [F('oleh', { follow: true }), F('ira', { added: 2 })],
+    replies: { oleh: R('Олег', { tt0000001: { s: 8, t: 'A' } }), ira: R('Іра', { tt0000001: { s: 9.5, t: 'A' } }) },
+    recs: { oleh: [{ id: 'tt0000001', t: 'A', k: 'series', s: 6 }, { id: 'tt0000002', t: 'B', k: 'anime', s: 9 }] },
+  });
+  assert.deepEqual(tb.cols.map(c => c.name), ['Олег', 'Іра']);
+  const a = tb.rows.find(r => r.id === 'tt0000001'), b = tb.rows.find(r => r.id === 'tt0000002');
+  assert.deepEqual(a.cells.oleh, { s: 8, n: '', rec: true });
+  assert.equal(a.avg, 8.8); assert.equal(a.mine, 10); assert.equal(a.have, true);
+  assert.deepEqual(b.cells.oleh, { s: 9, n: '', rec: true });
+  assert.equal(b.have, false); assert.equal(b.cells.ira, undefined);
+  assert.deepEqual(tb.rows.map(r => r.id), ['tt0000002', 'tt0000001']);
+});
+test('видалений друг не повертається, коли відповідає знову', () => {
+  const friends = [{ id: 'oleh', deleted: true, updated: 5 }];
+  const replies = { oleh: R('Олег', { tt0000001: { s: 8, t: 'A' } }) };
+  assert.deepEqual(newReplyAuthors(friends, replies), []);
+  assert.equal(friendTable({ entries: [], friends, replies, recs: {} }).rows.length, 0);
+  assert.deepEqual(newReplyAuthors([], replies), ['oleh']);
+});
+test('рекомендації без follow не читаються; понад 100 друзів ховаються', () => {
+  const tb = friendTable({ entries: [], friends: [F('oleh')], replies: {}, recs: { oleh: [{ id: 'tt0000002', t: 'B', k: 'anime', s: 9 }] } });
+  assert.equal(tb.rows.length, 0);
+  const many = Array.from({ length: 103 }, (_, i) => F('u' + i, { added: i }));
+  const big = friendTable({ entries: [], friends: many, replies: {}, recs: {} });
+  assert.equal(big.cols.length, 100); assert.equal(big.hidden, 3); assert.equal(big.cols[0].id, 'u0');
+});
+test('snapId стабільний і залежить від вмісту', () => {
+  const a = snapId('Олег', [{ id: 'tt0000002' }, { id: 'tt0000001' }]);
+  assert.equal(a, snapId('Олег', [{ id: 'tt0000001' }, { id: 'tt0000002' }]));
+  assert.notEqual(a, snapId('Іра', [{ id: 'tt0000001' }, { id: 'tt0000002' }]));
+  assert.match(a, /^s[0-9a-f]{8}$/);
+});
+test('unseenCount рахує лише свіжіші за останній перегляд', () => {
+  const friends = [F('oleh'), F('ira')], replies = { oleh: R('Олег', { tt0000001: { s: 8 } }) };
+  const tb = friendTable({ entries: [], friends, replies, recs: {} });
+  assert.equal(unseenCount(tb, replies, 5), 1);
+  assert.equal(unseenCount(tb, replies, 10), 0);
 });

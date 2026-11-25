@@ -4,6 +4,8 @@
 // даних і без DOM — тож працює й під Node. Хмара тут не імпортується:
 // вона сама підписується через onLocal і кличе applyRemote.
 
+import { cleanListDef, defId } from './social.js';
+
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key)) ?? {}; } catch { return {}; }
 }
@@ -67,12 +69,10 @@ export function makeSynced(name, clean) {
   return s;
 }
 
-// Назва добірки йде в id документа Firestore: «/» і крапки там небезпечні
-// (шлях, «.» і «..»), тому префікс і кодування.
-export const defId = name => 'l_' + encodeURIComponent(name);
+export { defId };
 
-// Тимчасове очищення: лише рядковий id. Завдання 3, 5 і 8 замінять його своїм.
+// Тимчасове очищення: лише рядковий id. Завдання 5 і 8 замінять його своїм.
 const hasId = r => (typeof r?.id === 'string' && r.id ? r : null);
 export const friends = makeSynced('friends', hasId);
-export const listdefs = makeSynced('listdefs', hasId);
+export const listdefs = makeSynced('listdefs', cleanListDef);
 export const prefs = makeSynced('prefs', hasId);

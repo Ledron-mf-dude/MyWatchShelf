@@ -1,9 +1,9 @@
 // Оболонка застосунку для роботи без мережі. Спершу мережа (щоб оновлення
 // приїжджали одразу), а коли її немає — остання збережена копія.
 // Чужих адрес (каталог, постери, Firebase) не чіпаємо.
-const CACHE = 'mws-shell-v19';
+const CACHE = 'mws-shell-v20';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
-  'js/app.js', 'js/i18n.js', 'js/ui.js', 'js/views.js', 'js/panel.js', 'js/extras.js', 'js/logic.js', 'js/meta.js', 'js/store.js', 'js/synced.js', 'js/cloud.js', 'js/config.js'];
+  'js/app.js', 'js/i18n.js', 'js/ui.js', 'js/views.js', 'js/panel.js', 'js/extras.js', 'js/logic.js', 'js/meta.js', 'js/store.js', 'js/synced.js', 'js/social.js', 'js/cloud.js', 'js/config.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

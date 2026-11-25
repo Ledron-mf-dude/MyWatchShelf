@@ -194,6 +194,7 @@ export function filterSort(list, f, sort, dir) {
     if (f.mine === 'none') { if (e.score > 0) return false; }
     else if (+f.mine && !((e.score || 0) >= +f.mine)) return false;
     if (f.kind && f.kind !== 'all' && e.kind !== f.kind) return false;
+    if (f.kinds?.length && !f.kinds.includes(e.kind)) return false;
     if (f.genres?.length && !f.genres.some(g => (e.meta?.genres || []).includes(g))) return false;
     if (f.list && !(e.lists || []).includes(f.list)) return false;
     if (f.status === 'rec') { if (!e.rec) return false; }

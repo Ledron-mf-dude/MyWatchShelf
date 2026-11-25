@@ -213,7 +213,7 @@ const D = {
   'reply.open.ok': ['Continue', 'Продовжити'],
   'reply.others': ['Friends’ scores', 'Оцінки друзів'], 'reply.anon': ['A friend', 'Друг'],
   'fr.keep': ['Remember', 'Запам’ятати'], 'fr.unsigned': ['Unsigned', 'Без підпису'],
-  'toast.reply.fail':['Could not save your score ({e})', 'Не вдалося зберегти оцінку ({e})'],
+  'toast.reply.fail': ['Could not save your score ({e})', 'Не вдалося зберегти оцінку ({e})'],
   'toast.reply.offline': ['No connection — rating not saved', 'Немає зʼєднання — оцінку не збережено'],
   'toast.reply.sent': ['Scores sent: {n}', 'Надіслано оцінок: {n}'],
   // збирання добірки за умовами

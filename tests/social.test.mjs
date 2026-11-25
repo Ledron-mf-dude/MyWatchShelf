@@ -241,3 +241,25 @@ test('synced: id __proto__ відкидається скрізь', () => {
   assert.equal(s.raw().length, 0);
   assert.equal({}.v, undefined);
 });
+
+test('socialCache: читання очищає, set замінює лише свою частину, clear стирає все', async () => {
+  const mem = {};
+  globalThis.localStorage = { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; }, removeItem: k => { delete mem[k]; } };
+  try {
+    const { socialCache } = await import('../js/synced.js');
+    // у сховищі лежить сміття: відповідь з чужим ключем і рекомендація без справжнього id
+    mem['mws.social.cache.v1'] = JSON.stringify({
+      replies: { u1: { name: 'Оля', items: { tt0000001: { s: 8, n: 'ок' }, '__proto__': { s: 5 }, bad: { s: 9 } } } },
+      recs: { f1: [{ id: 'tt0000002', t: 'Фільм', k: 'movie' }, { id: 'не-id', t: 'X' }] },
+    });
+    const c = socialCache.get();
+    assert.deepEqual(Object.keys(c.replies.u1.items), ['tt0000001']);
+    assert.deepEqual(c.recs.f1.map(x => x.id), ['tt0000002']);
+    socialCache.set({ replies: { u2: { name: 'Іра', items: {} } } });
+    const d = socialCache.get();
+    assert.deepEqual(Object.keys(d.replies), ['u2']);   // секція замінена цілком
+    assert.deepEqual(d.recs.f1.map(x => x.id), ['tt0000002']);   // інша секція вціліла
+    socialCache.clear();
+    assert.deepEqual(socialCache.get(), { replies: {}, recs: {} });
+  } finally { delete globalThis.localStorage; }
+});

@@ -3,7 +3,7 @@
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
 import { esc, fmtScore } from './logic.js';
-import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors } from './social.js';
+import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, FRIENDS_MAX } from './social.js';
 import { t } from './i18n.js';
 import { store } from './store.js';
 import { friends, socialCache } from './synced.js';
@@ -124,9 +124,11 @@ const offline = () => {
 // підтверджений хмарою стан: не вдалося — повертаємо його і перемальовуємо все,
 // тож на екрані не лишається оцінка, якої немає в хмарі (які б збої не йшли підряд).
 function send() {
-  const key = rs.key, owner = rs.owner;
+  // Стан знімаємо тут, а не в черзі: за цей час список чи акаунт могли змінитись,
+  // і тоді нова чи порожня відповідь пішла б у документ старого власника.
+  const key = rs.key, owner = rs.owner, sent = structuredClone(rs.mine.items);
   chain = chain.then(() => {
-    const sent = structuredClone(rs.mine.items);
+    if (rs.key !== key) return false;
     return cloud.sendReply(owner, { items: sent }).then(() => { if (rs.key === key) rs.saved = sent; return true; });
   }).catch(e => {
     if (rs.key === key) {
@@ -194,13 +196,26 @@ export function keepButton(recs) {
   return `<button class="btn lg" data-act="friend-keep">${icon('user')}${t('fr.keep')}</button>`;
 }
 
-const cacheRecs = (id, items) => socialCache.set({ recs: { ...socialCache.get().recs, [id]: items } });
+// У кеші лишаємо рекомендації лише тих, за ким досі стежимо: видалений чи
+// відписаний друг не засмічує кеш.
+const followed = id => { const f = friends.get(id); return !!f && f.kind === 'live' && f.follow; };
+const prunedRecs = () => Object.fromEntries(Object.entries(socialCache.get().recs).filter(([k]) => followed(k)));
+const cacheRecs = (id, items) => {
+  const recs = prunedRecs();
+  if (followed(id)) recs[id] = items;
+  socialCache.set({ recs });
+};
 // Помилка не зупиняє решту; null (публічного документа немає) кеш не стирає.
-const pullRecs = f => cloud.loadPublic(f.uid).then(r => { if (r) cacheRecs(f.id, r.items); }).catch(e => console.warn('рекомендації друга', e));
+// Пізня відповідь не пишеться, якщо за цей час змінилась людина чи друга вже нема.
+const pullRecs = f => {
+  const me = meUid();
+  return cloud.loadPublic(f.uid).then(r => { if (r && meUid() === me && followed(f.id)) cacheRecs(f.id, r.items); })
+    .catch(e => console.warn('рекомендації друга', e));
+};
 
 export const friendActions = {
   'friend-keep': () => {
-    if (!cur || friends.get(friendId(cur))) return;
+    if (!cur || (cur.uid && cur.uid === meUid()) || friends.get(friendId(cur))) return;
     const id = friendId(cur), name = nameOf(cur), added = Date.now();
     if (cur.uid) {
       friends.save(id, { uid: id, name, kind: 'live', follow: true, added });
@@ -215,7 +230,9 @@ export const friendActions = {
 let unwatch = null, watching = '', socialRedraw = () => {};
 function onReplies(map) {
   socialCache.set({ replies: map });
-  for (const uid of newReplyAuthors(friends.raw(), map)) friends.save(uid, { uid, name: map[uid].name, kind: 'live', follow: false, added: Date.now() });
+  // Не більше, ніж лишилось до межі: далі таблиця все одно показує перші FRIENDS_MAX.
+  const room = Math.max(0, FRIENDS_MAX - friends.list().length);
+  for (const uid of newReplyAuthors(friends.raw(), map).slice(0, room)) friends.save(uid, { uid, name: map[uid].name, kind: 'live', follow: false, added: Date.now() });
   socialRedraw();
 }
 // watchReplies мовчки нічого не робить без cloud.user і сам не підписується
@@ -226,7 +243,12 @@ function syncWatch() {
   unwatch?.(); unwatch = null; watching = uid;
   if (uid) unwatch = cloud.watchReplies(map => { if (watching === uid) onReplies(map); });
 }
-const pullAll = () => friends.list().filter(f => f.kind === 'live' && f.follow).forEach(pullRecs);
+const pullAll = () => {
+  if (!cloud.available) return;
+  socialCache.set({ recs: prunedRecs() });   // заодно чистимо кеш від тих, за ким не стежимо
+  friends.list().filter(f => f.kind === 'live' && f.follow).forEach(pullRecs);
+};
+let started = false;
 
 export const social = {
   table: () => {
@@ -235,6 +257,8 @@ export const social = {
   },
   start(redrawFn) {
     socialRedraw = redrawFn;
+    if (started) return;
+    started = true;
     cloud.onChange(syncWatch);
     syncWatch();
     pullAll();

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -178,6 +178,22 @@ test('seenStamp: майбутня відповідь гасить «нове» �
   assert.equal(seenStamp(tb, replies, 100), 9000);
   assert.equal(unseenCount(tb, replies, seenStamp(tb, replies, 100)), 0);
   assert.equal(seenStamp(tb, {}, 100), 100);
+});
+
+test('мітка часу з майбутнього обрізається при очищенні й не глушить «нове»', () => {
+  const now = 1000, c = cleanReply({ updated: 1e15, items: { tt0000001: { s: 5, at: 1e15 } } }, now);
+  assert.equal(c.updated, now + SKEW);
+  assert.equal(c.items.tt0000001.at, now + SKEW);
+  assert.equal(cleanReply({ updated: -5 }, now).updated, 0);
+  const friends = [F('oleh')], replies = { oleh: c };
+  const tb = friendTable({ entries: [], friends, replies, recs: {} });
+  const stamp = seenStamp(tb, replies, now);
+  assert.ok(stamp <= now + SKEW);
+  assert.equal(unseenCount(tb, replies, stamp), 0);
+  // справжня відповідь пізніше (now2 далеко за межею першої) знову «нова»
+  const now2 = now + 3 * SKEW, later = cleanReply({ updated: now2, items: { tt0000001: { s: 5 } } }, now2);
+  assert.equal(unseenCount(tb, { oleh: later }, stamp), 1);
+  assert.equal(cleanPrefs({ id: 'social', seenAt: 1e15 }, now).seenAt, now + SKEW);
 });
 
 test('isUid: лише звичайні ідентифікатори', () => {

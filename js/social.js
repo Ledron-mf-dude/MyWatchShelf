@@ -64,7 +64,12 @@ export function publicOver(entries, addIds) {
 // Назва, тип і рік лежать у самому елементі, щоб власник бачив відповідь і без
 // тайтла у своїй полиці. Ключ — лише справжній id IMDb: інакше в документ
 // потрапить що завгодно.
-export function cleanReply(data) {
+// Мітка часу з хмари не може бути з далекого майбутнього: її пише сам автор, а нею
+// міряємо «нове». Допускаємо добу запасу на розбіг годинників.
+export const SKEW = 864e5;
+const stamp = (v, now) => (Number.isFinite(v) ? Math.min(Math.max(v, 0), now + SKEW) : 0);
+
+export function cleanReply(data, now = Date.now()) {
   const raw = data?.items && typeof data.items === 'object' ? data.items : {};
   const items = {};
   let count = 0;
@@ -74,14 +79,13 @@ export function cleanReply(data) {
     const s = half(x.s), n = str(x.n, 500);
     if (!s && !n) continue;   // без оцінки й слів відповіді немає
     items[id] = {
-      s, n, at: Number.isFinite(x.at) ? x.at : 0, t: str(x.t, 300) || id,   // як у cleanRecs: без назви — id
+      s, n, at: stamp(x.at, now), t: str(x.t, 300) || id,   // як у cleanRecs: без назви — id
       k: KIND_IDS.includes(x.k) ? x.k : 'series',
       y: str(typeof x.y === 'number' ? String(x.y) : x.y, 20),   // рік міг прийти числом
     };
     count++;
   }
-  const updated = Number(data?.updated);
-  return { name: str(data?.name, 80), items, updated: Number.isFinite(updated) ? updated : 0 };
+  return { name: str(data?.name, 80), items, updated: stamp(Number(data?.updated), now) };
 }
 
 // x — елемент рекомендацій ({ id, k, t, y }).
@@ -106,9 +110,9 @@ export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^
 
 // Запис сховища prefs: єдиний запис 'social' — чи відкриті оцінки друзям і
 // коли власник востаннє дивився відповіді. Мітки видалення йдуть повз очищення.
-export function cleanPrefs(r) {
+export function cleanPrefs(r, now = Date.now()) {
   if (r?.id !== 'social') return null;
-  return { id: 'social', open: !!r.open, seenAt: Number.isFinite(r.seenAt) ? r.seenAt : 0, updated: Number.isFinite(r.updated) ? r.updated : 0 };
+  return { id: 'social', open: !!r.open, seenAt: stamp(r.seenAt, now), updated: Number.isFinite(r.updated) ? r.updated : 0 };
 }
 
 // ── друзі ─────────────────────────────────────────────────────────

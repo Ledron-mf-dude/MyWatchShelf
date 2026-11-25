@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -170,6 +170,14 @@ test('unseenCount рахує лише свіжіші за останній пе�
   const tb = friendTable({ entries: [], friends, replies, recs: {} });
   assert.equal(unseenCount(tb, replies, 5), 1);
   assert.equal(unseenCount(tb, replies, 10), 0);
+});
+
+test('seenStamp: майбутня відповідь гасить «нове» за один запис, без відповідей — now', () => {
+  const friends = [F('oleh')], replies = { oleh: { ...R('Олег', { tt0000001: { s: 8 } }), updated: 9000 } };
+  const tb = friendTable({ entries: [], friends, replies, recs: {} });
+  assert.equal(seenStamp(tb, replies, 100), 9000);
+  assert.equal(unseenCount(tb, replies, seenStamp(tb, replies, 100)), 0);
+  assert.equal(seenStamp(tb, {}, 100), 100);
 });
 
 test('isUid: лише звичайні ідентифікатори', () => {

@@ -187,6 +187,11 @@ export function newReplyAuthors(friends, replies) {
 export const unseenCount = (table, replies, seenAt) =>
   table.cols.filter(c => (own(replies, c.id)?.updated || 0) > seenAt).length;
 
+// Позначка «бачив»: не раніше за найновішу відповідь видимих друзів, бо годинник
+// друга може поспішати, і тоді «нове» не згасло б. Лише власні поля replies.
+export const seenStamp = (table, replies, now) =>
+  table.cols.reduce((m, c) => Math.max(m, own(replies, c.id)?.updated || 0), now);
+
 // uid потрапляє в шлях Firestore: пропускаємо лише звичайні ідентифікатори.
 export const isUid = v => typeof v === 'string' && /^[\w-]{1,128}$/.test(v);
 

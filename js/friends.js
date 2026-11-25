@@ -3,7 +3,7 @@
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, FRIENDS_MAX } from './social.js';
+import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
 import { friends, prefs, socialCache } from './synced.js';
@@ -309,7 +309,7 @@ function frRow(r, cols) {
       ${r.have ? '' : `<button class="rb" data-act="take" title="${t('take')}" aria-label="${t('take')}">${icon('plus')}</button>`}</div></th>
     <td class="fr-c me"><span class="fr-s">${r.mine ? fmtScore(r.mine) : ''}</span></td>
     ${cols.map(c => frCell(cellOf(r, c.id))).join('')}
-    <td class="fr-c avg"${r.n ? ` title="${r.n}"` : ''}><span class="fr-s">${r.n ? fmtScore(r.avg) : ''}</span></td></tr>`;
+    <td class="fr-c avg"${r.n ? ` title="${esc(t('fr.avg.n', { n: r.n }))}"` : ''}><span class="fr-s">${r.n ? fmtScore(r.avg) : ''}</span></td></tr>`;
 }
 
 // Секція картки: середня й оцінки друзів цього тайтла; без жодної оцінки — нічого.
@@ -326,7 +326,7 @@ setCardExtra(friendsBlock);
 export function renderFriends() {
   const c = socialCache.get(), tb = tableOf(c);
   // Відкрили екран — усе, що було, вважаємо баченим (зберігаємо лише коли є що).
-  if (unseenCount(tb, c.replies, prefs.get('social')?.seenAt || 0) > 0) prefs.save('social', { seenAt: Date.now() });
+  if (unseenCount(tb, c.replies, prefs.get('social')?.seenAt || 0) > 0) prefs.save('social', { seenAt: seenStamp(tb, c.replies, Date.now()) });
   if (!tb.cols.some(x => x.id === fr.who)) fr.who = '';   // друга видалили
   const cols = fr.who ? tb.cols.filter(x => x.id === fr.who) : tb.cols;
   const rows = tb.rows.filter(r => (!fr.who || cellOf(r, fr.who)) && (fr.kind === 'all' || r.k === fr.kind));
@@ -388,14 +388,17 @@ Object.assign(friendActions, {
     const f = friends.get(v);
     if (!f || f.kind !== 'live') return;
     friends.save(v, { follow: !f.follow });
-    if (!f.follow) pullRecs({ id: v, uid: v });
+    if (!f.follow) pullRecs({ id: v, uid: v }).then(() => socialRedraw());   // нові рядки зʼявляються без ручного перемальовування
     manageDone();
   },
   // Знімок без рекомендацій не має сенсу — прибираємо запис; живий друг лишається, але без добірки в кеші.
-  'fr-drop-recs': v => {
+  'fr-drop-recs': async v => {
     const f = friends.get(v);
     if (!f) return;
-    if (f.kind === 'snap') friends.remove(v);
+    if (f.kind === 'snap') {
+      if (!await confirmBox({ title: t('fr.drop.snap.title'), text: t('fr.drop.snap.text'), ok: t('fr.drop'), danger: true })) return;
+      friends.remove(v);
+    }
     else { friends.save(v, { follow: false }); socialCache.set({ recs: prunedRecs() }); }
     manageDone();
   },

@@ -11,14 +11,18 @@ function persist(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* приватне вікно чи Node — живемо в пам'яті */ }
 }
 
+// Мітка видалення — це лише { id, deleted, updated } і йде повз clean;
+// updated мусить бути числом, інакше рядок із хмари вигравав би порівняння.
+const tomb = r => (typeof r.id === 'string' && r.id ? { id: r.id, deleted: true, updated: Number.isFinite(r.updated) ? r.updated : 0 } : null);
+
 // clean — функція очищення запису: усе, що прийшло з хмари, посилання чи
 // localStorage, проходить крізь неї; null — запис відкинуто.
 export function makeSynced(name, clean) {
+  const cleanRec = r => (r?.deleted ? tomb(r) : clean(r));
   const KEY = `mws.${name}.v1`;
   let recs = {};
   for (const r of Object.values(load(KEY))) {
-    // мітка видалення — це лише { id, deleted, updated }, її теж пускаємо
-    const c = r?.deleted ? (typeof r.id === 'string' && r.id ? { id: r.id, deleted: true, updated: r.updated || 0 } : null) : clean(r);
+    const c = cleanRec(r);
     if (c) recs[c.id] = c;
   }
   const subs = new Set(), localSubs = new Set();
@@ -48,7 +52,7 @@ export function makeSynced(name, clean) {
     applyRemote(list) {
       let changed = false;
       for (const r of list) {
-        const c = r?.deleted ? (typeof r.id === 'string' && r.id ? { id: r.id, deleted: true, updated: r.updated || 0 } : null) : clean(r);
+        const c = cleanRec(r);
         if (!c) continue;
         const cur = recs[c.id];
         if (cur && (c.updated || 0) < (cur.updated || 0)) continue;

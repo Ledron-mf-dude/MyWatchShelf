@@ -183,7 +183,7 @@ function onUser(c, u) {
           if (!r || (e.updated || 0) > (r.updated || 0)) pushRec(name, e);
         }
       }
-    }, err => { console.warn('синхронізація', name, err); set('error'); }));
+    }, err => console.warn('синхронізація', name, err)));
   }
 }
 

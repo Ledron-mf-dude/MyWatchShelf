@@ -3,10 +3,10 @@
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, FRIENDS_MAX } from './social.js';
+import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, recsMissing, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
-import { friends, prefs, socialCache } from './synced.js';
+import { friends, listdefs, prefs, socialCache } from './synced.js';
 import { cloud } from './cloud.js';
 import { setCardExtra } from './panel.js';
 import { $, app, layer, ui, icon, ph, remember, showOverlay, toast, promptBox, confirmBox } from './ui.js';
@@ -208,10 +208,16 @@ const cacheRecs = (id, items) => {
 };
 // Помилка не зупиняє решту; null (публічного документа немає) кеш не стирає.
 // Пізня відповідь не пишеться, якщо за цей час змінилась людина чи друга вже нема.
+// Той самий запит двічі не шлемо; ключ — разом з людиною, бо запит, початий до
+// входу, буде відкинуто, і після входу потрібен новий.
+const pulling = new Set();
 const pullRecs = f => {
-  const me = meUid();
-  return cloud.loadPublic(f.uid).then(r => { if (r && meUid() === me && followed(f.id)) cacheRecs(f.id, r.items); })
-    .catch(e => console.warn('рекомендації друга', e));
+  const me = meUid(), k = `${me}|${f.id}`;
+  if (pulling.has(k)) return Promise.resolve();
+  pulling.add(k);
+  return cloud.loadPublic(f.uid).then(r => { if (r && meUid() === me && followed(f.id)) { cacheRecs(f.id, r.items); socialRedraw(); } })
+    .catch(e => console.warn('рекомендації друга', e))
+    .finally(() => pulling.delete(k));
 };
 
 export const friendActions = {
@@ -243,13 +249,27 @@ function syncWatch() {
   if (uid === watching) return;
   unwatch?.(); unwatch = null; watching = uid;
   if (uid) unwatch = cloud.watchReplies(map => { if (watching === uid) onReplies(map); });
+  // Запит, початий при запуску (вхід ще не відновився), буде відкинуто: тягнемо наново.
+  pullAll();
 }
 const pullAll = () => {
   if (!cloud.available) return;
   socialCache.set({ recs: prunedRecs() });   // заодно чистимо кеш від тих, за ким не стежимо
   friends.list().filter(f => f.kind === 'live' && f.follow).forEach(pullRecs);
 };
-let started = false;
+// Сховища змінюються й з хмари (інший пристрій): перемальовуємо один раз на
+// пачку змін. Самі обробники у сховища нічого не пишуть — лише читають і малюють.
+let started = false, queued = false, friendsChanged = false;
+const pullMissing = () => { if (cloud.available) recsMissing(friends.raw(), socialCache.get().recs).forEach(pullRecs); };
+const later = () => {
+  if (queued) return;
+  queued = true;
+  queueMicrotask(() => {
+    queued = false;
+    if (friendsChanged) { friendsChanged = false; pullMissing(); }
+    drawManage(); socialRedraw();
+  });
+};
 
 const tableOf = c => friendTable({ entries: store.list(), friends: friends.raw(), replies: c.replies, recs: c.recs });
 export const social = {
@@ -267,6 +287,9 @@ export const social = {
     syncWatch();
     pullAll();
     addEventListener('online', pullAll);
+    friends.onChange(() => { friendsChanged = true; later(); });
+    prefs.onChange(later);
+    listdefs.onChange(later);
   },
 };
 
@@ -388,7 +411,7 @@ Object.assign(friendActions, {
     const f = friends.get(v);
     if (!f || f.kind !== 'live') return;
     friends.save(v, { follow: !f.follow });
-    if (!f.follow) pullRecs({ id: v, uid: v }).then(() => socialRedraw());   // нові рядки зʼявляються без ручного перемальовування
+    if (!f.follow) pullRecs({ id: v, uid: v });   // нові рядки зʼявляються без ручного перемальовування (pullRecs малює сам)
     manageDone();
   },
   // Знімок без рекомендацій не має сенсу — прибираємо запис; живий друг лишається, але без добірки в кеші.

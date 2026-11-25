@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc, recsMissing } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -158,6 +158,12 @@ test('рекомендації без follow не читаються; понад
   const many = Array.from({ length: 103 }, (_, i) => F('u' + i, { added: i }));
   const big = friendTable({ entries: [], friends: many, replies: {}, recs: {} });
   assert.equal(big.cols.length, 100); assert.equal(big.hidden, 3); assert.equal(big.cols[0].id, 'u0');
+});
+test('recsMissing: лише живі друзі з follow, чиїх рекомендацій ще немає в кеші', () => {
+  const friends = [F('oleh', { follow: true }), F('ira', { follow: true }), F('max'), { id: 'gone', deleted: true, updated: 1 },
+    cleanFriend({ id: 's00000001', kind: 'snap', follow: true, items: [] }), F('constructor', { follow: true })];
+  assert.deepEqual(recsMissing(friends, { oleh: [] }).map(f => f.id), ['ira', 'constructor']);
+  assert.deepEqual(recsMissing([], {}), []);
 });
 test('snapId стабільний і залежить від вмісту', () => {
   const a = snapId('Олег', [{ id: 'tt0000002' }, { id: 'tt0000001' }]);

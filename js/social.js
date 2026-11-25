@@ -187,6 +187,11 @@ export function newReplyAuthors(friends, replies) {
   return Object.keys(replies).filter(uid => !known.has(uid));
 }
 
+// Друзі, чиї рекомендації треба дочитати: стежимо, а копії в кеші ще немає
+// (друга запам'ятали на іншому пристрої). `friends` — raw() сховища.
+export const recsMissing = (friends, recs) =>
+  friends.filter(f => !f.deleted && f.kind === 'live' && f.follow && !Object.hasOwn(recs, f.id));
+
 // Скільки видимих друзів відповіли після останнього перегляду таблиці.
 export const unseenCount = (table, replies, seenAt) =>
   table.cols.filter(c => (own(replies, c.id)?.updated || 0) > seenAt).length;

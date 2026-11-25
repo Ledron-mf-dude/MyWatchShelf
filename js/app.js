@@ -195,8 +195,9 @@ on({
     applyLang(); setTitle(); drawChrome(); draw(); toggleMenu(true);
     return 'keep';
   },
+  // Імʼя з Google-акаунта не підставляємо: погодившись не глянувши, людина опублікувала б його.
   name: async () => {
-    const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: S.name || cloud.user?.name || '', placeholder: t('name.ph') });
+    const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: S.name || '', placeholder: t('name.ph') });
     if (v !== null) { store.setSetting('name', v.slice(0, 80)); cloud.publishNow().catch(() => {}); toast(t('toast.name.saved')); }
   },
   share: () => openShare(),

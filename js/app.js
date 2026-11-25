@@ -11,12 +11,12 @@ import {
   cardActions, buildActions, loadDemo,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
-import { replyActions, friendActions, loadReplyState, social } from './friends.js';
+import { replyActions, friendActions, loadReplyState, social, renderFriends } from './friends.js';
 
 const S = store.settings;
-const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['discover', 'compass'], ['stats', 'chart']];
-// на телефоні внизу лишається чотири розділи й «+»; календар — із головної
-const TABS = NAV.filter(n => n[0] !== 'calendar');
+const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['friends', 'user'], ['discover', 'compass'], ['stats', 'chart']];
+// на телефоні внизу лишається чотири розділи й «+»; календар і друзі — з меню акаунта
+const TABS = NAV.filter(n => !['calendar', 'friends'].includes(n[0]));
 const top = $('#top'), tabs = $('#tabs');
 // Знак: кадр кіноплівки з кнопкою відтворення.
 const LOGO = `<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
@@ -56,6 +56,7 @@ function drawChrome() {
       <div class="pop menu" id="menu" hidden></div>
     </div>`}`;
   tabs.hidden = recs;
+  paintDot();
   const tab = ([r, ic]) => `<a class="tab ${here(r)}" href="${href(r)}">${icon(ic)}<span>${t('nav.' + r)}</span></a>`;
   tabs.innerHTML = recs ? '' : TABS.slice(0, 2).map(tab).join('')
     + `<button class="tab add" data-act="add" aria-label="${t('add')}">${icon('plus')}</button>` + TABS.slice(2).map(tab).join('');
@@ -74,6 +75,7 @@ function toggleMenu(force) {
         : `<div class="who"><p>${t('menu.local.text')}</p></div>`}
       <hr>
       <button data-act="go" data-v="calendar">${icon('calendar')}${t('nav.calendar')}</button>
+      <button data-act="go" data-v="friends" class="${social.unseen() ? 'fnew' : ''}">${icon('user')}${t('nav.friends')}</button>
       <button data-act="tonight">${icon('dice')}${t('pick.title')}</button>
       <hr>
       <button data-act="share">${icon('share')}${t('menu.share')}<small>${nRec}</small></button>
@@ -90,8 +92,13 @@ function toggleMenu(force) {
 }
 
 // ── маршрути ──────────────────────────────────────────────────────
-const RENDER = { home: renderHome, library: renderLibrary, calendar: renderCalendar, discover: renderDiscover, stats: renderStats, recs: renderRecs };
-function draw() { RENDER[view.route](); }
+const RENDER = { home: renderHome, library: renderLibrary, calendar: renderCalendar, friends: renderFriends, discover: renderDiscover, stats: renderStats, recs: renderRecs };
+function draw() { RENDER[view.route](); paintDot(); }
+// Крапка «нове» на пункті «Друзі» й на кнопці акаунта (на телефоні пункт лише в меню).
+function paintDot() {
+  const n = social.unseen() > 0;
+  $$('.nav a[href="#/friends"], .acct, #menu [data-v="friends"]').forEach(el => el.classList.toggle('fnew', n));
+}
 function setTitle() {
   document.title = view.route === 'recs'
     ? `${view.recs?.title || (view.recs?.name ? t('title.recs.by', { name: view.recs.name }) : t('title.recs'))} · ${t('brand')}`
@@ -320,7 +327,7 @@ applyTheme();
 applyLang();
 cloud.init();
 // відповіді друзів не мають смикати сторінку під відкритою карткою
-social.start(() => { if (ui.overlay) ui.dirty = true; else refresh(); });
+social.start(() => { paintDot(); if (ui.overlay) ui.dirty = true; else refresh(); });
 addEventListener('hashchange', route);
 route();
 // вхід міг не вдатися ще до того, як сторінка намалювалась — скажемо про це

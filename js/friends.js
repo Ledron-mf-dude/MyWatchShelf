@@ -2,13 +2,13 @@
 // кожній картці, «Надіслати мої оцінки» і оцінки інших друзів. Сторінка
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
-import { esc, fmtScore } from './logic.js';
-import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, FRIENDS_MAX } from './social.js';
-import { t } from './i18n.js';
+import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
+import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, FRIENDS_MAX } from './social.js';
+import { t, tn } from './i18n.js';
 import { store } from './store.js';
-import { friends, socialCache } from './synced.js';
+import { friends, prefs, socialCache } from './synced.js';
 import { cloud } from './cloud.js';
-import { icon, toast, promptBox, confirmBox } from './ui.js';
+import { $, app, layer, ui, icon, ph, remember, showOverlay, toast, promptBox, confirmBox } from './ui.js';
 
 const blank = () => ({ name: '', items: {} });
 // key — чия відповідь і на чиєму списку: коли змінюється (інший список, вхід,
@@ -250,10 +250,13 @@ const pullAll = () => {
 };
 let started = false;
 
+const tableOf = c => friendTable({ entries: store.list(), friends: friends.raw(), replies: c.replies, recs: c.recs });
 export const social = {
-  table: () => {
+  table: () => tableOf(socialCache.get()),
+  // Крапка «нове»: хтось відповів після останнього перегляду екрана «Друзі».
+  unseen: () => {
     const c = socialCache.get();
-    return friendTable({ entries: store.list(), friends: friends.raw(), replies: c.replies, recs: c.recs });
+    return unseenCount(tableOf(c), c.replies, prefs.get('social')?.seenAt || 0);
   },
   start(redrawFn) {
     socialRedraw = redrawFn;
@@ -282,3 +285,123 @@ export const replyActions = {
     if (await send()) toast(t('toast.reply.sent', { n: ids.length }));
   },
 };
+
+// ── екран «Друзі» ─────────────────────────────────────────────────
+// Фільтри живуть тут, а не у views.js: той імпортує цей модуль, а не навпаки.
+const fr = { who: '', kind: 'all' };
+// Ключ — id друга, а він може збігтись зі службовим словом («constructor»):
+// читаємо мапу лише через own-перевірку.
+const cellOf = (r, id) => (Object.hasOwn(r.cells, id) ? r.cells[id] : null);
+const chip = (act, v, on, label) => `<button class="chip ${on ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}" aria-pressed="${on}">${label}</button>`;
+const colName = c => c.name || t('fr.unsigned');
+
+// Коментар друга йде і в title (широкий екран), і під оцінкою (вузький, CSS).
+function frCell(c) {
+  if (!c) return '<td class="fr-c"></td>';
+  return `<td class="fr-c"${c.n ? ` title="${esc(c.n)}"` : ''}><span class="fr-s">${c.s ? fmtScore(c.s) : '·'}</span>${c.rec ? `<span class="fr-rec" title="${t('fr.rec')}" aria-label="${t('fr.rec')}">${icon('starFill')}</span>` : ''}${c.n ? `<small class="fr-n">${esc(c.n)}</small>` : ''}</td>`;
+}
+function frRow(r, cols) {
+  // тайтла немає на полиці — запам'ятовуємо для перегляду й дії take (за data-id)
+  if (!r.have) remember({ id: r.id, type: r.k === 'movie' ? 'movie' : 'series', kind: r.k, title: r.t, year: r.y });
+  return `<tr class="fr-row" data-id="${esc(r.id)}" data-act="${r.have ? 'open' : 'preview'}" tabindex="0">
+    <th scope="row" class="fr-t"><div>${ph(r.id, r.t, 'small')}<span><b>${esc(r.t)}</b><small>${esc([kindLabel(r.k), r.y].filter(Boolean).join(' · '))}</small></span>
+      ${r.have ? '' : `<button class="rb" data-act="take" title="${t('take')}" aria-label="${t('take')}">${icon('plus')}</button>`}</div></th>
+    <td class="fr-c me"><span class="fr-s">${r.mine ? fmtScore(r.mine) : ''}</span></td>
+    ${cols.map(c => frCell(cellOf(r, c.id))).join('')}
+    <td class="fr-c avg"${r.n ? ` title="${r.n}"` : ''}><span class="fr-s">${r.n ? fmtScore(r.avg) : ''}</span></td></tr>`;
+}
+
+export function renderFriends() {
+  const c = socialCache.get(), tb = tableOf(c);
+  // Відкрили екран — усе, що було, вважаємо баченим (зберігаємо лише коли є що).
+  if (unseenCount(tb, c.replies, prefs.get('social')?.seenAt || 0) > 0) prefs.save('social', { seenAt: Date.now() });
+  if (!tb.cols.some(x => x.id === fr.who)) fr.who = '';   // друга видалили
+  const cols = fr.who ? tb.cols.filter(x => x.id === fr.who) : tb.cols;
+  const rows = tb.rows.filter(r => (!fr.who || cellOf(r, fr.who)) && (fr.kind === 'all' || r.k === fr.kind));
+  const head = `<header class="page-head"><h1>${t('nav.friends')}</h1><span class="count">${tb.rows.length} ${tn('title', tb.rows.length)}</span>
+    <span class="grow"></span><button class="btn" data-act="fr-manage">${icon('user')}${t('fr.manage')}</button></header>`;
+  if (!tb.rows.length) {
+    app.innerHTML = `${head}<div class="empty">${icon('user')}<b>${t('fr.empty.title')}</b><p>${t('fr.empty.text')}</p>
+      <button class="btn primary" data-act="share">${icon('share')}${t('menu.share')}</button></div>`;
+    return;
+  }
+  app.innerHTML = `${head}
+    <div class="chips fr-chips">${chip('fr-who', '', !fr.who, t('fr.all'))}${tb.cols.map(x => chip('fr-who', x.id, fr.who === x.id, esc(colName(x)))).join('')}</div>
+    <div class="chips fr-chips">${['all', ...KIND_IDS].map(k => chip('fr-kind', k, fr.kind === k, k === 'all' ? t('all.kinds') : t('kinds.' + k))).join('')}</div>
+    ${rows.length ? `<div class="fr-wrap"><table class="fr-table"><thead><tr><th scope="col" class="fr-t">${t('fr.title')}</th><th scope="col" class="fr-c">${t('fr.me')}</th>
+      ${cols.map(x => `<th scope="col" class="fr-c" title="${esc(colName(x))}"><span>${esc(colName(x))}</span></th>`).join('')}<th scope="col" class="fr-c">${t('fr.avg')}</th></tr></thead>
+      <tbody>${rows.map(r => frRow(r, cols)).join('')}</tbody></table></div>`
+      : `<div class="empty small"><b>${t('fr.none')}</b></div>`}`;
+}
+
+// ── керування друзями (оверлей) ───────────────────────────────────
+const SNAP_ID = /^s[0-9a-f]{8}$/;   // id знімка (snapId): його тайтлів уже нема, повернути не можна
+const drawManage = () => {
+  if (ui.overlay?.type !== 'friends') return;
+  const c = socialCache.get(), tb = tableOf(c), open = !!prefs.get('social')?.open;
+  const gone = friends.raw().filter(f => f.deleted && !SNAP_ID.test(f.id));
+  const friend = col => {
+    const f = friends.get(col.id), snap = f?.kind === 'snap';
+    if (!f) return '';
+    const hasRecs = f.follow || Object.hasOwn(c.recs, f.id);
+    return `<div class="fr-man"><div class="fr-man-h"><b>${esc(colName(col))}</b>${snap ? `<small class="muted">${t('fr.snap')}</small>` : ''}</div>
+      <div class="fr-man-a">
+        ${snap ? '' : chip('fr-follow', f.id, f.follow, `${icon('star')}${t('fr.follow')}`)}
+        ${hasRecs ? `<button class="chip" data-act="fr-drop-recs" data-v="${esc(f.id)}">${t('fr.drop')}</button>` : ''}
+        <button class="chip danger" data-act="fr-del" data-v="${esc(f.id)}">${icon('trash')}${t('fr.del')}</button></div></div>`;
+  };
+  $('.palette', layer).innerHTML = `
+    <div class="pal-head"><h2>${t('fr.manage')}</h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
+    <div class="pal-body fr-manage">
+      <button class="toggle ${open ? 'on' : ''}" data-act="fr-open" aria-pressed="${open}"><span><b>${t('fr.open')}</b><small>${t('fr.open.sub')}</small></span><i></i></button>
+      ${tb.cols.length ? tb.cols.map(friend).join('') : `<p class="muted small">${t('fr.nofriends')}</p>`}
+      ${gone.length || tb.hidden ? `<h4>${t('fr.hidden')}</h4>` : ''}
+      ${gone.map(f => `<div class="fr-man"><div class="fr-man-h"><b>${esc((Object.hasOwn(c.replies, f.id) && c.replies[f.id].name) || t('fr.unsigned'))}</b>
+        <button class="chip" data-act="fr-restore" data-v="${esc(f.id)}">${icon('refresh')}${t('restore')}</button></div></div>`).join('')}
+      ${tb.hidden ? `<p class="muted small">${t('fr.more', { n: tb.hidden })}</p>` : ''}
+    </div>`;
+};
+// Таблиця під оверлеєм перемалюється, коли його закриють (ui.dirty).
+const manageDone = () => { ui.dirty = true; drawManage(); };
+
+Object.assign(friendActions, {
+  'fr-who': v => { fr.who = v; renderFriends(); },
+  'fr-kind': v => { fr.kind = v; renderFriends(); },
+  'fr-manage': () => {
+    showOverlay({ type: 'friends' }, `<div class="palette narrow" role="dialog" aria-label="${t('fr.manage')}"></div>`);
+    drawManage();
+  },
+  'fr-open': () => { prefs.save('social', { open: !prefs.get('social')?.open }); manageDone(); },
+  'fr-follow': v => {
+    const f = friends.get(v);
+    if (!f || f.kind !== 'live') return;
+    friends.save(v, { follow: !f.follow });
+    if (!f.follow) pullRecs({ id: v, uid: v });
+    manageDone();
+  },
+  // Знімок без рекомендацій не має сенсу — прибираємо запис; живий друг лишається, але без добірки в кеші.
+  'fr-drop-recs': v => {
+    const f = friends.get(v);
+    if (!f) return;
+    if (f.kind === 'snap') friends.remove(v);
+    else { friends.save(v, { follow: false }); socialCache.set({ recs: prunedRecs() }); }
+    manageDone();
+  },
+  'fr-del': async v => {
+    const f = friends.get(v);
+    if (!f) return;
+    const rep = socialCache.get().replies, name = (Object.hasOwn(rep, v) && rep[v].name) || f.name || t('fr.unsigned');
+    if (!await confirmBox({ title: t('fr.del.title', { name }), text: t('fr.del.text'), ok: t('fr.del'), danger: true })) return;
+    friends.remove(v);
+    socialCache.set({ recs: prunedRecs() });
+    // Відповідь у хмарі стираємо, не чекаючи: без мережі вона полежить до наступного разу.
+    if (f.kind === 'live' && cloud.user) cloud.deleteReply(cloud.user.uid, v).catch(e => console.warn('видалення відповіді', e));
+    manageDone();
+  },
+  // Мітка видалення імені не має: ім'я підтягнеться з відповіді, коли вона є (friendTable).
+  'fr-restore': v => {
+    if (!friends.raw().some(f => f.id === v && f.deleted && !SNAP_ID.test(v))) return;
+    friends.save(v, { uid: v, name: '', kind: 'live', follow: false, added: Date.now() });
+    manageDone();
+  },
+});

@@ -3,7 +3,7 @@
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { replyItem, replyMode, replyPatch, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, FRIENDS_MAX } from './social.js';
+import { replyItem, replyMode, replyPatch, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, recsFor, needsKeep, addList, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs, socialCache } from './synced.js';
@@ -192,11 +192,14 @@ document.addEventListener('change', ev => { const id = noteId(ev); if (id) flush
 // ── запам'ятати друга ─────────────────────────────────────────────
 // Живе посилання — за uid, знімок — за відбитком підпису й тайтлів. Видалений
 // друг (мітка видалення) для get() не існує, тож кнопка повертається, а save
-// його воскрешає.
+// його воскрешає. Кнопка є й для друга, що вже є, коли запам'ятовувати ще є що
+// (needsKeep): він додався сам або це його добірка, якої ми ще не брали.
 const nameOf = recs => (recs.name || '').slice(0, 80);
 const friendId = recs => (recs.uid || snapId(nameOf(recs), recs.items));
+const listOf = recs => (recs.uid ? (recs.title || '').slice(0, 40) : '');   // назва добірки на живому посиланні
+const mayKeep = recs => !!recs && !(recs.uid && recs.uid === meUid()) && needsKeep(friends.get(friendId(recs)), listOf(recs));
 export function keepButton(recs) {
-  if (!recs || (recs.uid && recs.uid === meUid()) || friends.get(friendId(recs))) return '';
+  if (!mayKeep(recs)) return '';
   return `<button class="btn lg" data-act="friend-keep">${icon('user')}${t('fr.keep')}</button>`;
 }
 
@@ -218,20 +221,24 @@ const pullRecs = f => {
   const me = meUid(), k = `${me}|${f.id}`;
   if (pulling.has(k)) return Promise.resolve();
   pulling.add(k);
-  return cloud.loadPublic(f.uid).then(r => { if (r && meUid() === me && followed(f.id)) { cacheRecs(f.id, r.items); socialRedraw(); } })
+  // У кеш кладемо лише те, що радили мені (recsFor): чужі добірки на пристрої не лишаються.
+  return cloud.loadPublic(f.uid).then(r => { if (r && meUid() === me && followed(f.id)) { cacheRecs(f.id, recsFor(friends.get(f.id), r.items)); socialRedraw(); } })
     .catch(e => console.warn('рекомендації друга', e))
     .finally(() => pulling.delete(k));
 };
 
 export const friendActions = {
   'friend-keep': () => {
-    if (!cur || (cur.uid && cur.uid === meUid()) || friends.get(friendId(cur))) return;
-    const id = friendId(cur), name = nameOf(cur), added = Date.now();
+    if (!mayKeep(cur)) return;
+    const id = friendId(cur), name = nameOf(cur), was = friends.get(id), added = was?.added || Date.now();
     if (cur.uid) {
-      friends.save(id, { uid: id, name, kind: 'live', follow: true, added });
-      cacheRecs(id, cur.items);
+      // Друг міг уже бути (відповів сам або запам'ятаний з іншого посилання): тоді
+      // лише вмикаємо рекомендації й дописуємо цю добірку до запам'ятаних.
+      const f = friends.save(id, { uid: id, name: was?.name || name, kind: 'live', follow: true, added, lists: addList(was?.lists, listOf(cur)) });
+      // Те, що на сторінці, кладемо одразу лише коли копії ще немає: добірка не має витіснити вже зібране.
+      if (f && !Object.hasOwn(socialCache.get().recs, id)) cacheRecs(id, recsFor(f, cur.items));
       pullRecs({ id, uid: id });   // на сторінці могла бути лише одна добірка — беремо весь список
-    } else friends.save(id, { name, kind: 'snap', follow: true, items: cur.items, added });
+    } else friends.save(id, { name, kind: 'snap', follow: true, items: recsFor(null, cur.items), added });
     redraw();
   },
 };

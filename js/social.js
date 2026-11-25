@@ -131,8 +131,10 @@ export const canWrite = (signedIn, synced) => !signedIn || !!synced;
 
 // ── друзі ─────────────────────────────────────────────────────────
 // Запис сховища friends: живий друг (kind 'live', id === uid) або знімок
-// чужого списку з посилання (kind 'snap', items — очищений масив). Мітки
-// видалення ідуть повз очищення (synced.js).
+// чужого списку з посилання (kind 'snap', items — очищений масив). lists —
+// назви добірок друга, посилання на які власник відкрив і запам'ятав: лише їх
+// (і загальні рекомендації) показуємо як «радив». Мітки видалення ідуть повз
+// очищення (synced.js).
 export function cleanFriend(r) {
   // uid Firebase і id знімка вкладаються в цей шаблон; службові слова не
   // ловимо поіменно, а читаємо мапи лише через own-перевірку (own нижче).
@@ -143,10 +145,26 @@ export function cleanFriend(r) {
   const out = {
     id, uid: snap ? '' : id, name: str(r.name, 80).trim(), kind: snap ? 'snap' : 'live',
     follow: !!r.follow, added: num(r.added), updated: num(r.updated),
+    lists: [...new Set((Array.isArray(r.lists) ? r.lists : []).map(v => str(v, 40)).filter(Boolean))].slice(0, LISTS_MAX),
   };
   if (snap) out.items = cleanRecs({ items: r.items }).items;
   return out;
 }
+
+// Назва щойно запам'ятаної добірки — в кінець; коли місця немає, випадає найстаріша.
+export const addList = (lists, name) => [...new Set([...(lists || []), ...(name ? [name] : [])])].slice(-LISTS_MAX);
+
+// Що з публічного документа друга справді радили мені: загальні рекомендації
+// (p !== 0) і тайтли з добірок, які я запам'ятав. Решта — добірки для інших.
+export const recsFor = (friend, items) => {
+  const mine = friend?.lists || [];
+  return (items || []).filter(x => x.p !== 0 || (x.l || []).some(n => mine.includes(n)));
+};
+
+// Чи показувати «Запам'ятати» на сторінці друга: його ще немає; він додався сам,
+// бо відповів (follow вимкнено); або це добірка, якої ще не запам'ятали.
+export const needsKeep = (friend, listName) =>
+  !friend || (friend.kind === 'live' && (!friend.follow || (!!listName && !friend.lists.includes(listName))));
 
 // Стабільний id знімка: FNV-1a від підпису й відсортованих id тайтлів, тож
 // той самий список із того самого посилання не дублюється.
@@ -175,7 +193,7 @@ export function friendTable({ entries, friends, replies, recs }) {
   const rows = new Map();
   for (const f of shown) {
     const reply = f.kind === 'live' ? own(replies, f.uid)?.items || {} : {};
-    const rec = new Map(f.follow || f.kind === 'snap' ? (own(recs, f.id) ?? f.items ?? []).map(x => [x.id, x]) : []);
+    const rec = new Map(f.follow || f.kind === 'snap' ? recsFor(f, own(recs, f.id) ?? f.items ?? []).map(x => [x.id, x]) : []);
     for (const id of new Set([...Object.keys(reply), ...rec.keys()])) {
       const a = reply[id], b = rec.get(id), e = mine.get(id), src = a || b;
       const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || 0, have: !!e, cells: new Map(), avg: 0, n: 0 };

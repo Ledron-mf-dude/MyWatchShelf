@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyPatch, replyWrite, recsMissing, seenAtOf, canWrite } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyPatch, replyWrite, recsMissing, recsFor, needsKeep, addList, seenAtOf, canWrite } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -266,6 +266,45 @@ test('cleanFriend: службові слова й сміття як іденти
   assert.equal(cleanFriend({ id: 'a/b' }), null);
   assert.equal(cleanFriend({ id: 'x'.repeat(129) }), null);
   assert.equal(cleanFriend({ id: 'constructor' }).id, 'constructor');
+});
+test('cleanFriend: lists — назви добірок без сміття й повторів, не більше 8', () => {
+  assert.deepEqual(F('oleh').lists, []);
+  assert.deepEqual(cleanFriend({ id: 'oleh', lists: 'не масив' }).lists, []);
+  assert.deepEqual(cleanFriend({ id: 'oleh', lists: ['Нові', 'Нові', '', 5, 'x'.repeat(60), null] }).lists, ['Нові', 'x'.repeat(40)]);
+  assert.equal(cleanFriend({ id: 'oleh', lists: Array.from({ length: 12 }, (_, i) => 'л' + i) }).lists.length, 8);
+  assert.deepEqual(cleanFriend({ id: 's00000001', kind: 'snap', items: [] }).lists, []);
+});
+test('addList: нова назва в кінець, без повторів, лишаються останні 8', () => {
+  assert.deepEqual(addList([], 'Нові'), ['Нові']);
+  assert.deepEqual(addList(['Нові'], 'Нові'), ['Нові']);
+  assert.deepEqual(addList(['Нові'], ''), ['Нові']);
+  assert.deepEqual(addList(undefined, ''), []);
+  const full = Array.from({ length: 8 }, (_, i) => 'л' + i);
+  assert.deepEqual(addList(full, 'Нові'), [...full.slice(1), 'Нові']);
+});
+test('recsFor: загальні рекомендації й лише ті добірки, що надіслані мені', () => {
+  const items = [{ id: 'tt0000001' }, { id: 'tt0000002', p: 0, l: ['Нові'] }, { id: 'tt0000003', p: 0, l: ['Чужа'] },
+    { id: 'tt0000004', l: ['Чужа'] }, { id: 'tt0000005', p: 0 }];
+  const ids = f => recsFor(f, items).map(x => x.id);
+  assert.deepEqual(ids(F('oleh')), ['tt0000001', 'tt0000004']);
+  assert.deepEqual(ids(F('oleh', { lists: ['Нові'] })), ['tt0000001', 'tt0000002', 'tt0000004']);
+  assert.deepEqual(ids({ id: 'без-lists' }), ['tt0000001', 'tt0000004']);
+  assert.deepEqual(ids(null), ['tt0000001', 'tt0000004']);
+  assert.deepEqual(recsFor(F('oleh'), undefined), []);
+});
+test('friendTable: тайтл лише з чужої добірки не показується як «радив»', () => {
+  const recs = { oleh: [{ id: 'tt0000001', t: 'A', k: 'series', s: 6 }, { id: 'tt0000002', t: 'B', k: 'anime', s: 9, n: 'не мені', p: 0, l: ['Нові'] }] };
+  const rows = f => friendTable({ entries: [], friends: [f], replies: {}, recs }).rows.map(r => r.id).sort();
+  assert.deepEqual(rows(F('oleh', { follow: true })), ['tt0000001']);
+  assert.deepEqual(rows(F('oleh', { follow: true, lists: ['Нові'] })), ['tt0000001', 'tt0000002']);
+});
+test('needsKeep: коли на сторінці друга потрібна кнопка «Запам’ятати»', () => {
+  assert.equal(needsKeep(null, ''), true);                                      // ще не друг
+  assert.equal(needsKeep(F('oleh'), ''), true);                                 // додався сам, бо відповів
+  assert.equal(needsKeep(F('oleh', { follow: true }), ''), false);
+  assert.equal(needsKeep(F('oleh', { follow: true }), 'Нові'), true);           // цієї добірки ще не запам'ятали
+  assert.equal(needsKeep(F('oleh', { follow: true, lists: ['Нові'] }), 'Нові'), false);
+  assert.equal(needsKeep(cleanFriend({ id: 's00000001', kind: 'snap', items: [] }), 'Нові'), false);
 });
 test('friendTable: id «constructor» і «toString» не ламають зведення', () => {
   const snap = cleanFriend({ id: 'toString', kind: 'snap', name: 'Знімок', follow: true, added: 2, items: [{ id: 'tt0000003', t: 'C', k: 'movie', s: 7 }] });

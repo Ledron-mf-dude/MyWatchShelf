@@ -534,3 +534,21 @@ button.more .ic{width:16px; height:16px}
   .fr-c{min-width:84px; max-width:120px}
   .fr-n{display:block}
 }
+
+/* розділ «Рекомендації» */
+.sh-note{max-width:70ch; margin-bottom:18px}
+.sh-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; padding-bottom:40px}
+.sh-card{display:grid; gap:12px; align-content:start; padding:18px; border:1px solid var(--line); border-radius:16px; background:var(--surface)}
+.sh-card header{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.sh-card h2{display:flex; align-items:center; gap:8px; font-size:18px; font-weight:800; min-width:0; overflow-wrap:anywhere}
+.sh-card h2 .ic{flex:none; width:18px; height:18px; color:var(--accent)}
+.sh-card p .ic{width:14px; height:14px; vertical-align:-2px}
+.sh-card .hero-act{flex-wrap:wrap}
+.sh-card .share-strip{overflow:hidden}
+/* сім розділів у шапці: на вужчому екрані стискаємо пошук і відступи, щоб нічого не вилазило */
+.searchbtn{min-width:40px}
+@media (min-width:1001px) and (max-width:1300px){
+  .nav a{padding:8px 10px}
+  .addbtn span{display:none}
+  .searchbtn kbd{display:none}
+}

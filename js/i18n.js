@@ -214,6 +214,18 @@ const D = {
   'reply.others': ['Friends’ scores', 'Оцінки друзів'], 'reply.anon': ['A friend', 'Друг'],
   // екран «Друзі»
   'nav.friends': ['Friends', 'Друзі'],
+  'nav.share': ['Recommendations', 'Рекомендації'],
+  'sh.note': ['Everything you share lives here. Each card has its own link: a friend sees only that list and can rate the titles in it.', 'Тут усе, чим ти ділишся. Кожна картка має власне посилання: друг бачить лише цей список і може оцінити тайтли в ньому.'],
+  'sh.general.text': ['Everything marked “Add to recommendations”.', 'Усе, що позначено «Додати в рекомендації».'],
+  'sh.general.empty': ['Nothing yet: open a title and turn on “Add to recommendations”.', 'Поки порожньо: відкрий запис і ввімкни «Додати в рекомендації».'],
+  'sh.manual': ['Picked by hand', 'Зібрано вручну'], 'sh.share': ['Share', 'Поділитись'],
+  'sh.copied.snap': ['Link copied. It is a snapshot — sign in to get a link that updates and lets friends rate.', 'Посилання скопійовано. Це знімок — увійди, щоб посилання оновлювалось і друзі могли оцінювати.'],
+  'sh.drop': ['Delete collection', 'Видалити добірку'],
+  'sh.drop.title': ['Delete “{name}”?', 'Видалити «{name}»?'],
+  'sh.drop.text': ['The collection and its link stop working. The {n} titles in it stay on your shelf.', 'Добірка та її посилання перестануть працювати. Записи з неї ({n}) лишаться на полиці.'],
+  'sh.dropped': ['“{name}” deleted', '«{name}» видалено'],
+  'sh.empty.title': ['Nothing to share yet', 'Ділитись поки нічим'],
+  'sh.empty.text': ['Build a collection — by conditions (only anime, only new, anime and series) or by hand — and send its link to a friend. They will be able to put their score next to yours.', 'Збери добірку — за умовами (лише аніме, лише нове, аніме й серіали) або вручну — і надішли посилання другові. Він зможе поставити свою оцінку поруч із твоєю.'],
   'fr.all': ['Everyone', 'Усі'], 'fr.title': ['Title', 'Тайтл'], 'fr.me': ['Me', 'Я'], 'fr.avg': ['Avg', 'Сер.'],
   'fr.rec': ['Recommended by them', 'Радить'], 'fr.none': ['Nothing matches this filter', 'За цим фільтром нічого немає'],
   'fr.empty.title': ['No friends’ scores yet', 'Оцінок друзів ще немає'],
@@ -278,6 +290,7 @@ export function t(key, vars) {
 const P = {
   entry: [['title', 'titles'], ['запис', 'записи', 'записів']],
   title: [['title', 'titles'], ['тайтл', 'тайтли', 'тайтлів']],
+  coll: [['collection', 'collections'], ['добірка', 'добірки', 'добірок']],
   season: [['season', 'seasons'], ['сезон', 'сезони', 'сезонів']],
   episode: [['episode', 'episodes'], ['серія', 'серії', 'серій']],
 };

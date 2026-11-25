@@ -12,11 +12,12 @@ import {
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
 import { replyActions, friendActions, loadReplyState, social, renderFriends } from './friends.js';
+import { renderShare, shareActions } from './shared.js';
 
 const S = store.settings;
-const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['friends', 'user'], ['discover', 'compass'], ['stats', 'chart']];
-// на телефоні внизу лишається чотири розділи й «+»; календар і друзі — з меню акаунта
-const TABS = NAV.filter(n => !['calendar', 'friends'].includes(n[0]));
+const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['friends', 'user'], ['share', 'share'], ['discover', 'compass'], ['stats', 'chart']];
+// на телефоні внизу лишається чотири розділи й «+»; календар, друзі й рекомендації — з меню акаунта
+const TABS = NAV.filter(n => !['calendar', 'friends', 'share'].includes(n[0]));
 const top = $('#top'), tabs = $('#tabs');
 // Знак: кадр кіноплівки з кнопкою відтворення.
 const LOGO = `<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
@@ -67,7 +68,7 @@ function toggleMenu(force) {
   if (!menu) return;
   const open = force ?? menu.hidden;
   if (open) {
-    const u = cloud.user, nRec = store.list().filter(e => e.rec).length;
+    const u = cloud.user, nShare = store.list().filter(e => e.rec || e.lists?.length).length;
     menu.innerHTML = `
       ${cloud.available ? (u
         ? `<div class="who"><span class="avatar lg">${initial(u)}</span><div><b>${esc(u.name || t('menu.google'))}</b><small>${esc(u.email)}</small><em class="st-${cloud.state}"><i class="state"></i>${stateText()}</em></div></div>`
@@ -76,9 +77,9 @@ function toggleMenu(force) {
       <hr>
       <button data-act="go" data-v="calendar">${icon('calendar')}${t('nav.calendar')}</button>
       <button data-act="go" data-v="friends" class="${social.unseen() ? 'fnew' : ''}">${icon('user')}${t('nav.friends')}</button>
+      <button data-act="go" data-v="share">${icon('share')}${t('nav.share')}<small>${nShare}</small></button>
       <button data-act="tonight">${icon('dice')}${t('pick.title')}</button>
       <hr>
-      <button data-act="share">${icon('share')}${t('menu.share')}<small>${nRec}</small></button>
       <button data-act="name">${icon('user')}${t('menu.name')}<small>${esc(S.name || t('not.set'))}</small></button>
       <hr>
       <button data-act="lang">${icon('globe')}${t('menu.lang')}<small>${LANGS.find(l => l[0] === getLang())[1]}</small></button>
@@ -92,7 +93,7 @@ function toggleMenu(force) {
 }
 
 // ── маршрути ──────────────────────────────────────────────────────
-const RENDER = { home: renderHome, library: renderLibrary, calendar: renderCalendar, friends: renderFriends, discover: renderDiscover, stats: renderStats, recs: renderRecs };
+const RENDER = { home: renderHome, library: renderLibrary, calendar: renderCalendar, friends: renderFriends, share: renderShare, discover: renderDiscover, stats: renderStats, recs: renderRecs };
 function draw() { RENDER[view.route](); paintDot(); }
 // Крапка «нове» на пункті «Друзі» й на кнопці акаунта (на телефоні пункт лише в меню).
 function paintDot() {
@@ -166,7 +167,7 @@ function importFile() {
 const idOf = el => el.closest('[data-id]')?.dataset.id || ui.overlay?.id;
 
 on({
-  ...cardActions, ...buildActions, ...pickActions, ...wrapActions, ...replyActions, ...friendActions,
+  ...cardActions, ...buildActions, ...pickActions, ...wrapActions, ...replyActions, ...friendActions, ...shareActions,
   go: v => { location.hash = '#/' + v; },
   'sel-toggle': (v, el) => {
     const pop = $('.pop', el.closest('.dd')), open = pop.hidden;

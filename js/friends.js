@@ -397,7 +397,7 @@ export function renderFriends() {
     <span class="grow"></span><button class="btn" data-act="fr-manage">${icon('user')}${t('fr.manage')}</button></header>`;
   if (!tb.rows.length) {
     app.innerHTML = `${head}<div class="empty">${icon('user')}<b>${t('fr.empty.title')}</b><p>${t('fr.empty.text')}</p>
-      <button class="btn primary" data-act="share">${icon('share')}${t('menu.share')}</button></div>`;
+      <button class="btn primary" data-act="go" data-v="share">${icon('share')}${t('nav.share')}</button></div>`;
     return;
   }
   app.innerHTML = `${head}

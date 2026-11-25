@@ -415,19 +415,28 @@ export const dropUrl = () => { ui.overlay.url = ''; palNote(); };
 
 // ── поширення рекомендацій ────────────────────────────────────────
 // list — назва добірки; порожньо — загальні рекомендації.
-export async function openShare(list = '') {
-  const all = store.list(), names = listNames(all);
-  const byScore = (a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, getLang());
-  const pool = l => (l ? all.filter(e => (e.lists || []).includes(l)) : all.filter(e => e.rec));
-  if (!list && !pool('').length && names.length) list = names[0];
-  const items = pool(list).sort(byScore).map(recItem);
-  if (!items.length) return toast(t('share.none'), { ms: 4200 });
+// Що потрапляє за посиланням: записи добірки або (list порожній) усе з позначкою «раджу».
+export const sharePool = (all, l) => (l ? all.filter(e => (e.lists || []).includes(l)) : all.filter(e => e.rec));
+const byScore = (a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, getLang());
+// Посилання на список: живе (з входом) або знімок у самому посиланні.
+export async function shareLink(list = '') {
+  const items = sharePool(store.list(), list).sort(byScore).map(recItem);
+  if (!items.length) return null;
   const base = location.origin + location.pathname;
   let link, live = false;
   if (cloud.user) {
     try { await cloud.publishNow(); link = `${base}#u=${cloud.user.uid}${list ? '&l=' + encodeURIComponent(list) : ''}`; live = true; } catch { /* нижче — знімок */ }
   }
   link ??= `${base}#r=${await encodeRecs(S.name, items, list)}`;
+  return { link, live, items };
+}
+export async function openShare(list = '') {
+  const all = store.list(), names = listNames(all);
+  const pool = l => sharePool(all, l);
+  if (!list && !pool('').length && names.length) list = names[0];
+  const sl = await shareLink(list);
+  if (!sl) return toast(t('share.none'), { ms: 4200 });
+  const { link, live, items } = sl;
   const tab = (l, label, n) => `<button class="chip ${l === list ? 'on' : ''}" data-act="share-list" data-v="${esc(l)}">${l ? icon('folder') : icon('starFill')}${esc(label)}<small>${n}</small></button>`;
   showOverlay({ type: 'share', link, list }, `
     <div class="palette narrow" role="dialog" aria-label="${t('menu.share')}">

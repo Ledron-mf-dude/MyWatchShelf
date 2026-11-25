@@ -21,7 +21,8 @@ const tomb = r => (typeof r.id === 'string' && r.id ? { id: r.id, deleted: true,
 // clean — функція очищення запису: усе, що прийшло з хмари, посилання чи
 // localStorage, проходить крізь неї; null — запис відкинуто.
 export function makeSynced(name, clean) {
-  const cleanRec = r => (r?.deleted ? tomb(r) : clean(r));
+  // «__proto__» як ключ мапи записів задав би прототип замість запису.
+  const cleanRec = r => (r?.id === '__proto__' ? null : r?.deleted ? tomb(r) : clean(r));
   const KEY = `mws.${name}.v1`;
   let recs = {};
   for (const r of Object.values(load(KEY))) {
@@ -40,6 +41,7 @@ export function makeSynced(name, clean) {
     list: () => Object.values(recs).filter(r => !r.deleted),
     get: id => (recs[id] && !recs[id].deleted ? recs[id] : null),
     save(id, patch) {
+      if (id === '__proto__') return null;
       const next = clean({ ...(recs[id] && !recs[id].deleted ? recs[id] : {}), ...patch, id, updated: Date.now() });
       if (!next) return null;
       recs[id] = next; save(); emit(); emitLocal(next);
@@ -48,6 +50,7 @@ export function makeSynced(name, clean) {
     // Видалене лишається міткою: інакше стара копія на іншому пристрої
     // воскресила б викинутий запис.
     remove(id) {
+      if (id === '__proto__') return;
       const next = { id, deleted: true, updated: Date.now() };
       recs[id] = next; save(); emit(); emitLocal(next);
     },

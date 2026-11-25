@@ -116,8 +116,10 @@ export function cleanPrefs(r) {
 // чужого списку з посилання (kind 'snap', items — очищений масив). Мітки
 // видалення ідуть повз очищення (synced.js).
 export function cleanFriend(r) {
-  const id = typeof r?.id === 'string' ? r.id.trim().slice(0, 128) : '';
-  if (!id) return null;
+  // uid Firebase і id знімка вкладаються в цей шаблон; службові слова не
+  // ловимо поіменно, а читаємо мапи лише через own-перевірку (own нижче).
+  const id = typeof r?.id === 'string' ? r.id : '';
+  if (!/^[\w-]{1,128}$/.test(id) || id === '__proto__') return null;
   const snap = r.kind === 'snap';
   const num = v => (Number.isFinite(v) ? v : 0);
   const out = {
@@ -140,27 +142,34 @@ export function snapId(name, items) {
 
 // Живі друзі за порядком додавання; `friends` — raw() сховища, тож мітки
 // видалення відсіюємо тут.
-const liveFriends = friends => friends.filter(f => !f.deleted).sort((a, b) => a.added - b.added);
+// Рівні `added` розв'язує id, щоб зріз до 100 був однаковий на всіх пристроях.
+const liveFriends = friends => friends.filter(f => !f.deleted).sort((a, b) => a.added - b.added || a.id.localeCompare(b.id));
+// replies і recs — звичайні об'єкти з id друга як ключем: «constructor» чи
+// «toString» не повинні читатися з прототипа.
+const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
 
 // Таблиця «тайтл × друзі». Оцінка з відповіді друга важить більше за його
 // рекомендацію; рекомендації читаємо лише в тих, за ким стежимо (або зі знімка).
 export function friendTable({ entries, friends, replies, recs }) {
   const all = liveFriends(friends), shown = all.slice(0, FRIENDS_MAX);
   const mine = new Map(entries.map(e => [e.id, e]));
-  const cols = shown.map(f => ({ id: f.id, name: replies[f.uid]?.name || f.name }));
+  const cols = shown.map(f => ({ id: f.id, name: own(replies, f.uid)?.name || f.name }));
   const rows = new Map();
   for (const f of shown) {
-    const reply = f.kind === 'live' ? replies[f.uid]?.items || {} : {};
-    const rec = new Map(f.follow || f.kind === 'snap' ? (recs[f.id] ?? f.items ?? []).map(x => [x.id, x]) : []);
+    const reply = f.kind === 'live' ? own(replies, f.uid)?.items || {} : {};
+    const rec = new Map(f.follow || f.kind === 'snap' ? (own(recs, f.id) ?? f.items ?? []).map(x => [x.id, x]) : []);
     for (const id of new Set([...Object.keys(reply), ...rec.keys()])) {
       const a = reply[id], b = rec.get(id), e = mine.get(id), src = a || b;
-      const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || 0, have: !!e, cells: {}, avg: 0, n: 0 };
-      row.cells[f.id] = { s: a?.s || b?.s || 0, n: a?.n || b?.n || '', rec: !!b };
+      const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || 0, have: !!e, cells: new Map(), avg: 0, n: 0 };
+      const cells = row.cells;
+      // Відповідь без оцінки, але з текстом: оцінка — з рекомендації, коментар лишається (так задумано).
+      cells.set(f.id, { s: a?.s || b?.s || 0, n: a?.n || b?.n || '', rec: !!b });
       rows.set(id, row);
     }
   }
   for (const r of rows.values()) {
-    const sc = Object.values(r.cells).map(c => c.s).filter(s => s > 0);
+    const sc = [...r.cells.values()].map(c => c.s).filter(s => s > 0);
+    r.cells = Object.fromEntries(r.cells);   // для виклику — звичайний об'єкт; ключ «__proto__» відсіяв cleanFriend
     r.n = sc.length;
     r.avg = sc.length ? Math.round(sc.reduce((a, s) => a + s, 0) / sc.length * 10) / 10 : 0;
   }
@@ -176,7 +185,7 @@ export function newReplyAuthors(friends, replies) {
 
 // Скільки видимих друзів відповіли після останнього перегляду таблиці.
 export const unseenCount = (table, replies, seenAt) =>
-  table.cols.filter(c => (replies[c.id]?.updated || 0) > seenAt).length;
+  table.cols.filter(c => (own(replies, c.id)?.updated || 0) > seenAt).length;
 
 // uid потрапляє в шлях Firestore: пропускаємо лише звичайні ідентифікатори.
 export const isUid = v => typeof v === 'string' && /^[\w-]{1,128}$/.test(v);

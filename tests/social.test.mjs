@@ -185,3 +185,59 @@ test('replyDoc: підпис завжди заданий, чужого імен�
   assert.deepEqual(Object.keys(d.items), ['tt0000001']);
   assert.equal(replyDoc({ items: {} }, 'x'.repeat(100), 1).name.length, 80);
 });
+
+test('cleanFriend: службові слова й сміття як ідентифікатор', () => {
+  assert.equal(cleanFriend({ id: '__proto__', uid: '__proto__', kind: 'live' }), null);
+  assert.equal(cleanFriend({ id: 'a b' }), null);
+  assert.equal(cleanFriend({ id: 'a/b' }), null);
+  assert.equal(cleanFriend({ id: 'x'.repeat(129) }), null);
+  assert.equal(cleanFriend({ id: 'constructor' }).id, 'constructor');
+});
+test('friendTable: id «constructor» і «toString» не ламають зведення', () => {
+  const snap = cleanFriend({ id: 'toString', kind: 'snap', name: 'Знімок', follow: true, added: 2, items: [{ id: 'tt0000003', t: 'C', k: 'movie', s: 7 }] });
+  const tb = friendTable({
+    entries: [],
+    friends: [F('constructor', { follow: true, name: 'Свій' }), snap],
+    replies: {},
+    recs: {},
+  });
+  assert.deepEqual(tb.cols.map(c => c.name), ['Свій', 'Знімок']);
+  assert.equal(tb.rows.length, 1);
+  assert.deepEqual(tb.rows[0].cells.toString, { s: 7, n: '', rec: true });
+  const tb2 = friendTable({
+    entries: [], friends: [F('constructor', { follow: true, name: 'Свій' }), F('valueOf', { name: 'Інший' })],
+    replies: { valueOf: R('Ім', { tt0000001: { s: 6, t: 'A' } }) },
+    recs: { constructor: [{ id: 'tt0000001', t: 'A', k: 'series', s: 8 }] },
+  });
+  assert.deepEqual(tb2.cols.map(c => c.name), ['Свій', 'Ім']);
+  assert.equal(tb2.rows[0].avg, 7); assert.equal(tb2.rows[0].n, 2);
+  assert.equal(unseenCount(tb2, {}, 0), 0);
+});
+test('friendTable: однаковий added розрізняє id; чужа відповідь без запису — без стовпця', () => {
+  const many = Array.from({ length: 102 }, (_, i) => F('u' + String(i).padStart(3, '0'), { added: 1 }));
+  const a = friendTable({ entries: [], friends: many, replies: {}, recs: {} });
+  const b = friendTable({ entries: [], friends: [...many].reverse(), replies: {}, recs: {} });
+  assert.deepEqual(a.cols, b.cols);
+  const st = friendTable({ entries: [], friends: [], replies: { x: R('Хтось', { tt0000001: { s: 5 } }) }, recs: {} });
+  assert.equal(st.cols.length, 0); assert.equal(st.rows.length, 0);
+});
+test('friendTable: знімок і відповідь лише з коментарем', () => {
+  const snap = cleanFriend({ id: 's00000001', kind: 'snap', name: 'Знімок', items: [{ id: 'tt0000005', t: 'E', k: 'anime', s: 9 }] });
+  const tb = friendTable({ entries: [], friends: [snap], replies: {}, recs: {} });
+  assert.deepEqual(tb.rows[0].cells.s00000001, { s: 9, n: '', rec: true });
+  // відповідь без оцінки, але з текстом: оцінка — з рекомендації, коментар лишається
+  const c = friendTable({
+    entries: [], friends: [F('oleh', { follow: true })],
+    replies: { oleh: R('Олег', { tt0000001: { s: 0, n: 'текст', t: 'A' } }) },
+    recs: { oleh: [{ id: 'tt0000001', t: 'A', k: 'series', s: 6 }] },
+  });
+  assert.deepEqual(c.rows[0].cells.oleh, { s: 6, n: 'текст', rec: true });
+});
+test('synced: id __proto__ відкидається скрізь', () => {
+  const s = makeSynced('t3', r => (typeof r?.id === 'string' ? r : null));
+  assert.equal(s.save('__proto__', { v: 1 }), null);
+  assert.equal(s.applyRemote([{ id: '__proto__', v: 1 }, { id: '__proto__', deleted: true }]), false);
+  s.remove('__proto__');
+  assert.equal(s.raw().length, 0);
+  assert.equal({}.v, undefined);
+});

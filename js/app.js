@@ -8,7 +8,7 @@ import * as catalog from './meta.js';
 import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
 import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl, palKind,
-  cardActions, loadDemo,
+  cardActions, buildActions, loadDemo,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
 
@@ -152,7 +152,7 @@ function importFile() {
 const idOf = el => el.closest('[data-id]')?.dataset.id || ui.overlay?.id;
 
 on({
-  ...cardActions, ...pickActions, ...wrapActions,
+  ...cardActions, ...buildActions, ...pickActions, ...wrapActions,
   go: v => { location.hash = '#/' + v; },
   'sel-toggle': (v, el) => {
     const pop = $('.pop', el.closest('.dd')), open = pop.hidden;

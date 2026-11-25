@@ -2,11 +2,13 @@
 // з каталогу, пошук-палітра та діалог поширення рекомендацій.
 import {
   STATUS_IDS, KIND_IDS, statusLabel, kindLabel, esc, safeUrl, backdrop, fmtRating, fmtScore, fmtRuntime, genreName,
-  parseInput, nextEpisode, progressText, progressPct, seasonTotal, episodesWatched, episodesTotal, recItem, encodeRecs, filterSort, listNames,
+  parseInput, nextEpisode, progressText, progressPct, seasonTotal, episodesWatched, episodesTotal, recItem, encodeRecs, filterSort, listNames, insights,
 } from './logic.js';
 import { t, tn, getLang } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
+import { listdefs, defId } from './synced.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, LISTS_MAX, PUBLIC_MAX } from './social.js';
 import { cloud } from './cloud.js';
 import { $, layer, icon, ph, toast, ui, showOverlay, closeOverlay, remember, recall, confirmBox, promptBox } from './ui.js';
 import { view } from './views.js';
@@ -432,12 +434,137 @@ export async function openShare(list = '') {
         <div class="hero-act">
           <button class="btn primary" data-act="copy">${icon('link')}${t('copy')}</button>
           ${navigator.share ? `<button class="btn" data-act="native-share">${icon('share')}${t('send')}</button>` : ''}
+          <button class="btn" data-act="list-build">${icon('filter')}${t('build.btn')}</button>
+          ${list && listdefs.get(defId(list)) ? `<button class="btn" data-act="list-rebuild" data-v="${esc(list)}">${icon('refresh')}${t('rebuild.btn')}</button>` : ''}
           <a class="btn" href="${esc(link)}" target="_blank" rel="noopener">${icon('external')}${t('share.preview')}</a>
         </div>
         <p class="muted small">${t('share.privacy')}${S.name ? ' ' + t('share.signed', { name: esc(S.name) }) : ''}</p>
       </div>
     </div>`);
 }
+
+// ── збирання добірки за умовами ───────────────────────────────────
+// Умови лежать у o.f (завжди крізь cleanListFilter). Зміна умов ставить
+// галочки на всьому знайденому, а порожні умови — це ручний вибір без галочок.
+const buildFound = f => filterSort(store.list(), f, 'score', -1);
+
+export function openBuild() {
+  showOverlay({ type: 'build', f: cleanListFilter({}), picked: new Set(), touched: false, name: '' },
+    `<div class="palette" role="dialog" aria-label="${t('build.title')}"></div>`);
+  drawBuild();
+}
+function drawBuild() {
+  const o = ui.overlay;
+  if (o?.type !== 'build') return;
+  const f = o.f, manual = isEmptyFilter(f), list = buildFound(f);
+  const genres = insights(store.list()).genres.slice(0, 6).map(g => g[0]);
+  const chip = (k, v, label, on) => `<button class="chip ${on ? 'on' : ''}" data-act="build-set" data-v="${k}:${esc(v)}" aria-pressed="${on}">${label}</button>`;
+  const year = (k, key) => `<input class="inp" type="text" inputmode="numeric" maxlength="4" data-build-year="${k}" placeholder="${t(key)}" aria-label="${t(key)}" value="${esc(f[k])}">`;
+  const picked = [...o.picked].filter(id => store.get(id)).length;
+  const scroll = $('.build-body', layer)?.scrollTop || 0;
+  $('.palette', layer).innerHTML = `
+    <div class="pal-head"><h2>${t('build.title')}</h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
+    <div class="build">
+      <div class="build-body">
+        <div class="build-f">
+          <div><b>${t('type')}</b>${KIND_IDS.map(k => chip('kinds', k, t('kinds.' + k), f.kinds.includes(k))).join('')}</div>
+          <div><b>${t('build.status')}</b>${['all', ...STATUS_IDS].map(v => chip('status', v, v === 'all' ? t('all.statuses') : statusLabel(v), f.status === v)).join('')}</div>
+          ${genres.length ? `<div><b>${t('genres')}</b>${genres.map(g => chip('genres', g, esc(genreName(g)), f.genres.includes(g))).join('')}</div>` : ''}
+          <div><b>${t('year')}</b>${year('from', 'year.from')}${year('to', 'year.to')}<small class="muted">${t('build.years.hint')}</small></div>
+          <div><b>${t('card.score')}</b>${[7, 8, 9].map(n => chip('mine', n, t('mine.min', { n }), f.mine === String(n))).join('')}</div>
+        </div>
+        ${manual ? `<p class="muted small">${t('build.manual')}</p>` : ''}
+        ${list.length ? `<div class="build-list">${list.map(e => {
+          const on = o.picked.has(e.id);
+          return `<div class="res" role="checkbox" aria-checked="${on}" tabindex="0" data-act="build-tick" data-v="${esc(e.id)}">
+            <span class="tick ${on ? 'on' : ''}">${on ? icon('check') : ''}</span>${ph(e.id, e.title, 'small')}
+            <div class="row-main"><div class="row-title"><b>${esc(e.title)}</b></div>
+              <div class="row-sub">${esc([e.year, kindLabel(e.kind)].filter(Boolean).join(' · '))}</div></div>
+            ${e.score ? `<span class="badge static score">${fmtScore(e.score)}</span>` : ''}</div>`;
+        }).join('')}</div>` : `<p class="muted pad">${t('build.none')}</p>`}
+      </div>
+      <div class="build-foot">
+        <span class="muted small">${t('build.picked', { n: picked })}</span>
+        <div class="build-save"><input class="inp" type="text" maxlength="40" data-build-name placeholder="${t('build.name.ph')}" aria-label="${t('build.name.ph')}" value="${esc(o.name)}">
+          <button class="btn primary" data-act="build-save">${t('build.save')}</button></div>
+        <p class="muted small">${t('lists.note')}</p>
+      </div>
+    </div>`;
+  $('.build-body', layer).scrollTop = scroll;
+}
+layer.addEventListener('input', ev => {
+  if (ui.overlay?.type === 'build' && ev.target.matches('[data-build-name]')) ui.overlay.name = ev.target.value;
+});
+// Рік застосовуємо, коли поле віддали (change), а не на кожну літеру.
+layer.addEventListener('change', ev => {
+  if (ui.overlay?.type === 'build' && ev.target.matches('[data-build-year]')) buildSet(`${ev.target.dataset.buildYear}:${ev.target.value.trim()}`);
+});
+function buildSet(v) {
+  const o = ui.overlay;
+  if (o?.type !== 'build') return;
+  const i = v.indexOf(':'), k = v.slice(0, i), x = v.slice(i + 1), f = o.f;
+  const flip = a => (a.includes(x) ? a.filter(y => y !== x) : [...a, x]);
+  o.f = cleanListFilter({
+    ...f,
+    ...(k === 'kinds' || k === 'genres' ? { [k]: flip(f[k]) }
+      : k === 'status' || k === 'mine' ? { [k]: f[k] === x ? (k === 'status' ? 'all' : '') : x }
+        : { [k]: x }),
+  });
+  o.picked = new Set(isEmptyFilter(o.f) ? [] : buildFound(o.f).map(e => e.id));
+  o.touched = false;
+  drawBuild();
+}
+function buildTick(id) {
+  const o = ui.overlay;
+  if (o?.type !== 'build') return;
+  if (!o.picked.delete(id)) o.picked.add(id);
+  o.touched = true;
+  drawBuild();
+}
+function buildSave() {
+  const o = ui.overlay;
+  if (o?.type !== 'build') return;
+  const name = o.name.trim().slice(0, 40), rows = [...o.picked].map(id => store.get(id)).filter(Boolean);
+  if (!name) return toast(t('build.err.name'));
+  if (!rows.length) return toast(t('build.err.pick'));
+  const todo = rows.filter(e => !(e.lists || []).includes(name));
+  const room = todo.filter(e => (e.lists || []).length < LISTS_MAX);
+  const over = publicOver(store.list(), room.map(e => e.id));
+  if (over > 0) return toast(t('build.over', { n: over, max: PUBLIC_MAX }), { ms: 4500 });
+  room.forEach(e => store.save(e.id, { lists: [...(e.lists || []), name] }));
+  if (todo.length > room.length) toast(t('build.skipped', { n: todo.length - room.length }), { ms: 4000 });
+  // порожні умови — ручний вибір, переформовувати нічим; без жодної мітки добірки теж нема
+  if (!isEmptyFilter(o.f) && listNames(store.list()).includes(name)) listdefs.save(defId(name), { name, f: o.f });
+  openShare(name);
+}
+
+// «Сформувати знову»: порівняти полицю з умовами добірки й оновити мітки.
+async function rebuild(name) {
+  const def = listdefs.get(defId(name));
+  if (!def) return;
+  const d = listDiff(store.list(), name, def.f);
+  if (!d.add.length && !d.drop.length) return toast(t('rebuild.none'));
+  const over = publicOver(store.list(), d.add.map(e => e.id));
+  if (over > 0) return toast(t('build.over', { n: over, max: PUBLIC_MAX }), { ms: 4500 });
+  const ok = await confirmBox({
+    title: t('rebuild.title', { name }),
+    text: t('rebuild.text', { a: d.add.length, d: d.drop.length }) + (d.skip.length ? ' ' + t('rebuild.skip', { n: d.skip.length }) : ''),
+    ok: t('rebuild.btn'),
+  });
+  if (!ok) return;
+  for (const e of d.add) { const c = store.get(e.id); if (c) store.save(c.id, { lists: [...new Set([...(c.lists || []), name])] }); }
+  for (const e of d.drop) { const c = store.get(e.id); if (c) store.save(c.id, { lists: (c.lists || []).filter(l => l !== name) }); }
+  // якщо мітку зняли з усіх, добірки вже нема — показуємо загальний вигляд
+  openShare(listNames(store.list()).includes(name) ? name : '');
+}
+
+export const buildActions = { 'list-build': openBuild, 'build-set': buildSet, 'build-tick': buildTick, 'build-save': buildSave, 'list-rebuild': rebuild };
+
+// Остання мітка добірки знята (в картці чи тут) — її умови більше нічого не значать.
+store.onChange(() => {
+  const names = new Set(listNames(store.list()));
+  for (const d of listdefs.list()) if (!names.has(d.name)) listdefs.remove(d.id);
+});
 
 // ── показ на прикладі ─────────────────────────────────────────────
 const DEMO = [

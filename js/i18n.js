@@ -236,6 +236,7 @@ const D = {
   'toast.reply.fail': ['Could not save your score ({e})', 'Не вдалося зберегти оцінку ({e})'],
   'toast.reply.offline': ['No connection — rating not saved', 'Немає зʼєднання — оцінку не збережено'],
   'toast.reply.sent': ['Scores sent: {n}', 'Надіслано оцінок: {n}'],
+  'toast.syncing': ['Still syncing — try again in a moment', 'Ще синхронізується — спробуй за мить'],
   // збирання добірки за умовами
   'build.btn': ['Build a list', 'Зібрати список'], 'build.status': ['Status', 'Статус'], 'build.title': ['Build a collection', 'Зібрати добірку'],
   'build.years.hint': ['A single year means exactly that year.', 'Один рік — це саме той рік.'],

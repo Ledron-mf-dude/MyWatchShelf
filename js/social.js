@@ -108,12 +108,26 @@ export function shelfScores(entries, items) {
 // Значення лежить у localStorage, тож перевіряємо і при записі, і при читанні.
 export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^#&]{1,400})?$/.test(h) ? h : '');
 
-// Запис сховища prefs: єдиний запис 'social' — чи відкриті оцінки друзям і
-// коли власник востаннє дивився відповіді. Мітки видалення йдуть повз очищення.
+// Записи сховища prefs: 'social' — чи відкриті оцінки друзям, 'seen' — коли
+// власник востаннє дивився відповіді. Окремо, бо запис цілком замінюється
+// свіжішим: позначка «бачив» зі старого пристрою тягла б за собою і старий
+// перемикач приватності. Мітки видалення йдуть повз очищення.
 export function cleanPrefs(r, now = Date.now()) {
+  const updated = Number.isFinite(r?.updated) ? r.updated : 0;
+  if (r?.id === 'seen') return { id: 'seen', seenAt: stamp(r.seenAt, now), updated };
   if (r?.id !== 'social') return null;
-  return { id: 'social', open: !!r.open, seenAt: stamp(r.seenAt, now), updated: Number.isFinite(r.updated) ? r.updated : 0 };
+  // Раніше seenAt жив тут же: уже збережене значення лишаємо, щоб seenAtOf міг
+  // його прочитати; нового сюди ніхто не пише.
+  const old = stamp(r.seenAt, now);
+  return { id: 'social', open: !!r.open, ...(old ? { seenAt: old } : {}), updated };
 }
+// Позначка «бачив»: власний запис, а поки його немає — стара з 'social'.
+export const seenAtOf = (seen, social) => (seen ? seen.seenAt : social?.seenAt) || 0;
+
+// Чи можна писати в синхронізоване сховище: без входу воно лише локальне, а з
+// входом — тільки коли хмара вже віддала свій стан. Інакше запис із порожнього
+// чи застарілого пристрою виграв би за часом і затер справжній.
+export const canWrite = (signedIn, synced) => !signedIn || !!synced;
 
 // ── друзі ─────────────────────────────────────────────────────────
 // Запис сховища friends: живий друг (kind 'live', id === uid) або знімок

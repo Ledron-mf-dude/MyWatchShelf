@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc, recsMissing } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyDoc, recsMissing, seenAtOf, canWrite } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -120,12 +120,29 @@ test('returnHash відкидає задовгі й нерядкові знач�
   assert.equal(returnHash('#u=abc&l=' + 'x'.repeat(400)), '#u=abc&l=' + 'x'.repeat(400));
   assert.equal(returnHash(null), '');
 });
-test('cleanPrefs лишає лише відомі поля й приводить типи', () => {
-  assert.deepEqual(cleanPrefs({ id: 'social', open: 1, seenAt: 5, updated: 7, junk: 'x' }), { id: 'social', open: true, seenAt: 5, updated: 7 });
-  assert.deepEqual(cleanPrefs({ id: 'social', open: 'так', seenAt: 'abc' }), { id: 'social', open: true, seenAt: 0, updated: 0 });
+test('cleanPrefs: два записи, кожен лише зі своїм полем', () => {
+  assert.deepEqual(cleanPrefs({ id: 'social', open: 1, updated: 7, junk: 'x' }), { id: 'social', open: true, updated: 7 });
+  assert.deepEqual(cleanPrefs({ id: 'social', open: 'так', seenAt: 'abc' }), { id: 'social', open: true, updated: 0 });
   assert.equal(cleanPrefs({ id: 'social', open: 0 }).open, false);
+  assert.deepEqual(cleanPrefs({ id: 'seen', seenAt: 5, open: true, updated: 7, junk: 1 }), { id: 'seen', seenAt: 5, updated: 7 });
+  assert.deepEqual(cleanPrefs({ id: 'seen', seenAt: 'abc' }), { id: 'seen', seenAt: 0, updated: 0 });
   assert.equal(cleanPrefs({ id: 'other', open: true }), null);
+  assert.equal(cleanPrefs({ id: 'constructor' }), null);
   assert.equal(cleanPrefs(null), null);
+  // запис старої форми: seenAt у social лишається лише щоб його можна було прочитати
+  assert.deepEqual(cleanPrefs({ id: 'social', open: 0, seenAt: 5, updated: 7 }), { id: 'social', open: false, seenAt: 5, updated: 7 });
+});
+test('seenAtOf: власний запис seen, а без нього — стара позначка з social', () => {
+  assert.equal(seenAtOf({ id: 'seen', seenAt: 9 }, { id: 'social', seenAt: 5 }), 9);
+  assert.equal(seenAtOf({ id: 'seen', seenAt: 0 }, { id: 'social', seenAt: 5 }), 0);
+  assert.equal(seenAtOf(null, { id: 'social', open: true, seenAt: 5 }), 5);
+  assert.equal(seenAtOf(null, { id: 'social', open: true }), 0);
+  assert.equal(seenAtOf(null, null), 0);
+});
+test('canWrite: без входу — завжди, з входом — лише після першої синхронізації', () => {
+  assert.equal(canWrite(false, false), true);
+  assert.equal(canWrite(true, false), false);
+  assert.equal(canWrite(true, true), true);
 });
 
 const F = (id, o = {}) => cleanFriend({ id, uid: id, name: id, kind: 'live', follow: false, added: 1, updated: 1, ...o });
@@ -199,7 +216,8 @@ test('мітка часу з майбутнього обрізається пр�
   // справжня відповідь пізніше (now2 далеко за межею першої) знову «нова»
   const now2 = now + 3 * SKEW, later = cleanReply({ updated: now2, items: { tt0000001: { s: 5 } } }, now2);
   assert.equal(unseenCount(tb, { oleh: later }, stamp), 1);
-  assert.equal(cleanPrefs({ id: 'social', seenAt: 1e15 }, now).seenAt, now + SKEW);
+  assert.equal(cleanPrefs({ id: 'seen', seenAt: 1e15 }, now).seenAt, now + SKEW);
+  assert.equal(cleanPrefs({ id: 'social', seenAt: 1e15 }, now).seenAt, now + SKEW);   // стара форма — та сама межа
 });
 
 test('isUid: лише звичайні ідентифікатори', () => {

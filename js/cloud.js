@@ -15,6 +15,8 @@ const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
 const RETURN = 'mws.returnTo', FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
 
 let signingIn = false, sdkPromise = null, unsub = null, unsubs = [], pubTimer = null, lastPub = '';
+// Які з додаткових сховищ уже отримали перший знімок із сервера (для поточної людини).
+let syncedNow = new Set();
 const subs = new Set();
 
 export const cloud = {
@@ -22,6 +24,8 @@ export const cloud = {
   user: null,          // { uid, name, email }
   state: 'off',        // off | connecting | synced | offline | error
   onChange(fn) { subs.add(fn); },
+  // Чи хмара вже віддала свій стан сховища ('friends' | 'listdefs' | 'prefs'); без входу — false.
+  synced: name => !!cloud.user && syncedNow.has(name),
   init, signIn, signOut, loadPublic, publishNow,
   sendReply, loadReply, loadReplies, watchReplies, deleteReply,
 };
@@ -93,7 +97,9 @@ function init() {
     schedulePublish();
   });
   for (const [name, s] of SYNCED) s.onLocal(rec => { if (cloud.user) pushRec(name, rec); });
-  prefs.onLocal(() => { if (cloud.user) schedulePublish(); });   // «open» живе в публічному документі
+  // «open» живе в публічному документі: перевидаємо і коли перемикач приїхав з
+  // іншого пристрою (однаковий вміст schedulePublish удруге не пише).
+  prefs.onChange(() => { if (cloud.user) schedulePublish(); });
   // Увійти могли в іншій вкладці (так буває в застосунку з головного
   // екрана): повернувшись сюди, підхоплюємо вже наявний вхід.
   const wake = () => {
@@ -117,9 +123,11 @@ async function push(entry) {
 }
 // друзі, фільтри добірок і налаштування — колекції поруч з entries
 const SYNCED = [['friends', friends], ['listdefs', listdefs], ['prefs', prefs]];
+// Невдалий запис лише в журнал, як і помилка читання цих сховищ: код може
+// з'явитися раніше за нові правила Firestore, і це не привід гасити всю хмару.
 async function pushRec(name, rec) {
   try { const c = await sdk(); await c.fs.setDoc(c.fs.doc(c.db, 'users', cloud.user.uid, name, rec.id), plain(rec)); }
-  catch (e) { console.warn('не записалось у хмару', e); set('error'); }
+  catch (e) { console.warn('не записалось у хмару', name, e); }
 }
 async function pushMeta(entry) {
   try {
@@ -131,6 +139,7 @@ async function pushMeta(entry) {
 function onUser(c, u) {
   unsub?.(); unsub = null;
   unsubs.forEach(f => f()); unsubs = [];
+  const done = syncedNow = new Set();   // нова людина — чекаємо її перших знімків наново
   if (!u) {
     // Поки токен від Google ще обмінюється на вхід, Firebase встигає
     // сказати «нікого немає» — це не привід показувати «Увійти».
@@ -177,20 +186,23 @@ function onUser(c, u) {
     set(navigator.onLine === false ? 'offline' : 'synced');
   }, err => { console.warn('синхронізація', err); set('error'); });
   // ті самі правила для друзів, фільтрів добірок і налаштувань
+  // Зміни метаданих слухаємо, щоб побачити перехід «з кешу → із сервера», навіть
+  // коли самі документи не змінились (docChanges() таких змін не віддає).
   for (const [name, s] of SYNCED) {
-    let firstRec = true;
-    unsubs.push(c.fs.onSnapshot(c.fs.collection(c.db, 'users', u.uid, name), snap => {
+    unsubs.push(c.fs.onSnapshot(c.fs.collection(c.db, 'users', u.uid, name), { includeMetadataChanges: true }, snap => {
       const incoming = [];
       snap.docChanges().forEach(ch => { if (ch.type !== 'removed') incoming.push(ch.doc.data()); });
       s.applyRemote(incoming);
-      if (firstRec) {
-        firstRec = false;
-        const remote = new Map(snap.docs.map(d => [d.id, d.data()]));
-        for (const e of s.raw()) {
-          const r = remote.get(e.id);
-          if (!r || (e.updated || 0) > (r.updated || 0)) pushRec(name, e);
-        }
+      // Знімок із кешу (без мережі він порожній) станом хмари не вважаємо: і
+      // віддавати своє нагору, і дозволяти записи можна лише після серверного.
+      if (snap.metadata.fromCache || done.has(name)) return;
+      const remote = new Map(snap.docs.map(d => [d.id, d.data()]));
+      for (const e of s.raw()) {
+        const r = remote.get(e.id);
+        if (!r || (e.updated || 0) > (r.updated || 0)) pushRec(name, e);
       }
+      done.add(name);
+      subs.forEach(fn => fn());   // стан той самий, але cloud.synced(name) тепер true
     }, err => console.warn('синхронізація', name, err)));
   }
 }

@@ -3,7 +3,7 @@
 // передає сюди свій стан аргументами (recs): views.js і app.js імпортують
 // цей модуль, тож він не може імпортувати їх у відповідь (цикл).
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, recsMissing, FRIENDS_MAX } from './social.js';
+import { replyItem, replyMode, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs, socialCache } from './synced.js';
@@ -235,19 +235,37 @@ export const friendActions = {
 
 // ── відповіді, кеш і оновлення ────────────────────────────────────
 let unwatch = null, watching = '', socialRedraw = () => {};
-function onReplies(map) {
-  socialCache.set({ replies: map });
+const syncKey = () => `${cloud.synced('friends')}|${cloud.synced('prefs')}`;
+let lastReplies = null, syncedWas = syncKey();
+// Чи можна вже писати у сховище: з входом — лише після його першого знімка з хмари.
+const ready = name => canWrite(!!cloud.user, cloud.synced(name));
+const seenAt = () => seenAtOf(prefs.get('seen'), prefs.get('social'));
+// Авторів відповідей додаємо, лише коли друзі вже приїхали з хмари: на порожньому
+// пристрої ми не знаємо ні про видалених, ні про запам'ятаних, а свіжий запис
+// «follow: false» переміг би їх на всіх пристроях. До того тримаємо останні відповіді.
+function autoAdd() {
+  if (!lastReplies || watching !== meUid() || !ready('friends')) return;
+  const map = lastReplies;
   // Не більше, ніж лишилось до межі: далі таблиця все одно показує перші FRIENDS_MAX.
   const room = Math.max(0, FRIENDS_MAX - friends.list().length);
   for (const uid of newReplyAuthors(friends.raw(), map).slice(0, room)) friends.save(uid, { uid, name: map[uid].name, kind: 'live', follow: false, added: Date.now() });
+}
+function onReplies(map) {
+  socialCache.set({ replies: map });
+  lastReplies = map;
+  autoAdd();
   socialRedraw();
 }
 // watchReplies мовчки нічого не робить без cloud.user і сам не підписується
 // після входу — тож слідкуємо за uid і підписуємось наново при кожній зміні.
 function syncWatch() {
   const uid = meUid();
-  if (uid === watching) return;
-  unwatch?.(); unwatch = null; watching = uid;
+  // Сховище щойно отримало стан хмари: доробляємо відкладене (авто-додавання,
+  // позначка «бачив» при перемальовуванні екрана «Друзі»).
+  const sy = syncKey(), flipped = sy !== syncedWas;
+  syncedWas = sy;
+  if (uid === watching) { if (flipped) { autoAdd(); later(); } return; }
+  unwatch?.(); unwatch = null; watching = uid; lastReplies = null;
   if (uid) unwatch = cloud.watchReplies(map => { if (watching === uid) onReplies(map); });
   // Запит, початий при запуску (вхід ще не відновився), буде відкинуто: тягнемо наново.
   pullAll();
@@ -277,7 +295,7 @@ export const social = {
   // Крапка «нове»: хтось відповів після останнього перегляду екрана «Друзі».
   unseen: () => {
     const c = socialCache.get();
-    return unseenCount(tableOf(c), c.replies, prefs.get('social')?.seenAt || 0);
+    return unseenCount(tableOf(c), c.replies, seenAt());
   },
   start(redrawFn) {
     socialRedraw = redrawFn;
@@ -348,8 +366,9 @@ setCardExtra(friendsBlock);
 
 export function renderFriends() {
   const c = socialCache.get(), tb = tableOf(c);
-  // Відкрили екран — усе, що було, вважаємо баченим (зберігаємо лише коли є що).
-  if (unseenCount(tb, c.replies, prefs.get('social')?.seenAt || 0) > 0) prefs.save('social', { seenAt: seenStamp(tb, c.replies, Date.now()) });
+  // Відкрили екран — усе, що було, вважаємо баченим (зберігаємо лише коли є що, а з
+  // входом — коли налаштування вже приїхали з хмари; тоді екран перемалюється сам).
+  if (unseenCount(tb, c.replies, seenAt()) > 0 && ready('prefs')) prefs.save('seen', { seenAt: seenStamp(tb, c.replies, Date.now()) });
   if (!tb.cols.some(x => x.id === fr.who)) fr.who = '';   // друга видалили
   const cols = fr.who ? tb.cols.filter(x => x.id === fr.who) : tb.cols;
   const rows = tb.rows.filter(r => (!fr.who || cellOf(r, fr.who)) && (fr.kind === 'all' || r.k === fr.kind));
@@ -406,7 +425,13 @@ Object.assign(friendActions, {
     showOverlay({ type: 'friends' }, `<div class="palette narrow" role="dialog" aria-label="${t('fr.manage')}"></div>`);
     drawManage();
   },
-  'fr-open': () => { prefs.save('social', { open: !prefs.get('social')?.open }); manageDone(); },
+  // До першого знімка з хмари локальний перемикач може бути застарілим: перемкнувши
+  // його, опублікували б не те, що людина бачить на інших пристроях.
+  'fr-open': () => {
+    if (!ready('prefs')) { toast(t('toast.syncing')); return; }
+    prefs.save('social', { open: !prefs.get('social')?.open });
+    manageDone();
+  },
   'fr-follow': v => {
     const f = friends.get(v);
     if (!f || f.kind !== 'live') return;

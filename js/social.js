@@ -97,3 +97,14 @@ export function shelfScores(entries, items) {
   for (const e of entries) if (have.has(e.id) && e.score > 0) out[e.id] = e.score;
   return out;
 }
+
+// Куди повернути людину після входу: лише адреса чужого списку (#u=…).
+// Значення лежить у localStorage, тож перевіряємо і при записі, і при читанні.
+export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^#&]{1,400})?$/.test(h) ? h : '');
+
+// Запис сховища prefs: єдиний запис 'social' — чи відкриті оцінки друзям і
+// коли власник востаннє дивився відповіді. Мітки видалення йдуть повз очищення.
+export function cleanPrefs(r) {
+  if (r?.id !== 'social') return null;
+  return { id: 'social', open: !!r.open, seenAt: Number.isFinite(r.seenAt) ? r.seenAt : 0, updated: Number.isFinite(r.updated) ? r.updated : 0 };
+}

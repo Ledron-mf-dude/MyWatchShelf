@@ -4,7 +4,7 @@
 // даних і без DOM — тож працює й під Node. Хмара тут не імпортується:
 // вона сама підписується через onLocal і кличе applyRemote.
 
-import { cleanListDef, defId } from './social.js';
+import { cleanListDef, cleanPrefs, defId } from './social.js';
 
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key)) ?? {}; } catch { return {}; }
@@ -71,8 +71,8 @@ export function makeSynced(name, clean) {
 
 export { defId };
 
-// Тимчасове очищення: лише рядковий id. Завдання 5 і 8 замінять його своїм.
+// Тимчасове очищення друзів: лише рядковий id. Завдання 8 замінить його своїм.
 const hasId = r => (typeof r?.id === 'string' && r.id ? r : null);
 export const friends = makeSynced('friends', hasId);
 export const listdefs = makeSynced('listdefs', cleanListDef);
-export const prefs = makeSynced('prefs', hasId);
+export const prefs = makeSynced('prefs', cleanPrefs);

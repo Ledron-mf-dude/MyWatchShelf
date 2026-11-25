@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, replyItem, replyMode, shelfScores } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, replyItem, replyMode, shelfScores, returnHash, cleanPrefs } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -96,4 +96,24 @@ test('replyMode: власне посилання і знімок — без оц
 test('shelfScores бере лише оцінені тайтли зі списку', () => {
   const mine = [E('tt0000001', { score: 8.5 }), E('tt0000002'), E('tt0000009', { score: 6 })];
   assert.deepEqual(shelfScores(mine, [{ id: 'tt0000001' }, { id: 'tt0000002' }, { id: 'tt0000003' }]), { tt0000001: 8.5 });
+});
+test('returnHash пускає лише адресу списку', () => {
+  assert.equal(returnHash('#u=abcDEF_12-3'), '#u=abcDEF_12-3');
+  assert.equal(returnHash('#u=abc&l=%D0%9D%D0%BE%D0%B2%D1%96'), '#u=abc&l=%D0%9D%D0%BE%D0%B2%D1%96');
+  assert.equal(returnHash('#id_token=x&state=y'), '');
+  assert.equal(returnHash('#u=abc&x=1'), '');
+  assert.equal(returnHash('#/library'), '');
+});
+test('returnHash відкидає задовгі й нерядкові значення', () => {
+  assert.equal(returnHash('#u=' + 'a'.repeat(129)), '');
+  assert.equal(returnHash('#u=abc&l=' + 'x'.repeat(401)), '');
+  assert.equal(returnHash('#u=abc&l=' + 'x'.repeat(400)), '#u=abc&l=' + 'x'.repeat(400));
+  assert.equal(returnHash(null), '');
+});
+test('cleanPrefs лишає лише відомі поля й приводить типи', () => {
+  assert.deepEqual(cleanPrefs({ id: 'social', open: 1, seenAt: 5, updated: 7, junk: 'x' }), { id: 'social', open: true, seenAt: 5, updated: 7 });
+  assert.deepEqual(cleanPrefs({ id: 'social', open: 'так', seenAt: 'abc' }), { id: 'social', open: true, seenAt: 0, updated: 0 });
+  assert.equal(cleanPrefs({ id: 'social', open: 0 }).open, false);
+  assert.equal(cleanPrefs({ id: 'other', open: true }), null);
+  assert.equal(cleanPrefs(null), null);
 });

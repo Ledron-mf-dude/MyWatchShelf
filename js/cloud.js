@@ -8,10 +8,11 @@ import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs } from './synced.js';
 import { recItem, cleanRecs } from './logic.js';
+import { cleanReply, returnHash } from './social.js';
 import { t, getLang } from './i18n.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
-const FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
+const RETURN = 'mws.returnTo', FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
 
 let signingIn = false, sdkPromise = null, unsub = null, unsubs = [], pubTimer = null, lastPub = '';
 const subs = new Set();
@@ -22,6 +23,7 @@ export const cloud = {
   state: 'off',        // off | connecting | synced | offline | error
   onChange(fn) { subs.add(fn); },
   init, signIn, signOut, loadPublic, publishNow,
+  sendReply, loadReply, loadReplies, watchReplies, deleteReply,
 };
 
 function set(state) { cloud.state = state; subs.forEach(fn => fn()); }
@@ -53,7 +55,11 @@ function takeReturn() {
   const h = location.hash.slice(1);
   if (!/(^|&)(id_token|error)=/.test(h) || !/(^|&)state=/.test(h)) return null;
   const p = new URLSearchParams(h);
-  history.replaceState(null, '', location.pathname + location.search);   // токену в адресі не місце
+  // Токену в адресі не місце; натомість повертаємо адресу списку, з якого
+  // людина натиснула «Увійти» (вона лежала у сховищі, тож перевіряємо ще раз).
+  let back = '';
+  try { back = returnHash(localStorage.getItem(RETURN)); localStorage.removeItem(RETURN); } catch { /* нічого */ }
+  history.replaceState(null, '', location.pathname + location.search + back);
   // state — наш одноразовий квиток: чужий токен, підсунутий посиланням, не пройде.
   // Лежить і в сховищі, і в cookie: встановлений на телефон застосунок
   // відкриває вхід в окремій вкладці, і одне з двох може туди не доїхати.
@@ -87,6 +93,7 @@ function init() {
     schedulePublish();
   });
   for (const [name, s] of SYNCED) s.onLocal(rec => { if (cloud.user) pushRec(name, rec); });
+  prefs.onLocal(() => { if (cloud.user) schedulePublish(); });   // «open» живе в публічному документі
   // Увійти могли в іншій вкладці (так буває в застосунку з головного
   // екрана): повернувшись сюди, підхоплюємо вже наявний вхід.
   const wake = () => {
@@ -191,6 +198,7 @@ function signIn() {
   const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
   const state = rnd();
   try { localStorage.setItem(STATE, state); } catch { throw new Error(t('err.private')); }
+  try { localStorage.setItem(RETURN, returnHash(location.hash)); } catch { /* нічого */ }
   document.cookie = `mws_state=${state}; Max-Age=900; Path=/; Secure; SameSite=Lax`;
   const q = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -215,7 +223,10 @@ function recsPayload() {
     .map(recItem);
   // Підпис — лише той, що людина вписала сама; ім'я з Google-акаунта
   // без її волі в публічний документ не потрапляє.
-  return { name: store.settings.name || '', items };
+  const payload = { name: store.settings.name || '', items };
+  // Оцінки друзям відкриті лише за згодою власника (prefs.social.open).
+  if (prefs.get('social')?.open) payload.open = true;
+  return payload;
 }
 const wasPublished = () => { try { return localStorage.getItem(PUBLISHED) === cloud.user?.uid; } catch { return false; } };
 function schedulePublish() {
@@ -242,4 +253,35 @@ async function loadPublic(uid) {
   const c = await sdk();
   const snap = await c.fs.getDoc(c.fs.doc(c.db, 'public', uid));
   return snap.exists() ? cleanRecs(snap.data()) : null;
+}
+
+// ── відповіді друзів: public/{власник}/replies/{друг} ──────────────
+const replyRef = (c, owner, friend) => c.fs.doc(c.db, 'public', owner, 'replies', friend);
+async function sendReply(ownerUid, reply) {
+  if (!cloud.user) throw new Error(t('err.nocloud'));
+  const c = await sdk(), { name, items } = cleanReply(reply);
+  await c.fs.setDoc(replyRef(c, ownerUid, cloud.user.uid), plain({ name, items, updated: Date.now() }));
+}
+async function loadReply(ownerUid, friendUid) {
+  const c = await sdk(), snap = await c.fs.getDoc(replyRef(c, ownerUid, friendUid));
+  return snap.exists() ? cleanReply(snap.data()) : null;
+}
+async function loadReplies(ownerUid) {
+  const c = await sdk(), snap = await c.fs.getDocs(c.fs.collection(c.db, 'public', ownerUid, 'replies'));
+  return Object.fromEntries(snap.docs.map(d => [d.id, cleanReply(d.data())]));
+}
+// Стежить за відповідями на список поточного користувача; повертає відписку.
+function watchReplies(cb) {
+  let off = null, stopped = false;
+  sdk().then(c => {
+    if (stopped || !cloud.user) return;
+    off = c.fs.onSnapshot(c.fs.collection(c.db, 'public', cloud.user.uid, 'replies'),
+      snap => cb(Object.fromEntries(snap.docs.map(d => [d.id, cleanReply(d.data())]))),
+      err => console.warn('відповіді', err));
+  }).catch(() => {});
+  return () => { stopped = true; off?.(); };
+}
+async function deleteReply(ownerUid, friendUid) {
+  const c = await sdk();
+  await c.fs.deleteDoc(replyRef(c, ownerUid, friendUid));
 }

@@ -283,8 +283,11 @@ function watchReplies(cb) {
   let off = null, stopped = false;
   sdk().then(c => {
     if (stopped || !cloud.user) return;
-    off = c.fs.onSnapshot(c.fs.collection(c.db, 'public', cloud.user.uid, 'replies'),
-      snap => cb(Object.fromEntries(snap.docs.map(d => [d.id, cleanReply(d.data())]))),
+    // Знімок із кешу пропускаємо: без мережі Firestore віддає порожній, і він
+    // стер би вже отримані відповіді. Зміни метаданих слухаємо, щоб після
+    // повернення мережі прийшов серверний знімок, навіть коли документи ті самі.
+    off = c.fs.onSnapshot(c.fs.collection(c.db, 'public', cloud.user.uid, 'replies'), { includeMetadataChanges: true },
+      snap => { if (!snap.metadata.fromCache) cb(Object.fromEntries(snap.docs.map(d => [d.id, cleanReply(d.data())]))); },
       err => console.warn('відповіді', err));
   }).catch(() => {});
   return () => { stopped = true; off?.(); };

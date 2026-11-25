@@ -8,6 +8,7 @@ import { t, tn } from './i18n.js';
 import { store } from './store.js';
 import { friends, prefs, socialCache } from './synced.js';
 import { cloud } from './cloud.js';
+import { setCardExtra } from './panel.js';
 import { $, app, layer, ui, icon, ph, remember, showOverlay, toast, promptBox, confirmBox } from './ui.js';
 
 const blank = () => ({ name: '', items: {} });
@@ -310,6 +311,17 @@ function frRow(r, cols) {
     ${cols.map(c => frCell(cellOf(r, c.id))).join('')}
     <td class="fr-c avg"${r.n ? ` title="${r.n}"` : ''}><span class="fr-s">${r.n ? fmtScore(r.avg) : ''}</span></td></tr>`;
 }
+
+// Секція картки: середня й оцінки друзів цього тайтла; без жодної оцінки — нічого.
+function friendsBlock(id) {
+  const tb = social.table(), r = tb.rows.find(x => x.id === id);
+  const list = r ? tb.cols.map(c => [c, cellOf(r, c.id)]).filter(([, c]) => c && (c.s || c.n || c.rec)) : [];
+  if (!list.length) return '';
+  return `<section class="fr-card"><h3>${t('nav.friends')} <small>${r.n ? `${t('fr.avg')} ${fmtScore(r.avg)}` : ''}</small></h3>
+    ${list.map(([f, c]) => `<p><b>${esc(colName(f))}</b>${c.s ? ` <span class="fr-s">${fmtScore(c.s)}</span>` : ''}${c.rec ? ` <span class="fr-rec" title="${t('fr.rec')}" aria-label="${t('fr.rec')}">${icon('starFill')}</span>` : ''}${c.n ? ` <span class="muted">${esc(c.n)}</span>` : ''}</p>`).join('')}
+    <a class="more" href="#/friends">${t('fr.card.all')} ${icon('chevR')}</a></section>`;
+}
+setCardExtra(friendsBlock);
 
 export function renderFriends() {
   const c = socialCache.get(), tb = tableOf(c);

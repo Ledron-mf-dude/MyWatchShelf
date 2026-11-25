@@ -514,6 +514,8 @@ button.more .ic{width:16px; height:16px}
 .fr-s{font-weight:800; font-size:16px; font-variant-numeric:tabular-nums}
 .fr-c.me .fr-s{color:var(--accent)} .fr-c.avg .fr-s{color:var(--amber)}
 .fr-rec{display:inline-block; margin-left:4px; vertical-align:middle; color:var(--amber)} .fr-rec .ic{width:13px; height:13px}
+.fr-card p{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; margin:0 0 6px}
+.fr-card .more{margin-top:4px}
 .fr-n{display:none; margin-top:2px; font-size:11.5px; font-weight:500; line-height:1.3; color:var(--muted); overflow-wrap:anywhere}
 .fr-manage{display:grid; gap:10px; align-content:start; padding:14px 18px 18px}
 .fr-manage h4{padding:10px 0 0}

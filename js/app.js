@@ -327,7 +327,13 @@ applyTheme();
 applyLang();
 cloud.init();
 // відповіді друзів не мають смикати сторінку під відкритою карткою
-social.start(() => { paintDot(); if (ui.overlay) ui.dirty = true; else refresh(); });
+social.start(() => {
+  paintDot();
+  if (!ui.overlay) return refresh();
+  ui.dirty = true;
+  // відкрита картка показує оцінки друзів — оновлюємо її, не вириваючи поле з-під пальців
+  if (ui.overlay.type === 'card' && !(document.activeElement && layer.contains(document.activeElement) && document.activeElement.matches('input,textarea'))) drawCard();
+});
 addEventListener('hashchange', route);
 route();
 // вхід міг не вдатися ще до того, як сторінка намалювалась — скажемо про це

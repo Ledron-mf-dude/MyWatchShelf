@@ -228,6 +228,7 @@ const D = {
   'fr.del.text': ['The column disappears and their reply to your list is deleted. You can bring them back from the hidden list, but the deleted reply returns only when they rate again.',
     'Стовпець зникне, а їхню відповідь на твій список буде видалено. Друга можна повернути з прихованих, але видалена відповідь зʼявиться лише коли він оцінить знову.'],
   'fr.hidden': ['Hidden', 'Приховані'], 'fr.more': ['and {n} more', 'ще {n}'],
+  'fr.card.all': ['All scores', 'Усі оцінки'],
   'fr.keep': ['Remember', 'Запам’ятати'], 'fr.unsigned': ['Unsigned', 'Без підпису'],
   'toast.reply.fail': ['Could not save your score ({e})', 'Не вдалося зберегти оцінку ({e})'],
   'toast.reply.offline': ['No connection — rating not saved', 'Немає зʼєднання — оцінку не збережено'],

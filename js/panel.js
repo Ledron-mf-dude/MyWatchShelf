@@ -114,6 +114,11 @@ function progressHtml(e) {
   </section>`;
 }
 
+// Додаткові секції картки реєструє friends.js (panel.js не може імпортувати
+// його у відповідь — цикл): функція отримує id запису й дає HTML або ''.
+let cardExtra = () => '';
+export function setCardExtra(fn) { cardExtra = fn; }
+
 function cardHtml(e) {
   const m = e.meta || {}, url = safeUrl(e.url);
   return `${headHtml(e, m)}
@@ -137,6 +142,7 @@ function cardHtml(e) {
         <button class="chip reset" data-act="list-new">${icon('plus')}${t('list.new')}</button></div>
       ${e.lists?.length ? `<p class="muted small mt">${t('lists.note')}</p>` : ''}
     </section>
+    ${cardExtra(e.id)}
     <section><h3>${t('card.note')}</h3><textarea class="inp" data-field="note" rows="3" placeholder="${t('card.note.ph')}">${esc(e.note)}</textarea></section>
     <section><h3>${t('card.about')}</h3>${aboutHtml(m).trim() || `<p class="muted">${e.metaAt ? t('no.plot') : t('loading.plot')}</p>`}
       <div class="kind-row"><span>${t('type')}</span>${KIND_IDS.map(v => `<button class="chip ${e.kind === v ? 'on' : ''}" data-act="set-kind" data-v="${v}">${kindLabel(v)}</button>`).join('')}</div></section>

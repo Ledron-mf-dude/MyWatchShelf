@@ -453,43 +453,61 @@ export function openBuild() {
     `<div class="palette" role="dialog" aria-label="${t('build.title')}"></div>`);
   drawBuild();
 }
+// Каркас малюємо один раз: поля року, назва й кнопка «Зберегти» лишаються тими
+// самими елементами, тож фокус і набране не губляться (оновлює їх updateBuild).
 function drawBuild() {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
-  const f = o.f, manual = isEmptyFilter(f), list = buildFound(f);
+  const f = o.f;
   const genres = insights(store.list()).genres.slice(0, 6).map(g => g[0]);
-  const chip = (k, v, label, on) => `<button class="chip ${on ? 'on' : ''}" data-act="build-set" data-v="${k}:${esc(v)}" aria-pressed="${on}">${label}</button>`;
+  const chip = (k, v, label) => `<button class="chip" data-act="build-set" data-v="${k}:${esc(v)}" aria-pressed="false">${label}</button>`;
   const year = (k, key) => `<input class="inp" type="text" inputmode="numeric" maxlength="4" data-build-year="${k}" placeholder="${t(key)}" aria-label="${t(key)}" value="${esc(f[k])}">`;
-  const picked = [...o.picked].filter(id => store.get(id)).length;
-  const scroll = $('.build-body', layer)?.scrollTop || 0;
   $('.palette', layer).innerHTML = `
     <div class="pal-head"><h2>${t('build.title')}</h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
     <div class="build">
       <div class="build-body">
         <div class="build-f">
-          <div><b>${t('type')}</b>${KIND_IDS.map(k => chip('kinds', k, t('kinds.' + k), f.kinds.includes(k))).join('')}</div>
-          <div><b>${t('build.status')}</b>${['all', ...STATUS_IDS].map(v => chip('status', v, v === 'all' ? t('all.statuses') : statusLabel(v), f.status === v)).join('')}</div>
-          ${genres.length ? `<div><b>${t('genres')}</b>${genres.map(g => chip('genres', g, esc(genreName(g)), f.genres.includes(g))).join('')}</div>` : ''}
+          <div><b>${t('type')}</b>${KIND_IDS.map(k => chip('kinds', k, t('kinds.' + k))).join('')}</div>
+          <div><b>${t('build.status')}</b>${['all', ...STATUS_IDS].map(v => chip('status', v, v === 'all' ? t('all.statuses') : statusLabel(v))).join('')}</div>
+          ${genres.length ? `<div><b>${t('genres')}</b>${genres.map(g => chip('genres', g, esc(genreName(g)))).join('')}</div>` : ''}
           <div><b>${t('year')}</b>${year('from', 'year.from')}${year('to', 'year.to')}<small class="muted">${t('build.years.hint')}</small></div>
-          <div><b>${t('card.score')}</b>${[7, 8, 9].map(n => chip('mine', n, t('mine.min', { n }), f.mine === String(n))).join('')}</div>
+          <div><b>${t('card.score')}</b>${[7, 8, 9].map(n => chip('mine', n, t('mine.min', { n }))).join('')}</div>
         </div>
-        ${manual ? `<p class="muted small">${t('build.manual')}</p>` : ''}
-        ${list.length ? `<div class="build-list">${list.map(e => {
-          const on = o.picked.has(e.id);
-          return `<div class="res" role="checkbox" aria-checked="${on}" tabindex="0" data-act="build-tick" data-v="${esc(e.id)}">
-            <span class="tick ${on ? 'on' : ''}">${on ? icon('check') : ''}</span>${ph(e.id, e.title, 'small')}
-            <div class="row-main"><div class="row-title"><b>${esc(e.title)}</b></div>
-              <div class="row-sub">${esc([e.year, kindLabel(e.kind)].filter(Boolean).join(' · '))}</div></div>
-            ${e.score ? `<span class="badge static score">${fmtScore(e.score)}</span>` : ''}</div>`;
-        }).join('')}</div>` : `<p class="muted pad">${t('build.none')}</p>`}
+        <p class="muted small" id="build-note"></p>
+        <div id="build-res"></div>
       </div>
       <div class="build-foot">
-        <span class="muted small">${t('build.picked', { n: picked })}</span>
+        <span class="muted small" id="build-count"></span>
         <div class="build-save"><input class="inp" type="text" maxlength="40" data-build-name placeholder="${t('build.name.ph')}" aria-label="${t('build.name.ph')}" value="${esc(o.name)}">
           <button class="btn primary" data-act="build-save">${t('build.save')}</button></div>
         <p class="muted small">${t('lists.note')}</p>
       </div>
     </div>`;
+  updateBuild();
+}
+const buildCount = o => { $('#build-count', layer).textContent = t('build.picked', { n: [...o.picked].filter(id => store.get(id)).length }); };
+function updateBuild() {
+  const o = ui.overlay;
+  if (o?.type !== 'build') return;
+  const f = o.f, list = buildFound(f);
+  const scroll = $('.build-body', layer).scrollTop;
+  // чипи лише перемикають вигляд; рік чіпаємо, хіба що поле не в фокусі
+  for (const b of layer.querySelectorAll('[data-act="build-set"]')) {
+    const i = b.dataset.v.indexOf(':'), k = b.dataset.v.slice(0, i), x = b.dataset.v.slice(i + 1);
+    const on = k === 'kinds' || k === 'genres' ? f[k].includes(x) : f[k] === x;
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+  }
+  for (const inp of layer.querySelectorAll('[data-build-year]')) if (inp !== document.activeElement) inp.value = f[inp.dataset.buildYear];
+  $('#build-note', layer).textContent = isEmptyFilter(f) ? t('build.manual') : '';
+  $('#build-res', layer).innerHTML = list.length ? `<div class="build-list">${list.map(e => {
+    const on = o.picked.has(e.id);
+    return `<div class="res" role="checkbox" aria-checked="${on}" tabindex="0" data-act="build-tick" data-v="${esc(e.id)}">
+      <span class="tick ${on ? 'on' : ''}">${on ? icon('check') : ''}</span>${ph(e.id, e.title, 'small')}
+      <div class="row-main"><div class="row-title"><b>${esc(e.title)}</b></div>
+        <div class="row-sub">${esc([e.year, kindLabel(e.kind)].filter(Boolean).join(' · '))}</div></div>
+      ${e.score ? `<span class="badge static score">${fmtScore(e.score)}</span>` : ''}</div>`;
+  }).join('')}</div>` : `<p class="muted pad">${t('build.none')}</p>`;
+  buildCount(o);
   $('.build-body', layer).scrollTop = scroll;
 }
 layer.addEventListener('input', ev => {
@@ -511,13 +529,21 @@ function buildSet(v) {
         : { [k]: x }),
   });
   o.picked = new Set(isEmptyFilter(o.f) ? [] : buildFound(o.f).map(e => e.id));
-  drawBuild();
+  updateBuild();
 }
 function buildTick(id) {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
-  if (!o.picked.delete(id)) o.picked.add(id);
-  drawBuild();
+  const on = !o.picked.delete(id);
+  if (on) o.picked.add(id);
+  // міняємо лише цей рядок і лічильник — решта діалогу не перемальовується
+  const row = [...layer.querySelectorAll('[data-act="build-tick"]')].find(r => r.dataset.v === id);
+  if (row) {
+    row.setAttribute('aria-checked', String(on));
+    const tk = row.querySelector('.tick');
+    tk.classList.toggle('on', on); tk.innerHTML = on ? icon('check') : '';
+  }
+  buildCount(o);
 }
 function buildSave() {
   const o = ui.overlay;
@@ -533,6 +559,8 @@ function buildSave() {
   if (todo.length > room.length) toast(t('build.skipped', { n: todo.length - room.length }), { ms: 4000 });
   // порожні умови — ручний вибір, переформовувати нічим; без жодної мітки добірки теж нема
   if (!isEmptyFilter(o.f) && listNames(store.list()).includes(name)) listdefs.save(defId(name), { name, f: o.f });
+  // ручний вибір під старою назвою не лишає старих умов (інакше з'явилось б «Сформувати знову»)
+  else if (isEmptyFilter(o.f) && listdefs.get(defId(name))) listdefs.remove(defId(name));
   openShare(name);
 }
 

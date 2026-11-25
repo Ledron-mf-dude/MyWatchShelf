@@ -376,3 +376,30 @@ test('socialCache: читання очищає, set замінює лише св
     assert.deepEqual(socialCache.get(), { replies: {}, recs: {} });
   } finally { delete globalThis.localStorage; }
 });
+
+test('synced: службові слова як id не читаються з прототипа', () => {
+  const s = makeSynced('t4', r => (typeof r?.id === 'string' ? r : null));
+  assert.equal(s.get('constructor'), null);
+  assert.equal(s.get('toString'), null);
+  assert.deepEqual(Object.keys(s.save('constructor', { v: 1 })).sort(), ['id', 'updated', 'v']);
+  assert.equal(s.get('constructor').v, 1);
+  assert.equal(s.applyRemote([{ id: 'valueOf', v: 2, updated: 1 }]), true);
+  assert.equal(s.get('valueOf').v, 2);
+  assert.equal(s.raw().length, 2);
+});
+
+test('socialCache: ключ «__proto__» у кеші не стає прототипом секції', async () => {
+  const mem = {};
+  globalThis.localStorage = { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; }, removeItem: k => { delete mem[k]; } };
+  try {
+    const { socialCache } = await import('../js/synced.js');
+    mem['mws.social.cache.v1'] = '{"replies":{"__proto__":{"name":"Зло","items":{}},"u1":{"name":"Оля","items":{}}},"recs":{"__proto__":[{"id":"tt0000002"}],"constructor":[{"id":"tt0000003"}]}}';
+    const c = socialCache.get();
+    assert.deepEqual(Object.keys(c.replies), ['u1']);
+    assert.equal(Object.getPrototypeOf(c.replies), Object.prototype);
+    assert.equal(c.replies.name, undefined);
+    assert.deepEqual(Object.keys(c.recs), ['constructor']);
+    assert.equal(Object.getPrototypeOf(c.recs), Object.prototype);
+    assert.equal(c.recs.length, undefined);
+  } finally { delete globalThis.localStorage; }
+});

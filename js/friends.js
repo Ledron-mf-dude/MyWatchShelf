@@ -77,18 +77,24 @@ export function loadReplyState(recs, redrawFn) {
   wasKey = key;
   Object.assign(rs, { key, owner: recs?.uid || '', ready: false, mine: blank(), saved: {}, others: {}, confirmed: false });
   if (!first) redraw();
-  if (modeOf(recs) !== 'rate') return;
-  const me = meUid();
+  fetchReply();
+}
+// Власна відповідь (а на відкритому списку й чужі). Не завантажилась — поля
+// лишаються вимкненими, а спробу повторюємо, коли повернеться мережа.
+function fetchReply() {
+  const key = rs.key, recs = cur;
+  if (!recs || rs.ready || modeOf(recs) !== 'rate') return;
   Promise.all([
-    cloud.loadReply(rs.owner, me),
+    cloud.loadReply(rs.owner, meUid()),
     // чужі оцінки — додаток: їхня відсутність не заважає оцінювати
     recs.open ? cloud.loadReplies(rs.owner).catch(e => { console.warn('оцінки друзів', e); return {}; }) : {},
   ]).then(([mine, others]) => {
-    if (rs.key !== key) return;
+    if (rs.key !== key || rs.ready) return;   // повторна спроба могла впоратись першою
     Object.assign(rs, { ready: true, mine: mine || blank(), saved: structuredClone((mine || blank()).items), others });
     redraw();
-  }).catch(e => { if (rs.key === key) toast(t('toast.reply.fail', { e: e?.message || '' }), { ms: 5000 }); });
+  }).catch(e => { if (rs.key === key && !rs.ready) toast(t('toast.reply.load', { e: e?.message || '' }), { ms: 5000 }); });
 }
+addEventListener('online', fetchReply);
 
 // Перша відповідь: потрібен підпис, а на відкритому списку ще й згода, що
 // оцінки бачать усі друзі автора. Відмова — нічого не зберігаємо.

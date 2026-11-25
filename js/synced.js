@@ -24,7 +24,9 @@ export function makeSynced(name, clean) {
   // «__proto__» як ключ мапи записів задав би прототип замість запису.
   const cleanRec = r => (r?.id === '__proto__' ? null : r?.deleted ? tomb(r) : clean(r));
   const KEY = `mws.${name}.v1`;
-  let recs = {};
+  // Мапа без прототипа: id «constructor» чи «toString» не має знаходити
+  // успадковане замість запису.
+  let recs = Object.create(null);
   for (const r of Object.values(load(KEY))) {
     const c = cleanRec(r);
     if (c) recs[c.id] = c;
@@ -68,7 +70,7 @@ export function makeSynced(name, clean) {
       if (changed) { save(); emit(); }
       return changed;
     },
-    clear() { recs = {}; save(); emit(); },
+    clear() { recs = Object.create(null); save(); emit(); },
   };
   return s;
 }
@@ -83,8 +85,11 @@ const CACHE_KEY = 'mws.social.cache.v1';
 export const socialCache = {
   get() {
     const raw = load(CACHE_KEY), replies = {}, recs = {};
-    for (const [k, v] of Object.entries(raw.replies && typeof raw.replies === 'object' ? raw.replies : {})) replies[k] = cleanReply(v);
-    for (const [k, v] of Object.entries(raw.recs && typeof raw.recs === 'object' ? raw.recs : {})) recs[k] = cleanRecs({ items: v }).items;
+    // «__proto__» як ключ задав би прототип секції замість запису — пропускаємо;
+    // решту службових слів читачі беруть лише через own-перевірку.
+    const part = v => Object.entries(v && typeof v === 'object' ? v : {}).filter(([k]) => k !== '__proto__');
+    for (const [k, v] of part(raw.replies)) replies[k] = cleanReply(v);
+    for (const [k, v] of part(raw.recs)) recs[k] = cleanRecs({ items: v }).items;
     return { replies, recs };
   },
   // patch ({ replies } і/або { recs }) замінює відповідну частину цілком

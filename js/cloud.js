@@ -256,17 +256,25 @@ async function loadPublic(uid) {
 }
 
 // ── відповіді друзів: public/{власник}/replies/{друг} ──────────────
+// uid потрапляє в шлях Firestore: пропускаємо лише звичайні ідентифікатори.
+const uidOk = u => typeof u === 'string' && /^[\w-]{1,128}$/.test(u);
+const needUid = (...u) => { if (!u.every(uidOk)) throw new Error('uid'); };
 const replyRef = (c, owner, friend) => c.fs.doc(c.db, 'public', owner, 'replies', friend);
 async function sendReply(ownerUid, reply) {
   if (!cloud.user) throw new Error(t('err.nocloud'));
-  const c = await sdk(), { name, items } = cleanReply(reply);
+  needUid(ownerUid, cloud.user.uid);
+  // Підпис — завжди той, що людина вписала сама (як у рекомендаціях): ні ім'я
+  // з Google-акаунта, ні надіслане викликачем у відповідь не потрапляє.
+  const c = await sdk(), { name, items } = cleanReply({ items: reply?.items, name: store.settings.name });
   await c.fs.setDoc(replyRef(c, ownerUid, cloud.user.uid), plain({ name, items, updated: Date.now() }));
 }
 async function loadReply(ownerUid, friendUid) {
+  needUid(ownerUid, friendUid);
   const c = await sdk(), snap = await c.fs.getDoc(replyRef(c, ownerUid, friendUid));
   return snap.exists() ? cleanReply(snap.data()) : null;
 }
 async function loadReplies(ownerUid) {
+  needUid(ownerUid);
   const c = await sdk(), snap = await c.fs.getDocs(c.fs.collection(c.db, 'public', ownerUid, 'replies'));
   return Object.fromEntries(snap.docs.map(d => [d.id, cleanReply(d.data())]));
 }
@@ -282,6 +290,7 @@ function watchReplies(cb) {
   return () => { stopped = true; off?.(); };
 }
 async function deleteReply(ownerUid, friendUid) {
+  needUid(ownerUid, friendUid);
   const c = await sdk();
   await c.fs.deleteDoc(replyRef(c, ownerUid, friendUid));
 }

@@ -8,6 +8,7 @@ import { t, tn } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
+import { replyBox, othersLine, replyBar } from './friends.js';
 import { $, app, icon, ph, remember, dropdown, selects } from './ui.js';
 
 const S = store.settings;
@@ -411,6 +412,7 @@ export function renderRecs() {
       <div class="hero-act"><a class="btn lg" href="./">${icon('library')}${t('my.shelf')}</a></div></div>
   </section>
   ${tm.panel}
+  ${replyBar(view.recs)}
   <ul class="rec-list">${items.map((x, i) => {
     const have = store.get(x.id);
     return `<li class="rcard" data-id="${x.id}" data-act="preview" tabindex="0">
@@ -419,7 +421,8 @@ export function renderRecs() {
         <p class="row-sub">${esc([kindLabel(x.k), x.y].filter(Boolean).join(' · '))}${x.r ? ` · IMDb ${fmtRating(x.r)}` : ''}</p>
         ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
         ${tasteBadge(tm.tags.get(x.id))}
-        <button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : t('take')}</button></div>
+        <button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : t('take')}</button>
+        ${othersLine(x.id, view.recs)}${replyBox(x, view.recs)}</div>
       ${x.s ? `<div class="rec-score"><b>${fmtScore(x.s)}</b><small>${t('author.score')}</small></div>` : ''}
     </li>`;
   }).join('') || `<li class="empty">${icon('star')}<b>${t('recs.empty.title')}</b><p>${t('recs.empty.text')}</p></li>`}</ul>`;

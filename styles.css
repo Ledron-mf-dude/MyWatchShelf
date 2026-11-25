@@ -278,6 +278,12 @@ a.badge.static:hover{border-color:var(--accent); color:var(--accent)}
 .rec-score small{font-size:11px; font-weight:700; color:var(--faint); white-space:nowrap}
 blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:0 10px 10px 0; background:var(--accent-soft); color:var(--text); font-size:14.5px}
 .author{display:flex; gap:16px; align-items:center}
+/* оцінка друга на картці списку */
+.reply{width:100%; display:grid; gap:8px; margin-top:6px; cursor:default}
+.reply h4,.others h4{font-size:12px; font-weight:800; color:var(--faint); text-transform:uppercase; letter-spacing:.04em} .reply h4 small{color:var(--accent); font-size:13px}
+.reply .scores button{height:34px; font-size:13px}
+.others{display:grid; gap:4px; font-size:13.5px; width:100%} .others .sc{font-weight:800; color:var(--accent)}
+.reply-bar{margin-top:20px; max-width:920px} .reply-bar:empty{display:none} .reply-bar small{margin-left:8px; opacity:.8}
 
 /* ── шар поверх: картка ────────────────────────────── */
 .scrim{position:fixed; inset:0; background:var(--scrim); z-index:30; animation:fade .18s}

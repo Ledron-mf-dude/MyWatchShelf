@@ -11,6 +11,7 @@ import {
   cardActions, buildActions, loadDemo,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
+import { replyActions, loadReplyState } from './friends.js';
 
 const S = store.settings;
 const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['discover', 'compass'], ['stats', 'chart']];
@@ -107,14 +108,20 @@ async function route() {
       if (raw.startsWith('u=')) {
         // #u=<uid> — загальні рекомендації; #u=<uid>&l=<назва> — одна добірка
         const q = new URLSearchParams(raw), list = (q.get('l') || '').slice(0, 40);
-        const data = await cloud.loadPublic((q.get('u') || '').replace(/[^\w-]/g, ''));
-        view.recs = data && { name: data.name, title: list,
+        const uid = (q.get('u') || '').replace(/[^\w-]/g, '').slice(0, 128);
+        const data = await cloud.loadPublic(uid);
+        // uid і open потрібні оцінюванню: чий це список і чи бачать друзі оцінки одне одного
+        view.recs = data && { name: data.name, title: list, uid, open: !!data.open,
           items: data.items.filter(x => (list ? (x.l || []).includes(list) : x.p !== 0)) };
         if (view.recs && list && !view.recs.items.length) view.recs = null;
-      } else view.recs = await decodeRecs(raw.slice(2));
+      } else {
+        view.recs = await decodeRecs(raw.slice(2));
+        if (view.recs) Object.assign(view.recs, { uid: '', open: false });   // знімок: оцінювати нікому
+      }
       if (!view.recs) throw new Error(t('recs.missing'));
       setTitle();
       renderRecs();
+      loadReplyState(view.recs, refresh);
     } catch (err) {
       app.innerHTML = `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.fail.text', { e: esc(err.message || '') })}</p><a class="btn primary" href="./">${t('my.shelf')}</a></div>`;
     }
@@ -152,7 +159,7 @@ function importFile() {
 const idOf = el => el.closest('[data-id]')?.dataset.id || ui.overlay?.id;
 
 on({
-  ...cardActions, ...buildActions, ...pickActions, ...wrapActions,
+  ...cardActions, ...buildActions, ...pickActions, ...wrapActions, ...replyActions,
   go: v => { location.hash = '#/' + v; },
   'sel-toggle': (v, el) => {
     const pop = $('.pop', el.closest('.dd')), open = pop.hidden;
@@ -302,6 +309,8 @@ let greeted = false;
 cloud.onChange(() => {
   drawChrome();
   if (view.route === 'home' && !ui.overlay) draw();
+  // увійшли чи вийшли на чужому списку — оцінки друга завантажуємо наново
+  if (view.route === 'recs' && view.recs) loadReplyState(view.recs, refresh);
   if (cloud.lastError) { toast(t('toast.signin.fail', { e: cloud.lastError }), { ms: 5000 }); cloud.lastError = ''; }
   if (cloud.justSignedIn && cloud.state === 'synced' && !greeted) { greeted = true; toast(t('toast.signedin')); }
 });

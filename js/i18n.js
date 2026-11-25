@@ -204,6 +204,16 @@ const D = {
   'lists.note': ['Titles in collections are visible to anyone with your link — with your score and this comment, never your watch link or note.', 'Записи в добірках бачить кожен, хто має твоє посилання, — з оцінкою й цим коментарем, але без посилання «де дивлюсь» і нотатки.'],
   'list.new.ph': ['Anime for beginners', 'Аніме для новачків'], 'list.limit': ['A title can be in up to 8 collections', 'Запис може бути щонайбільше у 8 добірках'],
   'recs.list': ['Collection', 'Добірка'], 'recs.list.by': ['Collection by {name}', 'Добірка від {name}'],
+  // оцінки друга на чужому списку
+  'reply.signin': ['Sign in to rate', 'Увійти, щоб оцінити'], 'reply.label': ['Your score', 'Твоя оцінка'],
+  'reply.note.ph': ['Your comment for the author', 'Твій коментар для автора'],
+  'reply.all': ['Send my scores', 'Надіслати мої оцінки'],
+  'reply.open.title': ['This list is open to friends', 'Список відкрито для друзів'],
+  'reply.open.text': ['All of the author’s friends will see your scores and comments here.', 'Твої оцінки й коментарі побачать усі друзі автора.'],
+  'reply.open.ok': ['Continue', 'Продовжити'],
+  'reply.others': ['Friends’ scores', 'Оцінки друзів'], 'reply.anon': ['A friend', 'Друг'],
+  'toast.reply.fail': ['Could not save your score ({e})', 'Не вдалося зберегти оцінку ({e})'],
+  'toast.reply.sent': ['Scores sent: {n}', 'Надіслано оцінок: {n}'],
   // збирання добірки за умовами
   'build.btn': ['Build a list', 'Зібрати список'], 'build.status': ['Status', 'Статус'], 'build.title': ['Build a collection', 'Зібрати добірку'],
   'build.years.hint': ['A single year means exactly that year.', 'Один рік — це саме той рік.'],

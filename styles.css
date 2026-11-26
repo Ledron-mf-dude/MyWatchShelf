@@ -549,16 +549,20 @@ button.more .ic{width:16px; height:16px}
 .fr-chips{padding-top:4px}
 .fr-vis{display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; margin:-6px 0 14px; color:var(--muted); font-size:14px}
 .fr-vis .ic{flex:none; width:16px; height:16px} .fr-vis.open{color:var(--amber)} .fr-vis span{min-width:0}
-/* таблиця гортається у власній рамці: інакше рядок заголовків не втримати на місці */
-.fr-wrap{overflow:auto; max-height:calc(100dvh - var(--top-h) - 16px); margin-top:14px; border:1px solid var(--line2); border-radius:var(--r); background:var(--bg)}
+/* гортається сторінка, а не таблиця: рядок заголовків липне одразу під шапкою сайта.
+   Власної прокрутки рамка не має (інакше заголовки липли б до неї, а не до екрана),
+   тож на вужчому екрані таблиця стискається — див. нижче. */
+.fr-wrap{margin-top:14px; border:1px solid var(--line2); border-radius:var(--r); background:var(--bg)}
 .fr-table{border-collapse:separate; border-spacing:0; width:100%}
 .fr-table th,.fr-table td{padding:10px 12px; border-top:1px solid var(--line2); text-align:center; vertical-align:middle; background:var(--bg)}
-.fr-table thead th{position:sticky; top:0; z-index:2; border-top:0; font-size:12px; font-weight:800; letter-spacing:.04em; color:var(--faint); background:var(--surface); box-shadow:0 1px 0 var(--line2)}
-.fr-table thead .fr-t{z-index:3} .fr-table thead abbr{text-decoration:underline dotted; cursor:help}
+.fr-table thead th{position:sticky; top:var(--top-h); z-index:2; border-top:0; font-size:12px; font-weight:800; letter-spacing:.04em; color:var(--faint); background:var(--surface); box-shadow:0 1px 0 var(--line2)}
+.fr-table thead th:first-child{border-top-left-radius:var(--r)} .fr-table thead th:last-child{border-top-right-radius:var(--r)}
+.fr-table tbody tr:last-child>:first-child{border-bottom-left-radius:var(--r)} .fr-table tbody tr:last-child>:last-child{border-bottom-right-radius:var(--r)}
+.fr-table thead abbr{text-decoration:underline dotted; cursor:help}
 .fr-table thead th span{display:block; max-width:110px; margin:0 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .fr-table tbody th{font-weight:400}
 .fr-c{min-width:76px}
-.fr-t{position:sticky; left:0; z-index:1; min-width:230px; max-width:320px; text-align:left !important; box-shadow:1px 0 0 var(--line2)}
+.fr-t{min-width:230px; max-width:320px; text-align:left !important}
 .fr-t>div{display:flex; align-items:center; gap:12px}
 .fr-t>.fr-stack{display:none}
 .fr-t .ph{width:36px; flex:none}
@@ -566,11 +570,12 @@ button.more .ic{width:16px; height:16px}
 .fr-t b{display:block; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .fr-t small{display:block; font-size:12.5px; font-weight:500; color:var(--faint); text-transform:none; letter-spacing:0}
 .fr-t .rb{flex:none; min-width:30px; height:30px}
-.fr-row{cursor:pointer}
+/* перехід «Усі оцінки»: рядок не ховається під шапкою сайта й рядком заголовків */
+.fr-row{cursor:pointer; scroll-margin-top:calc(var(--top-h) + 56px)}
 .fr-row:hover th,.fr-row:hover td{background:var(--surface)}
 .fr-row th,.fr-row td{transition:background .5s}
 .fr-row.flash th,.fr-row.flash td{background:var(--accent-soft)}
-.fr-sub th{position:sticky; left:0; padding:14px 12px 8px; text-align:left; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--faint); background:var(--surface)}
+.fr-sub th{padding:14px 12px 8px; text-align:left; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--faint); background:var(--surface)}
 .fr-s{font-weight:800; font-size:16px; font-variant-numeric:tabular-nums}
 .fr-c.me .fr-s{color:var(--accent)} .fr-c.avg .fr-s{color:var(--amber)}
 .fr-rec{display:inline-block; vertical-align:middle; color:var(--amber)} .fr-rec .ic{width:13px; height:13px}
@@ -599,18 +604,25 @@ button.more .ic{width:16px; height:16px}
 .fr-man-a{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
 .fr-man .chip{height:30px; padding:0 12px; font-size:13px; flex:none}
 .chip.danger{color:var(--red)} .chip.danger:hover{border-color:var(--red)}
+/* вужчий екран комп'ютера: щільніші клітинки, коротші початки коментарів, без стовпця «Сер.» */
+@media (min-width:721px) and (max-width:1100px){
+  .fr-table th,.fr-table td{padding:8px 6px} .fr-c{min-width:54px} .fr-t{min-width:170px}
+  .fr-table thead th span{max-width:80px}
+  .fr-n{max-width:120px} .fr-n .cut{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden} .fr-n.open .cut{display:none}
+}
+@media (min-width:721px) and (max-width:900px){ .fr-table .avg{display:none} }
 @media (max-width:720px){
   /* на телефоні стовпців друзів немає: оцінки йдуть рядками під назвою, вбік нічого не гортається */
-  .fr-wrap{overflow:visible; max-height:none; margin:14px -16px 0; border-radius:0; border-left:0; border-right:0}
+  .fr-wrap{margin:14px -16px 0; border-radius:0; border-left:0; border-right:0}
   .fr-table thead,.fr-table .fr-c{display:none}
   .fr-table th,.fr-table td{padding:10px 16px}
-  .fr-t{position:static; min-width:0; max-width:none; box-shadow:none} .fr-t>div{gap:10px} .fr-t .ph{width:32px}
+  .fr-t{min-width:0; max-width:none} .fr-t>div{gap:10px} .fr-t .ph{width:32px}
   .fr-t b{white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical} .fr-t small{font-size:11.5px}
   .fr-t>.fr-stack{display:block; padding:6px 0 0 42px}
   .fr-stack p{display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px; margin:4px 0 0; font-size:13px}
   .fr-stack strong{font-weight:700} .fr-stack .fr-s{font-size:14px} .fr-stack .fr-s.me{color:var(--accent)} .fr-stack .fr-s.avg{color:var(--amber)}
   .fr-own{color:var(--muted)} .fr-own>span+span::before{content:"· "}
-  .fr-sub th{position:static; padding:16px 16px 8px}
+  .fr-sub th{padding:16px 16px 8px}
 }
 
 /* розділ «Рекомендації» */

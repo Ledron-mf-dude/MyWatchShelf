@@ -653,7 +653,7 @@ export function renderFriends() {
     <div class="chips fr-chips">${['all', ...KIND_IDS].map(k => chip('fr-kind', k, fr.kind === k, k === 'all' ? t('all.kinds') : t('kinds.' + k))).join('')}</div>
     ${rows.length ? `<div class="fr-wrap"><table class="fr-table"><thead><tr><th scope="col" class="fr-t">${t('fr.title')}</th><th scope="col" class="fr-c">${t('fr.me')}</th>
       ${cols.map(x => `<th scope="col" class="fr-c" title="${esc(colName(x))}"><span>${esc(colName(x))}</span></th>`).join('')}
-      ${showAvg ? `<th scope="col" class="fr-c" title="${t('fr.avg.hint')}"><abbr title="${t('fr.avg.hint')}">${t('fr.avg')}</abbr></th>` : ''}</tr></thead>
+      ${showAvg ? `<th scope="col" class="fr-c avg" title="${t('fr.avg.hint')}"><abbr title="${t('fr.avg.hint')}">${t('fr.avg')}</abbr></th>` : ''}</tr></thead>
       <tbody>${body(rows.filter(r => !r.only))}${recOnly.length ? `<tr class="fr-sub"><th scope="colgroup" colspan="${cols.length + 2 + showAvg}"><span>${t('fr.sub.recs')}</span></th></tr>${body(recOnly)}` : ''}</tbody></table></div>`
       : `<div class="empty small"><b>${t('fr.none')}</b></div>`}`;
   showFocus();

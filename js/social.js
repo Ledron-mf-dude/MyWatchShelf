@@ -12,35 +12,106 @@ export const defId = name => 'l_' + encodeURIComponent(name);
 const year = v => { const s = String(v ?? '').trim(); return /^\d{4}$/.test(s) ? s : ''; };
 
 // Фільтр добірки з чого завгодно (хмара, посилання, localStorage) → відомий вигляд.
+// rec — «лише з позначкою „раджу“»; поле є тільки коли ввімкнено, тож старі
+// збережені умови лишаються тими самими. Роки навпаки міняємо місцями.
 export function cleanListFilter(f) {
   f = f && typeof f === 'object' ? f : {};
   const mine = +f.mine;
+  let from = year(f.from), to = year(f.to);
+  if (from && to && from > to) [from, to] = [to, from];
   return {
     kinds: [...new Set(Array.isArray(f.kinds) ? f.kinds.filter(k => KIND_IDS.includes(k)) : [])],
-    from: year(f.from), to: year(f.to),
+    from, to,
     status: STATUS_IDS.includes(f.status) ? f.status : 'all',
     genres: [...new Set(Array.isArray(f.genres) ? f.genres.filter(g => typeof g === 'string' && g && g.length <= 40) : [])].slice(0, 6),
     mine: Number.isInteger(mine) && mine >= 1 && mine <= 10 ? String(mine) : '',
+    ...(f.rec === true ? { rec: true } : {}),
   };
 }
 
 export const isEmptyFilter = f => {
   const c = cleanListFilter(f);
-  return !c.kinds.length && !c.from && !c.to && c.status === 'all' && !c.genres.length && !c.mine;
+  return !c.kinds.length && !c.from && !c.to && c.status === 'all' && !c.genres.length && !c.mine && !c.rec;
 };
 
+// Що з полиці підходить під умови добірки. Роки тут свої, не як у бібліотеці:
+// лише «від» — від того року й далі, лише «до» — до того року включно.
+export function listMatch(entries, f, sort = 'title', dir = 1) {
+  const c = cleanListFilter(f), a = +c.from || 0, b = +c.to || 9999;
+  const out = filterSort(entries, { ...c, from: '', to: '', status: c.status === 'all' ? undefined : c.status }, sort, dir);
+  return c.from || c.to ? out.filter(e => { const y = parseInt(e.year, 10); return y >= a && y <= b; }) : out;
+}
+
+// Ручний вибір поверх умов: plus — позначене рукою, minus — зняте рукою.
+// Показане = (те, що підходить під умови ∪ plus) \ minus; зміна умов їх не чіпає.
+export const manualPick = (matchIds, plus, minus) => {
+  const no = new Set(minus);
+  return new Set([...matchIds, ...plus].filter(id => !no.has(id)));
+};
+// Клік по галочці: m = { plus, minus } (Set), matches — чи підходить запис під умови.
+export function tickManual(m, id, matches, on) {
+  if (on) { m.minus.delete(id); if (!matches) m.plus.add(id); }
+  else { m.plus.delete(id); if (matches) m.minus.add(id); }
+}
+
+// Чи зайнята назва добірки (без огляду на регістр і пробіли по краях); except —
+// добірка, яку саме редагують. Повертає наявну назву або ''.
+export const nameTaken = (names, name, except = '') => {
+  const k = v => String(v).trim().toLowerCase();
+  return names.find(n => n !== except && k(n) === k(name)) || '';
+};
+
+// Сталий ключ добірки для посилання: 10 знаків [a-z0-9], створюється один раз.
+const KEY_ABC = 'abcdefghijklmnopqrstuvwxyz0123456789';
+export const listKey = (bytes = crypto.getRandomValues(new Uint8Array(10))) => Array.from(bytes, b => KEY_ABC[b % 36]).join('');
+const isKey = v => typeof v === 'string' && /^[a-z0-9]{6,16}$/.test(v) && !(v in Object.prototype);
+// Мапа «ключ → назва» для публічного документа: лише добірки, що ще існують.
+export const colsOf = (defs, names) =>
+  Object.fromEntries(defs.filter(d => isKey(d.key) && names.includes(d.name)).slice(0, 60).map(d => [d.key, d.name]));
+
+// «А, Б, В +2» — назви в підтвердженні й повідомленнях.
+export const nameList = (titles, max = 6) =>
+  titles.slice(0, max).join(', ') + (titles.length > max ? ` +${titles.length - max}` : '');
+
+// Збереження добірки: які записи отримують який перелік міток. old — стара назва
+// (порожньо — нова добірка), name — нова, picked — позначені id. Під час
+// редагування склад замінюється рівно позначеним, а мітка перейменовується на місці.
+export function listPlan(entries, old, name, picked) {
+  const want = new Set(picked), out = { set: [], added: [], skipped: 0 };
+  for (const e of entries) {
+    const cur = e.lists || [], has = !!old && cur.includes(old);
+    let next = cur;
+    if (want.has(e.id)) {
+      if (has) next = [...new Set(cur.map(l => (l === old ? name : l)))];
+      else if (cur.includes(name)) continue;
+      else if (cur.length >= LISTS_MAX) { out.skipped++; continue; }
+      else { next = [...cur, name]; out.added.push(e.id); }
+    } else if (has) next = cur.filter(l => l !== old);
+    if (next.length !== cur.length || next.some((l, i) => l !== cur[i])) out.set.push([e.id, next]);
+  }
+  return out;
+}
+
 // Запис сховища listdefs; мітки видалення проходять повз очищення (synced.js).
+// Є для кожної добірки (у зібраної вручну умови порожні): key — сталий ключ для
+// посилання, plus/minus — додане й зняте рукою поверх умов. Необов'язкові поля
+// пишемо лише коли вони є, тож старі записи не змінюються.
+const ids = v => [...new Set(Array.isArray(v) ? v.filter(isId) : [])].slice(0, 500);
 export function cleanListDef(r) {
   const name = typeof r?.name === 'string' ? r.name.trim().slice(0, 40) : '';
   if (!name || r.id !== defId(name)) return null;
-  return { id: r.id, name, f: cleanListFilter(r.f), updated: Number.isFinite(r.updated) ? r.updated : 0 };
+  const plus = ids(r.plus), minus = ids(r.minus);
+  return {
+    id: r.id, name, f: cleanListFilter(r.f), updated: Number.isFinite(r.updated) ? r.updated : 0,
+    ...(isKey(r.key) ? { key: r.key } : {}), ...(plus.length ? { plus } : {}), ...(minus.length ? { minus } : {}),
+  };
 }
 
 // Що змінить «переформувати добірку»: додати підходящі без мітки, прибрати
 // мітку з тих, що вже не підходять; записи з 8 добірками пропускаємо.
-export function listDiff(entries, name, f) {
-  const c = cleanListFilter(f);
-  const hit = new Set(filterSort(entries, { ...c, status: c.status === 'all' ? undefined : c.status }, 'title', 1).map(e => e.id));
+// manual — { plus, minus } з умов добірки: додане рукою не прибираємо, зняте не додаємо.
+export function listDiff(entries, name, f, manual = {}) {
+  const hit = manualPick(listMatch(entries, f).map(e => e.id), ids(manual.plus), ids(manual.minus));
   const has = e => (e.lists || []).includes(name);
   const out = { add: [], drop: [], skip: [] };
   for (const e of entries) {
@@ -106,7 +177,7 @@ export function shelfScores(entries, items) {
 
 // Куди повернути людину після входу: лише адреса чужого списку (#u=…).
 // Значення лежить у localStorage, тож перевіряємо і при записі, і при читанні.
-export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^#&]{1,400})?$/.test(h) ? h : '');
+export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^#&]{1,400}|&c=[a-z0-9]{6,16})?$/.test(h) ? h : '');
 
 // Записи сховища prefs: 'social' — чи відкриті оцінки друзям, 'seen' — коли
 // власник востаннє дивився відповіді. Окремо, бо запис цілком замінюється

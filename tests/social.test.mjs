@@ -410,3 +410,112 @@ test('socialCache: ключ «__proto__» у кеші не стає протот
     assert.equal(c.recs.length, undefined);
   } finally { delete globalThis.localStorage; }
 });
+
+// ── добірки: назва, ключ, ручний вибір, умови (пакет 1 після тесту друзів) ──
+import { listMatch, manualPick, tickManual, listKey, colsOf, nameTaken, nameList, listPlan } from '../js/social.js';
+import { cleanCols, colName, cleanRecs } from '../js/logic.js';
+
+test('nameTaken: та сама назва без огляду на регістр і пробіли', () => {
+  assert.equal(nameTaken(['Аніме', 'Нові'], ' аніме '), 'Аніме');
+  assert.equal(nameTaken(['Аніме'], 'Кіно'), '');
+  assert.equal(nameTaken(['Аніме', 'Нові'], 'аніме', 'Аніме'), '');   // редагуємо її саму — зміна регістру дозволена
+  assert.equal(nameTaken(['Аніме', 'Нові'], 'нові', 'Аніме'), 'Нові');
+});
+test('cleanListFilter: «лише раджу» і переставлені роки', () => {
+  assert.equal(cleanListFilter({ rec: true }).rec, true);
+  assert.equal('rec' in cleanListFilter({ rec: 'так' }), false);
+  assert.equal(isEmptyFilter({ rec: true }), false);
+  const f = cleanListFilter({ from: '2025', to: '2020' });
+  assert.deepEqual([f.from, f.to], ['2020', '2025']);
+});
+test('listMatch: роки «від», «до», проміжок; лише з позначкою «раджу»', () => {
+  const list = [E('tt0000001', { year: '2019' }), E('tt0000002', { year: '2021', rec: true }), E('tt0000003', { year: '2024' }), E('tt0000004', { year: '' })];
+  const ids = f => listMatch(list, f).map(e => e.id);
+  assert.deepEqual(ids({ from: '2021' }), ['tt0000002', 'tt0000003']);
+  assert.deepEqual(ids({ to: '2021' }), ['tt0000001', 'tt0000002']);
+  assert.deepEqual(ids({ from: '2020', to: '2022' }), ['tt0000002']);
+  assert.deepEqual(ids({ rec: true }), ['tt0000002']);
+  assert.equal(ids({}).length, 4);
+});
+test('manualPick і tickManual: ручні галочки переживають зміну умов', () => {
+  const m = { plus: new Set(), minus: new Set() };
+  tickManual(m, 'a', false, true);    // позначили те, що умовам не підходить
+  tickManual(m, 'b', true, false);    // зняли те, що підходить
+  assert.deepEqual([...manualPick(['b', 'c'], m.plus, m.minus)].sort(), ['a', 'c']);
+  assert.deepEqual([...manualPick(['d'], m.plus, m.minus)].sort(), ['a', 'd']);   // умови змінились — «a» лишилось
+  tickManual(m, 'a', false, false);
+  tickManual(m, 'b', true, true);
+  assert.deepEqual([...manualPick(['b', 'c'], m.plus, m.minus)].sort(), ['b', 'c']);
+  assert.deepEqual([m.plus.size, m.minus.size], [0, 0]);
+});
+test('listDiff зважає на ручні додавання й вилучення', () => {
+  const list = [
+    E('tt0000001', { kind: 'anime' }),                          // підходить, але знято вручну
+    E('tt0000002', { kind: 'movie', type: 'movie', lists: ['Л'] }),   // не підходить, але додано вручну
+    E('tt0000003', { kind: 'movie', type: 'movie', lists: ['Л'] }),   // не підходить і не ручне — прибрати
+    E('tt0000004', { kind: 'anime' }),
+  ];
+  const d = listDiff(list, 'Л', { kinds: ['anime'] }, { plus: ['tt0000002'], minus: ['tt0000001'] });
+  assert.deepEqual(d.add.map(e => e.id), ['tt0000004']);
+  assert.deepEqual(d.drop.map(e => e.id), ['tt0000003']);
+});
+test('cleanListDef: ключ і ручні списки чистяться', () => {
+  const base = { id: defId('Л'), name: 'Л', f: {}, updated: 1 };
+  const d = cleanListDef({ ...base, key: 'abc123xyz0', plus: ['tt0000001', 'сміття', 'tt0000001'], minus: 'ні' });
+  assert.equal(d.key, 'abc123xyz0');
+  assert.deepEqual(d.plus, ['tt0000001']);
+  assert.equal('minus' in d, false);
+  assert.equal('key' in cleanListDef({ ...base, key: 'ABC/../x' }), false);
+  assert.equal('key' in cleanListDef({ ...base, key: '__proto__' }), false);
+  assert.equal(cleanListDef({ ...base, plus: Array.from({ length: 600 }, (_, i) => 'tt' + String(1000000 + i)) }).plus.length, 500);
+});
+test('listKey: 10 знаків із малих літер і цифр', () => {
+  assert.match(listKey(), /^[a-z0-9]{10}$/);
+  assert.equal(listKey(new Uint8Array([0, 25, 26, 35, 36, 255, 1, 2, 3, 4])), 'az09adbcde');
+  assert.notEqual(listKey(), listKey());
+});
+test('colsOf: ключ → назва лише для живих добірок', () => {
+  const defs = [{ name: 'А', key: 'aaaaaaaa' }, { name: 'Б' }, { name: 'Зникла', key: 'bbbbbbbb' }];
+  assert.deepEqual(colsOf(defs, ['А', 'Б']), { aaaaaaaa: 'А' });
+});
+test('cleanCols і colName: чужа мапа добірок', () => {
+  const raw = JSON.parse('{"aaaaaaaa":"А","__proto__":"x","constructor":"y","ab":"короткий","bbbbbbbb":7,"cccccccc":"' + 'я'.repeat(50) + '"}');
+  const c = cleanCols(raw);
+  assert.deepEqual(Object.keys(c).sort(), ['aaaaaaaa', 'cccccccc']);
+  assert.equal(c.cccccccc.length, 40);
+  assert.equal(colName(c, 'aaaaaaaa'), 'А');
+  assert.equal(colName(c, 'constructor'), '');
+  assert.equal(colName(undefined, 'aaaaaaaa'), '');
+  assert.equal(Object.keys(cleanCols(Object.fromEntries(Array.from({ length: 80 }, (_, i) => ['k' + String(1000000 + i), 'н'])))).length, 60);
+  assert.deepEqual(cleanCols('ні'), {});
+  assert.deepEqual(cleanRecs({ items: [], cols: { aaaaaaaa: 'А' } }).cols, { aaaaaaaa: 'А' });
+  assert.equal('cols' in cleanRecs({ items: [] }), false);
+});
+test('returnHash пускає й посилання з ключем добірки', () => {
+  assert.equal(returnHash('#u=abc&c=abc123xyz0'), '#u=abc&c=abc123xyz0');
+  assert.equal(returnHash('#u=abc&c=ABC'), '');
+  assert.equal(returnHash('#u=abc&c=abc123xyz0&l=x'), '');
+});
+test('nameList: до шести назв, далі «+N»', () => {
+  assert.equal(nameList(['А', 'Б']), 'А, Б');
+  assert.equal(nameList(['1', '2', '3', '4', '5', '6', '7', '8']), '1, 2, 3, 4, 5, 6 +2');
+  assert.equal(nameList([]), '');
+});
+test('listPlan: редагування замінює склад і перейменовує', () => {
+  const full = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const list = [
+    E('tt0000001', { lists: ['Інша', 'Стара'] }),   // лишається — мітка перейменовується на місці
+    E('tt0000002', { lists: ['Стара'] }),           // зняли галочку
+    E('tt0000003'),                                 // додали
+    E('tt0000004', { lists: full }),                // додали, але місця немає
+    E('tt0000005', { lists: ['Інша'] }),            // не чіпали
+  ];
+  const p = listPlan(list, 'Стара', 'Нова', ['tt0000001', 'tt0000003', 'tt0000004']);
+  assert.deepEqual(p.set, [['tt0000001', ['Інша', 'Нова']], ['tt0000002', []], ['tt0000003', ['Нова']]]);
+  assert.deepEqual(p.added, ['tt0000003']);
+  assert.equal(p.skipped, 1);
+  // нова добірка: лише додавання, наявне не чіпаємо
+  assert.deepEqual(listPlan(list, '', 'Ще', ['tt0000005']).set, [['tt0000005', ['Інша', 'Ще']]]);
+  // без змін — порожній план
+  assert.deepEqual(listPlan(list, 'Стара', 'Стара', ['tt0000001', 'tt0000002']).set, []);
+});

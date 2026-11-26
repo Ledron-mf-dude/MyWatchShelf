@@ -197,6 +197,7 @@ export function filterSort(list, f, sort, dir) {
     if (f.kinds?.length && !f.kinds.includes(e.kind)) return false;
     if (f.genres?.length && !f.genres.some(g => (e.meta?.genres || []).includes(g))) return false;
     if (f.list && !(e.lists || []).includes(f.list)) return false;
+    if (f.rec === true && !e.rec) return false;   // умова добірки «лише з позначкою „раджу“»
     if (f.status === 'rec') { if (!e.rec) return false; }
     else if (f.status && f.status !== 'all' && e.status !== f.status) return false;
     if (q) {
@@ -284,6 +285,20 @@ export const recItem = e => ({
   ...(e.rec ? {} : { p: 0 }), ...(e.lists?.length ? { l: e.lists } : {}),
 });
 
+// Мапа «ключ добірки → назва» з публічного документа: за нею посилання
+// #u=…&c=<ключ> знаходить добірку й після перейменування. Ключі на кшталт
+// «constructor» відсіюємо, а читаємо мапу лише через colName.
+export function cleanCols(v) {
+  const out = {};
+  for (const [k, name] of Object.entries(v && typeof v === 'object' ? v : {})) {
+    if (Object.keys(out).length >= 60) break;
+    if (!/^[a-z0-9]{6,16}$/.test(k) || k in Object.prototype || typeof name !== 'string' || !name.trim()) continue;
+    out[k] = name.trim().slice(0, 40);
+  }
+  return out;
+}
+export const colName = (cols, key) => (cols && typeof key === 'string' && Object.hasOwn(cols, key) ? cols[key] : '');
+
 export function cleanRecs(data) {
   const items = (Array.isArray(data?.items) ? data.items : []).slice(0, 500)
     .filter(x => x && isId(x.id))
@@ -299,6 +314,8 @@ export function cleanRecs(data) {
   const out = { name: str(data?.name, 80), items };
   if (data?.title) out.title = str(data.title, 40);
   if (data?.open === true) out.open = true;   // список відкрито для оцінок друзів
+  const cols = cleanCols(data?.cols);
+  if (Object.keys(cols).length) out.cols = cols;
   return out;
 }
 

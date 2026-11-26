@@ -440,7 +440,7 @@ function renderRecsFail() {
         <a class="btn primary" href="#u=${esc(f.uid)}">${t('recs.nolist.go')}</a></div>`
     : f.kind === 'net'
       ? `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.net.text')}</p><button class="btn primary" data-act="recs-retry">${icon('refresh')}${t('retry')}</button></div>`
-      : `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.bad.text')}</p></div>`;
+      : `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.bad.text')}</p><a class="btn primary" href="./">${icon('library')}${t('my.shelf')}</a></div>`;
 }
 export function renderRecs() {
   if (!view.recs) return renderRecsFail();
@@ -465,10 +465,10 @@ export function renderRecs() {
   ${z('who')}${z('taste')}${z('bar', 'reply-bar')}
   <ul class="rec-list">${items.map((x, i) => `<li class="rcard" data-id="${x.id}" data-act="preview" tabindex="0">
       <span class="rec-n">${i + 1}</span>${ph(x.id, x.t, 'medium')}
-      <div class="rec-main"><h3>${esc(x.t)}${x.s ? `<b class="rec-sm" title="${t('author.score')}">${icon('starFill')}${fmtScore(x.s)}</b>` : `<small class="rec-sm none">${t('author.none')}</small>`}</h3>
+      <div class="rec-main"><div class="rec-top"><h3>${esc(x.t)}${x.s ? `<b class="rec-sm" title="${t('author.score')}">${icon('starFill')}${fmtScore(x.s)}</b>` : `<small class="rec-sm none">${t('author.none')}</small>`}</h3>
         <p class="row-sub">${esc([kindLabel(x.k), x.y].filter(Boolean).join(' · '))}${x.r ? ` · IMDb ${fmtRating(x.r)}` : ''}</p>
         ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
-        ${z('a:' + x.id, 'rec-acts')}${z('o:' + x.id)}
+        ${z('a:' + x.id, 'rec-acts')}${z('o:' + x.id)}</div>
         <div class="reply" data-act="reply-box">${z('r:' + x.id)}${z('n:' + x.id)}${z('t:' + x.id, 'reply-st')}</div></div>
       ${x.s ? `<div class="rec-score"><b>${fmtScore(x.s)}</b><small>${t('author.score')}</small></div>` : `<div class="rec-score none" title="${t('author.score')}"><small>${t('author.none')}</small></div>`}
     </li>`).join('') || `<li class="empty">${icon('star')}<b>${t('recs.empty.title')}</b><p>${t('recs.empty.text')}</p></li>`}</ul>`;

@@ -80,8 +80,11 @@ export function dropdown(id, value, options, ic, aria) {
 
 // ── повідомлення внизу екрана, за потреби з дією («Скасувати») ───
 let toastTimer;
-export function toast(text, { ms = 2800, label = '', action = null } = {}) {
+// low — лишити внизу, навіть коли там кнопка діалогу: коротке повідомлення про помилку
+// не має лягати на перелік, який людина саме читає.
+export function toast(text, { ms = 2800, label = '', action = null, low = false } = {}) {
   const t = $('#toast');
+  t.classList.toggle('low', low);
   t.innerHTML = `<span>${esc(text)}</span>${label ? `<button type="button">${esc(label)}</button>` : ''}`;
   if (label) $('button', t).onclick = () => { t.classList.remove('on'); action?.(); };
   t.classList.add('on');
@@ -102,7 +105,7 @@ function placeToast() {
   if (!t) return;
   t.style.bottom = '';
   const btn = [...layer.querySelectorAll('.btn.primary')].pop();
-  if (!btn || !t.classList.contains('on')) return;
+  if (!btn || !t.classList.contains('on') || t.classList.contains('low')) return;
   // своє місце рахуємо зі стилів, а не міряємо: повідомлення саме в цю мить виїжджає
   const box = (btn.closest('.card-foot, .build-foot') || btn).getBoundingClientRect();
   const low = innerHeight - (parseFloat(getComputedStyle(t).bottom) || 0), high = low - t.offsetHeight;

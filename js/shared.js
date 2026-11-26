@@ -13,6 +13,8 @@ function listCard(name, rows, all) {
   const cond = condDef(name);
   // добірка за умовами застаріла, коли полиця вже розійшлася з умовами
   const d = cond ? listDiff(all, name, cond.f, cond) : null, stale = d && (d.add.length || d.drop.length);
+  // додане рукою поверх умов — щоб було видно, чому в добірці є не лише відповідне умовам
+  const hand = cond ? rows.filter(e => (cond.plus || []).includes(e.id)).length : 0;
   const top = [...rows].sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 6);
   const v = esc(name);
   return `<article class="sh-card">
@@ -20,7 +22,7 @@ function listCard(name, rows, all) {
     ${rows.length
     ? `<div class="share-strip">${top.map(e => ph(e.id, e.title, 'small', '', true)).join('')}${rows.length > 6 ? `<span class="morecount">+${rows.length - 6}</span>` : ''}</div>`
     : `<p class="muted small">${t('sh.general.empty')}</p>`}
-    ${name ? `<p class="muted small">${cond ? `${icon('filter')} ${esc(filterText(cond.f))}` : t('sh.manual')}${stale ? ` <span class="badge static warn">${t('sh.stale', { a: d.add.length, d: d.drop.length })}</span>` : ''}</p>` : rows.length ? `<p class="muted small">${t('sh.general.text')}</p>` : ''}
+    ${name ? `<p class="muted small">${cond ? `${icon('filter')} ${esc(filterText(cond.f))}${hand ? ` · ${t('sh.hand', { n: hand })}` : ''}` : t('sh.manual')}${stale ? ` <span class="badge static warn">${t('sh.stale', { a: d.add.length, d: d.drop.length })}</span>` : ''}</p>` : rows.length ? `<p class="muted small">${t('sh.general.text')}</p>` : ''}
     ${rows.length ? `<div class="hero-act">
       <button class="btn primary" data-act="sh-copy" data-v="${v}">${icon('link')}${t('copy')}</button>
       <button class="btn" data-act="share-list" data-v="${v}">${icon('share')}${t('sh.share')}</button>
@@ -49,7 +51,8 @@ export const shareActions = {
     const sl = await shareLink(v);
     if (!sl) return toast(t('share.none'), { ms: 4200 });
     try { await navigator.clipboard.writeText(sl.link); toast(t(sl.live ? 'toast.copied' : 'sh.copied.snap'), { ms: sl.live ? 2800 : 4500 }); }
-    catch { openShare(v); }   // буфер недоступний — покажемо посилання в діалозі
+    // буфер недоступний — показуємо посилання в діалозі й кажемо, що з ним робити
+    catch { await openShare(v); toast(t('sh.copy.manual'), { ms: 5000 }); }
   },
   // Добірка — це мітка на записах: знімаємо її, самі записи лишаються на полиці.
   'sh-drop': async v => {

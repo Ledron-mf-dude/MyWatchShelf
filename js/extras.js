@@ -7,7 +7,7 @@ import {
 import { t, tn, getLang } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
-import { scoreFrom } from './social.js';
+import { scoreFrom, tasteVerdict } from './social.js';
 import { $, app, layer, icon, ph, toast, ui, showOverlay, closeOverlay } from './ui.js';
 import { openCard } from './panel.js';
 
@@ -138,8 +138,8 @@ export function taste(items, replyScores = {}) {
   const enough = m.scored >= TASTE_MIN;
   const panel = `<section class="taste">
     ${enough ? `<div class="taste-pct"><b>${m.pct}%</b><small>${t('taste.match')}</small></div>` : ''}
-    <div><b>${!m.scored ? t('taste.none') : !enough ? t('taste.few') : m.pct >= 75 ? t('taste.high') : m.pct >= 50 ? t('taste.mid') : t('taste.low')}</b>
-      <p>${t('taste.line', { a: m.common, b: m.unseen })}${m.scored ? ' ' + t('taste.scored', { n: `${m.scored} ${tn('title', m.scored)}` }) : ''}</p></div></section>`;
+    <div><b>${!m.scored ? t('taste.none') : !enough ? t('taste.few') : t(tasteVerdict(m.pct, [...tags.values()].some(v => v.tag === 'differ')))}</b>
+      <p>${t('taste.line', { a: m.common, b: m.unseen })}${m.scored ? ' · ' + t('taste.scored', { n: m.scored }) : ''}</p></div></section>`;
   return { panel, tags };
 }
 // sent — моя оцінка, надіслана на цей список; canRate — чи можу тут оцінювати.

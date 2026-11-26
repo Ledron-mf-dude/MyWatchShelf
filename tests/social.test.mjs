@@ -161,7 +161,7 @@ test('friendTable: оцінка мого списку й рекомендаці�
     replies: { oleh: R('Олег', { tt0000001: { s: 8, t: 'A' } }), ira: R('Іра', { tt0000001: { s: 9.5, t: 'A' } }) },
     recs: { oleh: [{ id: 'tt0000001', t: 'A', k: 'series', s: 6 }, { id: 'tt0000002', t: 'B', k: 'anime', s: 9 }] },
   });
-  assert.deepEqual(tb.cols.map(c => c.name), ['Олег', 'Іра']);
+  assert.deepEqual(tb.cols.map(c => c.name), ['Іра', 'Олег']);   // за іменем, а не за часом додавання
   const a = tb.rows.find(r => r.id === 'tt0000001'), b = tb.rows.find(r => r.id === 'tt0000002');
   assert.deepEqual(a.cells.oleh, { s: 8, n: '', rec: true, rs: 6, rn: '' });
   assert.equal(a.avg, 8.8); assert.equal(a.mine, 10); assert.equal(a.have, true); assert.equal(a.only, false);
@@ -333,7 +333,7 @@ test('friendTable: id «constructor» і «toString» не ламають зве
     replies: {},
     recs: {},
   });
-  assert.deepEqual(tb.cols.map(c => c.name), ['Свій', 'Знімок']);
+  assert.deepEqual(tb.cols.map(c => c.name), ['Знімок', 'Свій']);
   assert.equal(tb.rows.length, 1);
   assert.deepEqual(tb.rows[0].cells.toString, { s: 0, n: '', rec: true, rs: 7, rn: '' });
   const tb2 = friendTable({
@@ -341,7 +341,7 @@ test('friendTable: id «constructor» і «toString» не ламають зве
     replies: { valueOf: R('Ім', { tt0000001: { s: 6, t: 'A' } }) },
     recs: { constructor: [{ id: 'tt0000001', t: 'A', k: 'series', s: 8 }] },
   });
-  assert.deepEqual(tb2.cols.map(c => c.name), ['Свій', 'Ім']);
+  assert.deepEqual(tb2.cols.map(c => c.name), ['Ім', 'Свій']);
   assert.equal(tb2.rows[0].avg, 7); assert.equal(tb2.rows[0].n, 2);
   assert.equal(unseenCount(tb2, {}, 0), 0);
 });
@@ -869,4 +869,24 @@ test('scoreFrom: оцінка з полиці, не надіслана на це
   assert.equal(scoreFrom({ shelf: 7, sent: 9, canRate: true }), 'shelf');     // для збігу береться полиця — так і кажемо
   assert.equal(scoreFrom({ shelf: 7, sent: 0, canRate: false }), 'shelf');    // без входу чи на знімку надсилати нікуди
   assert.equal(scoreFrom({ shelf: 0, sent: 8, canRate: true }), 'here');      // на полиці оцінки немає — рахується поставлена тут
+});
+
+// ── дрібниці другої хвилі ──
+import { tasteVerdict } from '../js/social.js';
+test('tasteVerdict: «дуже схоже» не кажемо, коли хоч один тайтл «розійшлись»', () => {
+  assert.equal(tasteVerdict(90, false), 'taste.high');
+  assert.equal(tasteVerdict(90, true), 'taste.mostly');
+  assert.equal(tasteVerdict(75, false), 'taste.high');
+  assert.equal(tasteVerdict(60, true), 'taste.mid');
+  assert.equal(tasteVerdict(49, false), 'taste.low');
+});
+test('friendTable: стовпці — за іменем без огляду на регістр, далі за id; порядок не залежить від часу додавання', () => {
+  const F = (id, name, added) => ({ id, uid: id, name, kind: 'live', follow: false, kept: false, added, lists: [] });
+  const it = { tt0000001: { s: 5, n: '', at: 1, t: 'A', k: 'movie', y: '' } };
+  const replies = { u1: { name: 'віка', items: it, updated: 1 }, u2: { name: 'Богдан', items: it, updated: 1 }, u3: { name: 'Віка', items: it, updated: 1 }, u4: { name: '', items: it, updated: 1 } };
+  const order = friends => friendTable({ entries: [], friends, replies, recs: {} }).cols.map(c => c.id);
+  const a = order([F('u1', '', 1), F('u2', '', 2), F('u3', '', 3), F('u4', '', 4)]);
+  assert.deepEqual(a, ['u2', 'u1', 'u3', 'u4']);   // Богдан, віка (u1), Віка (u3), без підпису — в кінці
+  // сховали й повернули Богдана: added став найновішим, а місце стовпця те саме
+  assert.deepEqual(order([F('u1', '', 1), F('u3', '', 3), F('u4', '', 4), F('u2', '', 99)]), a);
 });

@@ -8,7 +8,7 @@ import * as catalog from './meta.js';
 import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs, updateRecs, retryHome, retryDiscover } from './views.js';
 import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl, palKind,
-  cardActions, buildActions, loadDemo, flushCard, palRetry,
+  cardActions, buildActions, loadDemo, flushCard, palRetry, closeAsk,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
 import { replyActions, friendActions, loadReplyState, leaveReplies, refreshReplies, flushReplies, resendReplies, replayOutbox, takeScore, ownPreview, social, renderFriends } from './friends.js';
@@ -241,7 +241,7 @@ on({
   'sel-pick': (v, el) => { selects[el.closest('.sel').dataset.sel]?.(v); },
   'share-list': v => openShare(v),
   'list-filter': v => { view.f.list = view.f.list === v ? '' : v; updateLibrary(); },
-  close: closeOverlay,
+  close: closeAsk,
   add: openPalette,
   menu: () => toggleMenu(),
   signin: () => { try { cloud.signIn(); } catch (err) { toast(t('toast.signin.fail', { e: err.message }), { ms: 5000 }); } },
@@ -341,7 +341,7 @@ document.addEventListener('pointerover', ev => {
 
 document.addEventListener('keydown', ev => {
   const typing = ev.target.matches?.('input,textarea,select');
-  if (ev.key === 'Escape') { if (ui.overlay) closeOverlay(); else closePops(); }
+  if (ev.key === 'Escape') { if (ui.overlay) closeAsk(); else closePops(); }
   else if ((ev.key === '/' && !typing) || (ev.key.toLowerCase() === 'k' && (ev.ctrlKey || ev.metaKey))) { ev.preventDefault(); if (view.route !== 'recs') openPalette(); }
   else if (ev.key === 'Enter' && ev.target.matches?.('[data-act][tabindex]')) ev.target.click();
   else if ((ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && ev.target.matches?.('.options button')) {

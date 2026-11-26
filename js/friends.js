@@ -82,7 +82,7 @@ function othersHtml(id, cap = '') {
 // уже після моїх оцінок — помітне повідомлення, яке треба закрити самому.
 function whoHtml(recs, mode) {
   const owner = esc(ownerName(recs));
-  if (mode === 'signin') return `<p class="who-line">${recs.open ? t('who.signin') : cap(t('who.closed', { owner }))}</p>`;
+  if (mode === 'signin') return `<p class="who-line">${t(recs.open ? 'who.signin.open' : 'who.signin.closed', { owner })}</p>`;
   if (recs.open && rs.ready && openNotice(true, Object.keys(rs.mine.items).length, replyMem.get(rs.owner).open)) {
     return `<div class="who-box" role="status"><div><b>${t('who.changed')}</b><p>${cap(t('who.open', { owner }))}</p></div>
       <button class="btn" data-act="who-ok">${t('who.ok')}</button></div>`;
@@ -112,9 +112,11 @@ export function replyParts(recs) {
     ['keep', own ? '' : keepButton(recs)],
     ['bar', rate ? barHtml(recs) : ''],
   ]);
-  for (const x of recs.items) {
+  // що дає вхід — одним рядком біля першої кнопки «Увійти, щоб оцінити»
+  const why = signin ? `${signin}<small class="muted signin-why">${t('reply.signin.why', { owner: esc(ownerName(recs)) })}</small>` : '';
+  for (const [i, x] of recs.items.entries()) {
     zones.set('o:' + x.id, others ? othersHtml(x.id, cap) : '');
-    zones.set('r:' + x.id, rate ? scoreHtml(x) : signin);
+    zones.set('r:' + x.id, rate ? scoreHtml(x) : i ? signin : why);
     zones.set('n:' + x.id, rate ? noteHtml(x) : '');
     zones.set('t:' + x.id, rate ? stateHtml(x.id) : '');
   }
@@ -349,7 +351,7 @@ document.addEventListener('input', ev => {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight + 2, 220) + 'px';
   const c = el.closest('.reply')?.querySelector('[data-reply-count]');
-  if (c) { c.hidden = el.value.length < 450; c.textContent = `${el.value.length}/500`; }
+  if (c) { c.hidden = el.value.length < 400; c.textContent = `${el.value.length}/500`; }
 });
 document.addEventListener('change', ev => { const el = noteEl(ev); if (el) saveNote(idOf(el), el.value); });
 document.addEventListener('keydown', ev => {
@@ -571,7 +573,7 @@ const frNote = n => `<button class="fr-n" data-act="fr-note" title="${esc(n)}" a
 function facts(c) {
   const mine = !!(c.s || c.n), both = mine && c.rec;
   const star = `<span class="fr-rec" title="${t('fr.rec')}" aria-label="${t('fr.rec')}">${icon('starFill')}</span>`;
-  return `${mine ? `<span class="fr-l">${both ? `<i>${t('fr.l.score')}</i>` : ''}<span class="fr-s">${c.s ? fmtScore(c.s) : '·'}</span>${c.n ? frNote(c.n) : ''}</span>` : ''}${
+  return `${mine ? `<span class="fr-l">${both ? `<i>${t('fr.l.score')}</i>` : ''}${c.s ? `<span class="fr-s">${fmtScore(c.s)}</span>` : ''}${c.n ? frNote(c.n) : ''}</span>` : ''}${
     c.rec ? `<span class="fr-l rec">${both ? `<i>${t('fr.l.rec')}</i>` : ''}${star}${c.rs ? `<span class="fr-s">${fmtScore(c.rs)}</span>` : ''}${c.rn ? frNote(c.rn) : ''}</span>` : ''}`;
 }
 // На телефоні стовпців друзів немає: ті самі оцінки йдуть рядками під назвою
@@ -616,7 +618,7 @@ function showFocus() {
     if (!row) return;
     row.scrollIntoView({ block: 'center' });
     row.classList.add('flash');
-    setTimeout(() => row.classList.remove('flash'), 1800);
+    setTimeout(() => row.classList.remove('flash'), 2200);
   }, 0);
 }
 
@@ -753,6 +755,14 @@ Object.assign(friendActions, {
     if (next && Object.hasOwn(c.recs, v)) c.recs[v] = recsFor(next, c.recs[v]);
     socialCache.set(c);
     manageDone();
+    // Помилились — «Повернути»: запам'ятане стає як було, а рекомендації дочитуємо наново
+    // (з кешу їх уже прибрано).
+    toast(list ? t('fr.forgot', { name: list }) : t('fr.forgot.general'), { label: t('restore'), action: () => {
+      if (!friends.get(v)) return;
+      friends.save(v, { kept: f.kept, lists: f.lists, follow: f.follow });
+      pullRecs({ id: v, uid: v });
+      manageDone();
+    } });
   },
   // Справді забуваємо все, що запам'ятали в цієї людини: «Показувати» вже нічого не
   // поверне. Її оцінки моїх списків лишаються.

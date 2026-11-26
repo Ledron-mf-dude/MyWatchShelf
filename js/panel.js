@@ -605,7 +605,14 @@ function drawBuild() {
   buildNameCount(o);
   updateBuild();
 }
-const buildNameCount = o => { $('#build-n', layer).textContent = `${o.name.length}/40`; };
+const buildNameCount = o => { $('#build-n', layer).textContent = `${o.name.trim().length}/40`; };   // рахуємо те, що збережеться
+// Закриття діалогу хрестиком, тлом чи Esc: коли в добірці щось змінили (галочки,
+// назву, умови) й не зберегли — спершу перепитуємо.
+export async function closeAsk() {
+  const o = ui.overlay;
+  if (o?.type === 'build' && o.touched && !await confirmBox({ title: t('build.leave.title'), ok: t('build.leave.ok') })) return;
+  if (ui.overlay === o) closeOverlay();
+}
 // Лічильник і примітка: коли є і умови, і ручні зміни, кажемо, що «Сформувати знову» їх не чіпає.
 function buildCount(o) {
   $('#build-count', layer).textContent = t('build.picked', { n: [...buildPicked(o)].filter(id => store.get(id)).length });
@@ -644,6 +651,7 @@ function updateBuild() {
 function buildApply(f) {
   const o = ui.overlay;
   o.f = cleanListFilter(f);
+  o.touched = true;
   for (const id of o.pending) o.minus.delete(id);
   o.pending.clear();
   updateBuild();
@@ -662,7 +670,7 @@ function buildYears() {
 layer.addEventListener('input', ev => {
   const o = ui.overlay, el = ev.target;
   if (o?.type !== 'build') return;
-  if (el.matches('[data-build-name]')) { o.name = el.value; buildNameCount(o); }
+  if (el.matches('[data-build-name]')) { o.name = el.value; o.touched = true; buildNameCount(o); }
   if (el.matches('[data-build-year]')) {
     // лише цифри; застосовуємо невдовзі після останньої, не чекаючи виходу з поля
     const v = el.value.replace(/\D/g, '');
@@ -696,6 +704,7 @@ function buildTick(id) {
   const on = !buildPicked(o).has(id);
   tickManual(o, id, buildHit(o.f).has(id), on);
   o.pending.delete(id);
+  o.touched = true;
   // міняємо лише цей рядок і лічильник — решта діалогу не перемальовується
   const row = [...layer.querySelectorAll('[data-act="build-tick"]')].find(r => r.dataset.v === id);
   if (row) {
@@ -716,7 +725,7 @@ function buildSave() {
   if (!name) return toast(t('build.err.name'));
   // та сама назва злила б дві добірки в одну — відмовляємо, нічого не пишучи
   const dup = nameTaken(listNames(all), name, o.edit);
-  if (dup) return toast(t('build.err.dup', { name: dup }), { ms: 5000 });
+  if (dup) return toast(t('build.err.dup', { name: dup }), { low: true });   // коротко й унизу: перелік лишається видним
   if (!picked.length) return toast(t('build.err.pick'));
   const plan = listPlan(all, o.edit, name, picked);
   // усе позначене вже у 8 добірках: назви не ніс би жоден запис, а редагована добірка зникла б

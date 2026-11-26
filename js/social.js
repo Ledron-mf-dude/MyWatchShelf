@@ -119,7 +119,7 @@ export function cleanListDef(r) {
   };
 }
 
-// Що змінить «переформувати добірку»: додати підходящі без мітки, прибрати
+// Що змінить «переформувати добірку»: додати відповідні без мітки, прибрати
 // мітку з тих, що вже не підходять; записи з 8 добірками пропускаємо.
 // manual — { plus, minus } з умов добірки: додане рукою не прибираємо, зняте не додаємо.
 export function listDiff(entries, name, f, manual = {}) {
@@ -193,6 +193,10 @@ export function shelfScores(entries, items) {
 // 'unsent' — є лише на полиці, на цей список не надіслана (і надіслати можна);
 // 'shelf' — з полиці (надсилати нікуди або тут стоїть інша).
 export const scoreFrom = ({ shelf, sent, canRate }) => (!shelf || sent === shelf ? 'here' : canRate && !sent ? 'unsent' : 'shelf');
+
+// Вердикт збігу смаків — за відсотком; але «дуже схоже» не кажемо, коли хоч один
+// тайтл позначено «розійшлись»: тоді «здебільшого схоже».
+export const tasteVerdict = (pct, differ) => (pct >= 75 ? (differ ? 'taste.mostly' : 'taste.high') : pct >= 50 ? 'taste.mid' : 'taste.low');
 
 // Куди повернути людину після входу: лише адреса чужого списку (#u=…).
 // Значення лежить у localStorage, тож перевіряємо і при записі, і при читанні.
@@ -358,7 +362,11 @@ const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
 export function friendTable({ entries, friends, replies, recs, given = {} }) {
   const all = liveFriends(friends), shown = all.slice(0, FRIENDS_MAX);
   const mine = new Map(entries.map(e => [e.id, e]));
-  const cols = shown.map(f => ({ id: f.id, name: own(replies, f.uid)?.name || f.name }));
+  // Стовпці — за іменем (без огляду на регістр), далі за id, без підпису — в кінці:
+  // сховану й повернену людину (новий added) не переносить в інше місце.
+  const low = c => c.name.toLowerCase();
+  const cols = shown.map(f => ({ id: f.id, name: own(replies, f.uid)?.name || f.name }))
+    .sort((a, b) => !a.name - !b.name || low(a).localeCompare(low(b)) || a.id.localeCompare(b.id));
   const rows = new Map();
   for (const f of shown) {
     const reply = f.kind === 'live' ? own(replies, f.uid)?.items || {} : {};

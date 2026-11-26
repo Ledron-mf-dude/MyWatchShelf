@@ -281,7 +281,10 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
 .author{display:flex; gap:16px; align-items:center}
 /* оцінка друга на картці списку; .z — шматок, який сторінка оновлює на місці */
 .z:empty{display:none}
-.rec-main>.z{justify-self:stretch; min-width:0}
+.rec-main .z{justify-self:stretch; min-width:0}
+/* верх картки (назва, коментар автора, кнопки): на комп'ютері це ті самі рядки сітки, на телефоні — окремий блок біля постера */
+.rec-top{display:contents}
+.signin-why{display:block; margin-top:6px; font-size:12.5px}
 .rec-acts{display:flex; flex-wrap:wrap; align-items:center; gap:8px}
 .rec-sm{display:none} .rec-score.none small{font-size:12px}
 .reply{width:100%; display:grid; gap:8px; margin-top:6px; cursor:default}
@@ -482,7 +485,12 @@ button.more .ic{width:16px; height:16px}
   .rcard{flex-wrap:wrap; gap:12px; padding:14px} .rcard .ph{width:76px} .rec-n{display:none} .rec-main{flex:1 1 60%} .rcard h3{font-size:16px}
   /* оцінка автора лишається біля назви, а не внизу картки; бали — у два ряди, під палець */
   .rec-score{display:none} .rec-sm{display:inline-flex; align-items:center; gap:3px; margin-left:8px; color:var(--accent); font-size:15px; white-space:nowrap; vertical-align:baseline} .rec-sm .ic{width:14px; height:14px} .rec-sm.none{color:var(--faint); font-size:12px; font-weight:700}
-  .reply .scores{grid-template-columns:repeat(6,minmax(30px,1fr))} .reply .scores button{height:42px; font-size:14px}
+  /* оцінювання — на всю ширину картки, під постером: бали у два ряди по п'ять, кожен щонайменше 44 px */
+  .rec-top{display:grid; gap:6px; justify-items:start; align-content:start; min-height:114px}
+  .reply{width:calc(100% + 88px); margin-left:-88px}
+  .reply .scores{grid-template-columns:repeat(5,minmax(44px,1fr))} .reply .scores button{height:44px; font-size:15px} .reply .scores .half{grid-column:1/-1}
+  .reply textarea.inp{font-size:16px}   /* менший шрифт змушує iOS наближати сторінку */
+  .rec-acts .btn{height:auto; min-height:40px; padding-top:8px; padding-bottom:8px; white-space:normal; text-align:left; max-width:100%}
   .reply h4 .rb{min-width:32px; height:32px} .btn.sm{height:36px}
   .who-box{flex-direction:column; align-items:stretch}
   .card{width:100%; border-left:0} .card-hero{padding:96px 16px 14px} .card-body{padding:4px 16px 20px} .card-foot{padding-left:16px; padding-right:16px}
@@ -574,7 +582,9 @@ button.more .ic{width:16px; height:16px}
 .fr-row{cursor:pointer; scroll-margin-top:calc(var(--top-h) + 56px)}
 .fr-row:hover th,.fr-row:hover td{background:var(--surface)}
 .fr-row th,.fr-row td{transition:background .5s}
-.fr-row.flash th,.fr-row.flash td{background:var(--accent-soft)}
+.fr-row.flash th,.fr-row.flash td{background:var(--accent-soft); box-shadow:inset 0 2px 0 var(--accent),inset 0 -2px 0 var(--accent)}
+/* оцінка стоїть на тій самій висоті з коментарем під нею й без нього */
+.fr-table td.fr-c{vertical-align:top; padding-top:24px}
 .fr-sub th{padding:14px 12px 8px; text-align:left; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--faint); background:var(--surface)}
 .fr-s{font-weight:800; font-size:16px; font-variant-numeric:tabular-nums}
 .fr-g{display:block; font-size:10.5px; font-weight:600; color:var(--faint); white-space:nowrap} .fr-card .fr-g,.fr-stack .fr-g{display:inline}
@@ -608,7 +618,7 @@ button.more .ic{width:16px; height:16px}
 .chip.danger{color:var(--red)} .chip.danger:hover{border-color:var(--red)}
 /* вужчий екран комп'ютера: щільніші клітинки, коротші початки коментарів, без стовпця «Сер.» */
 @media (min-width:721px) and (max-width:1100px){
-  .fr-table th,.fr-table td{padding:8px 6px} .fr-c{min-width:54px} .fr-t{min-width:170px}
+  .fr-table th,.fr-table td{padding:8px 6px} .fr-table td.fr-c{padding-top:22px} .fr-c{min-width:54px} .fr-t{min-width:170px}
   .fr-table thead th span{max-width:80px}
   .fr-n{max-width:120px} .fr-n .cut{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden} .fr-n.open .cut{display:none}
 }

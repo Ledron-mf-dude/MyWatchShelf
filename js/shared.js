@@ -18,7 +18,7 @@ function listCard(name, rows, all) {
   return `<article class="sh-card">
     <header><h2>${name ? icon('folder') + v : icon('starFill') + t('share.title')}</h2><span class="count">${rows.length} ${tn('title', rows.length)}</span></header>
     ${rows.length
-    ? `<div class="share-strip">${top.map(e => ph(e.id, e.title, 'small')).join('')}${rows.length > 6 ? `<span class="morecount">+${rows.length - 6}</span>` : ''}</div>`
+    ? `<div class="share-strip">${top.map(e => ph(e.id, e.title, 'small', '', true)).join('')}${rows.length > 6 ? `<span class="morecount">+${rows.length - 6}</span>` : ''}</div>`
     : `<p class="muted small">${t('sh.general.empty')}</p>`}
     ${name ? `<p class="muted small">${cond ? `${icon('filter')} ${esc(filterText(cond.f))}` : t('sh.manual')}${stale ? ` <span class="badge static warn">${t('sh.stale', { a: d.add.length, d: d.drop.length })}</span>` : ''}</p>` : rows.length ? `<p class="muted small">${t('sh.general.text')}</p>` : ''}
     ${rows.length ? `<div class="hero-act">

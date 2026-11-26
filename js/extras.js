@@ -62,7 +62,7 @@ export function renderCalendar() {
   const row = (r, v, label, cls) => `<li class="row" data-id="${r.e.id}" data-act="open" tabindex="0">${ph(r.e.id, r.e.title, 'small')}
     <div class="row-main"><div class="row-title"><b>${esc(r.e.title)}</b></div>
       <div class="row-sub">${v ? esc(epLabel(v)) : ''}${v && r.behind > 1 ? ' · ' : ''}${r.behind > 1 || !v ? `${r.behind} ${tn('episode', r.behind)} ${t('cal.waiting')}` : ''}</div></div>
-    <div class="row-act">${r.behind > 0 ? `<button class="rb" data-act="plus" title="${t('next.ep')}">+1</button>` : ''}</div>
+    <div class="row-act">${r.behind > 0 ? `<button class="rb" data-act="plus" title="${t('next.ep')}" aria-label="${t('next.ep')}">+1</button>` : ''}</div>
     <div class="when"><em class="badge static ${cls}">${esc(label)}</em></div></li>`;
   const group = (title, rows) => (rows.length ? `<h2 class="cal-h">${title}<small>${rows.length}</small></h2><ul class="list">${rows.join('')}</ul>` : '');
   const body = group(t('cal.fresh'), a.fresh.map(r => row(r, r.fresh, dayLabel(r.fresh.d), 'ok')))

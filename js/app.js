@@ -3,12 +3,12 @@ import { esc, decodeRecs, recsHash, listView, fmtScore } from './logic.js';
 import { t, tn, setLang, getLang, LANGS } from './i18n.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
-import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox, selects } from './ui.js';
+import { $, $$, app, layer, icon, toast, hideToast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox, selects } from './ui.js';
 import * as catalog from './meta.js';
-import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs, updateRecs } from './views.js';
+import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs, updateRecs, retryHome, retryDiscover } from './views.js';
 import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl, palKind,
-  cardActions, buildActions, loadDemo, flushCard,
+  cardActions, buildActions, loadDemo, flushCard, palRetry,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
 import { replyActions, friendActions, loadReplyState, refreshReplies, flushReplies, resendReplies, takeScore, social, renderFriends } from './friends.js';
@@ -151,6 +151,7 @@ setInterval(refreshRecs, 60000);
 
 async function route() {
   flushReplies();   // недописаний коментар на списку, з якого йдемо
+  hideToast();      // повідомлення про попередню сторінку на новій ні до чого
   closeOverlay();
   const raw = location.hash.slice(1);
   if (raw.startsWith('u=') || raw.startsWith('r=')) {
@@ -271,6 +272,9 @@ on({
   'disc-type': v => { view.disc.type = v; history.replaceState(null, '', '#/discover/' + v); renderDiscover(); },
   'disc-more': () => loadDiscover(false),
   'disc-reset': resetDiscover,
+  'disc-retry': retryDiscover,
+  'home-retry': retryHome,
+  'pal-retry': palRetry,
   'pal-kind': palKind,
   // пошук і поширення
   pick: v => pickResult(+v),

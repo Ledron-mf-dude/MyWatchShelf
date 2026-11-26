@@ -35,7 +35,7 @@ export function entryCard(e, { rank = 0 } = {}) {
         ${m.imdb ? `<span class="badge imdb">IMDb ${fmtRating(m.imdb)}</span>` : ''}
         <div class="pc-acts">
           ${url ? `<a class="rb solid" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${t('watch')}" aria-label="${t('watch')}">${icon('play')}</a>` : ''}
-          ${canPlus(e) ? `<button class="rb solid" data-act="plus" title="${t('next.ep')}">+1</button>` : ''}
+          ${canPlus(e) ? `<button class="rb solid" data-act="plus" title="${t('next.ep')}" aria-label="${t('next.ep')}">+1</button>` : ''}
         </div>
         ${e.type === 'series' && pct > 0 && pct < 100 ? `<i class="pc-bar" style="--w:${pct}%"></i>` : ''}
       </div>
@@ -53,7 +53,7 @@ export function catalogCard(x, { rank = 0 } = {}) {
       <div class="pc-img">${ph(x.id, x.title, 'medium', 'fill')}
         ${m.imdb ? `<span class="badge imdb">IMDb ${fmtRating(m.imdb)}</span>` : ''}
         <div class="pc-acts show">${have
-          ? `<span class="rb solid on" title="${t('on.shelf.already')}">${icon('check')}</span>`
+          ? `<span class="rb solid on" role="img" title="${t('on.shelf.already')}" aria-label="${t('on.shelf.already')}">${icon('check')}</span>`
           : `<button class="rb solid" data-act="quick-add" title="${t('to.shelf')}" aria-label="${t('to.shelf')}">${icon('plus')}</button>`}</div>
       </div>
       <h3>${esc(x.title)}</h3>
@@ -61,6 +61,9 @@ export function catalogCard(x, { rank = 0 } = {}) {
     </div>
   </article>`;
 }
+// Каталог не відповів: замість вічних заглушок — що сталося й кнопка «Спробувати ще раз».
+const downHtml = act => `<div class="empty small" role="alert">${icon('compass')}<b>${t('catalog.down')}</b><p>${t('catalog.down.text')}</p>
+  <button class="btn primary" data-act="${act}">${icon('refresh')}${t('retry')}</button></div>`;
 const skeletons = n => Array.from({ length: n }, () => '<div class="pc skel"><div class="pc-body"><div class="pc-img"></div><h3>&nbsp;</h3><p>&nbsp;</p></div></div>').join('');
 
 function rail(id, cards, { ranked = false, link = '' } = {}) {
@@ -145,18 +148,20 @@ function drawHomeCatalog() {
     }
     return;
   }
-  if (view.home.error) { box.innerHTML = `<p class="muted pad">${t('catalog.down')}</p>`; return; }
+  if (view.home.error) { box.innerHTML = downHtml('home-retry'); return; }
   const h = view.home;
   box.innerHTML = rail('popular', h.series.slice(0, 10).map((x, i) => catalogCard(x, { rank: i + 1 })).join(''), { ranked: true, link: more('series') })
     + (h.anime.length ? rail('anime', h.anime.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more('anime') }) : '')
     + rail('movies', h.movies.slice(0, 20).map(x => catalogCard(x)).join(''), { link: more('movie') });
 }
 
+export function retryHome() { view.home = null; drawHomeCatalog(); }
+
 // ── бібліотека ────────────────────────────────────────────────────
 function rowHtml(e) {
   const m = e.meta || {}, url = safeUrl(e.url), pct = progressPct(e);
   const line = [statusLabel(e.status), progressText(e), ...(m.genres || []).slice(0, 3).map(genreName), fmtRuntime(m.runtime)].filter(Boolean).join(' · ');
-  return `<li class="row" data-id="${e.id}" data-act="open" tabindex="0">
+  return `<li class="row" data-id="${e.id}" data-act="open" tabindex="0" aria-label="${esc(e.title)}">
     ${ph(e.id, e.title, 'small')}
     <div class="row-main">
       <div class="row-title"><i class="dot st-${e.status}"></i><b>${esc(e.title)}</b>${e.rec ? `<span class="badge rec static">${t('badge.rec')}</span>` : ''}</div>
@@ -166,13 +171,16 @@ function rowHtml(e) {
     </div>
     <div class="row-act">
       ${url ? `<a class="rb" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${t('watch')}" aria-label="${t('watch')}">${icon('play')}</a>` : ''}
-      ${canPlus(e) ? `<button class="rb" data-act="plus" title="${t('next.ep')}">+1</button>` : ''}
+      ${canPlus(e) ? `<button class="rb" data-act="plus" title="${t('next.ep')}" aria-label="${t('next.ep')}">+1</button>` : ''}
     </div>
     <div class="score ${e.score ? '' : 'none'}"><b>${fmtScore(e.score) || '—'}</b><small>IMDb ${fmtRating(m.imdb) || '—'}</small></div>
   </li>`;
 }
 
 const RATING_MINS = [9, 8.5, 8, 7.5, 7, 6];
+// Що зараз намальовано в бібліотеці: поки склад і порядок ті самі, міняємо лише
+// плитки, чия розмітка змінилась (закрили картку з новою оцінкою) — решта постерів не блимає.
+let libShown = { key: '', html: new Map() };
 export function renderLibrary() {
   const f = view.f, now = new Date().getFullYear();
   // роки — від найстарішого запису в списку до поточного
@@ -192,8 +200,8 @@ export function renderLibrary() {
     ${dropdown('lib-min', f.min, [['', t('any.rating')], ...RATING_MINS.map(n => [n, t('rating.min', { n: fmtRating(n) })])], 'starFill', t('rating'))}
     ${dropdown('lib-mine', f.mine, [['', t('mine.any')], ...[10, 9, 8, 7, 6, 5].map(n => [n, t(n === 10 ? 'mine.ten' : 'mine.min', { n })]), ['none', t('mine.none')]], 'star', t('card.score'))}
     ${dropdown('lib-sort', S.sort, SORTS.map(v => [v, t('sort.' + v)]), 'sortDown', t('sorting'))}
-    <button class="rb" data-act="dir" id="lib-dir" title="${t('sort.dir')}"></button>
-    <button class="rb" data-act="view" id="lib-view" title="${t('view.toggle')}"></button>
+    <button class="rb" data-act="dir" id="lib-dir" title="${t('sort.dir')}" aria-label="${t('sort.dir')}"></button>
+    <button class="rb" data-act="view" id="lib-view" title="${t('view.toggle')}" aria-label="${t('view.toggle')}"></button>
   </div>
   <div class="chips" id="lib-status"></div>
   <div id="lib-list"></div>`;
@@ -233,10 +241,15 @@ export function updateLibrary() {
     box.innerHTML = `<div class="empty">${icon('search')}<b>${t('nothing.found')}</b><p>${t('nothing.found.text')}</p>
       <button class="btn" data-act="reset-filters">${t('reset.filters')}</button></div>`;
   } else {
-    box.innerHTML = S.view === 'grid'
-      ? `<div class="grid">${list.map(e => entryCard(e)).join('')}</div>`
-      : `<ul class="list">${list.map(rowHtml).join('')}</ul>`;
+    const grid = S.view === 'grid', html = new Map(list.map(e => [e.id, grid ? entryCard(e) : rowHtml(e)]));
+    const key = S.view + '|' + list.map(e => e.id).join(','), wrap = box.firstElementChild;
+    if (key === libShown.key && wrap?.children.length === list.length) {
+      for (const el of [...wrap.children]) if (html.get(el.dataset.id) !== libShown.html.get(el.dataset.id)) el.outerHTML = html.get(el.dataset.id);
+    } else box.innerHTML = grid ? `<div class="grid">${[...html.values()].join('')}</div>` : `<ul class="list">${[...html.values()].join('')}</ul>`;
+    libShown = { key, html };
+    return;
   }
+  libShown = { key: '', html: new Map() };
 }
 
 // ── каталог ───────────────────────────────────────────────────────
@@ -271,6 +284,8 @@ export function renderDiscover() {
   }
   if (d.key === discKey(d) && d.items.length) drawDiscover(); else loadDiscover(true);
 }
+// Після невдачі пробуємо все наново, з власним індексом включно: мережа могла повернутись.
+export const retryDiscover = () => { view.disc.live = false; loadDiscover(false); };
 export const resetDiscover = () => { Object.assign(view.disc, { genre: '', from: '', to: '', min: '', sort: 'pop' }); renderDiscover(); };
 function discAuto() {
   const d = view.disc, el = $('#disc-more');
@@ -358,7 +373,7 @@ export function drawDiscover() {
   if (!box) return;
   $('#disc-count').textContent = d.pool ? count('title', d.pool.length) : t('disc.sub');
   box.innerHTML = d.items.map(x => catalogCard(x)).join('') + (d.loading ? skeletons(d.items.length ? 6 : 18) : '');
-  $('#disc-more').innerHTML = d.error ? `<p class="muted">${t('catalog.down.retry')}</p><button class="btn" data-act="disc-more">${t('retry')}</button>`
+  $('#disc-more').innerHTML = d.error ? downHtml('disc-retry')
     : !d.loading && !d.items.length ? `<div class="empty">${icon('compass')}<b>${t('disc.empty.title')}</b><p>${t('disc.empty.text')}</p></div>`
     : !d.loading && d.more ? `<button class="btn lg" data-act="disc-more">${t('show.more')}</button>` : '';
 }
@@ -392,7 +407,7 @@ export function renderStats() {
     <section class="panel"><h2>${t('panel.status')}</h2>${bars(STATUS_IDS.map(k => [`<i class="dot st-${k}"></i>${statusLabel(k)}`, s.byStatus[k] || 0]))}
       <h2 class="mt">${t('panel.kind')}</h2>${bars(KIND_IDS.map(k => [t('kinds.' + k), s.byKind[k] || 0]))}</section>
     <section class="panel"><h2>${t('panel.gaps')}</h2>${s.gaps.length ? `<ul class="gaps">${s.gaps.map(({ e, d }) =>
-      `<li data-id="${e.id}" data-act="open" tabindex="0">${ph(e.id, e.title, 'small')}<div><b>${esc(e.title)}</b>
+      `<li data-id="${e.id}" data-act="open" tabindex="0" aria-label="${esc(e.title)}">${ph(e.id, e.title, 'small')}<div><b>${esc(e.title)}</b>
         <span>${t('gap.line', { a: fmtScore(e.score), b: fmtRating(e.meta.imdb) })}</span></div><em class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : '−'}${fmtRating(Math.abs(d)) || '0'}</em></li>`).join('')}</ul>`
       : `<p class="muted">${t('gaps.empty')}</p>`}</section>
   </div>`;
@@ -450,12 +465,12 @@ export function renderRecs() {
   ${z('who')}${z('taste')}${z('bar', 'reply-bar')}
   <ul class="rec-list">${items.map((x, i) => `<li class="rcard" data-id="${x.id}" data-act="preview" tabindex="0">
       <span class="rec-n">${i + 1}</span>${ph(x.id, x.t, 'medium')}
-      <div class="rec-main"><h3>${esc(x.t)}${x.s ? `<b class="rec-sm" title="${t('author.score')}">${icon('starFill')}${fmtScore(x.s)}</b>` : ''}</h3>
+      <div class="rec-main"><h3>${esc(x.t)}${x.s ? `<b class="rec-sm" title="${t('author.score')}">${icon('starFill')}${fmtScore(x.s)}</b>` : `<small class="rec-sm none">${t('author.none')}</small>`}</h3>
         <p class="row-sub">${esc([kindLabel(x.k), x.y].filter(Boolean).join(' · '))}${x.r ? ` · IMDb ${fmtRating(x.r)}` : ''}</p>
         ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
         ${z('a:' + x.id, 'rec-acts')}${z('o:' + x.id)}
         <div class="reply" data-act="reply-box">${z('r:' + x.id)}${z('n:' + x.id)}${z('t:' + x.id, 'reply-st')}</div></div>
-      ${x.s ? `<div class="rec-score"><b>${fmtScore(x.s)}</b><small>${t('author.score')}</small></div>` : ''}
+      ${x.s ? `<div class="rec-score"><b>${fmtScore(x.s)}</b><small>${t('author.score')}</small></div>` : `<div class="rec-score none" title="${t('author.score')}"><small>${t('author.none')}</small></div>`}
     </li>`).join('') || `<li class="empty">${icon('star')}<b>${t('recs.empty.title')}</b><p>${t('recs.empty.text')}</p></li>`}</ul>`;
 }
 // Оновлення на місці: лише шматки, що змінились. Поле, в якому саме набирають

@@ -9,7 +9,7 @@ import * as catalog from './meta.js';
 import { store } from './store.js';
 import { listdefs, defId } from './synced.js';
 import {
-  cleanListFilter, isEmptyFilter, listDiff, listMatch, manualPick, tickManual, nameTaken, listKey, nameList, listPlan, publicOver, canWrite, PUBLIC_MAX,
+  cleanListFilter, isEmptyFilter, listDiff, listMatch, manualPick, tickManual, manualNote, nameTaken, listKey, nameList, listPlan, publicOver, canWrite, PUBLIC_MAX,
 } from './social.js';
 import { cloud } from './cloud.js';
 import { $, layer, icon, ph, toast, ui, showOverlay, closeOverlay, remember, recall, confirmBox, promptBox } from './ui.js';
@@ -22,12 +22,15 @@ const META_TTL = 14 * 24 * 3600 * 1000;
 export async function refreshMeta(id, { first = false, detect = false, loud = false } = {}) {
   const e = store.get(id);
   if (!e) return;
+  // Назва дорівнює номеру — тайтл додали за посиланням IMDb, коли каталог не відповідав:
+  // про нього ще нічого не відомо, тож тип і вид визначаємо як уперше.
+  const blank = e.title === id;
   try {
-    const x = await catalog.fetchMeta(id, detect ? undefined : e.type);
+    const x = await catalog.fetchMeta(id, detect || blank ? undefined : e.type);
     const cur = store.get(id);
     if (!cur) return;
     const patch = {};
-    if (first && cur.kind !== x.kind) patch.kind = x.kind;
+    if ((first || blank) && cur.kind !== x.kind) patch.kind = x.kind;
     if (cur.type !== x.type) patch.type = x.type;
     if (x.title && cur.title !== x.title) patch.title = x.title;
     if (x.year && cur.year !== x.year) patch.year = x.year;
@@ -100,9 +103,9 @@ function progressHtml(e) {
   return `<section><h3>${t('card.where')} <small>${all ? `${t('eps.of', { a: episodesWatched(e), b: all })} · ${pct}%` : ''}</small></h3>
     ${all ? `<i class="bar" style="--w:${pct}%"></i>` : ''}
     ${seasons.length > 1 && seasons.length <= 40 ? `<div class="pills">${seasons.map(n =>
-      `<button class="${n === s ? 'on' : ''} ${n < s ? 'past' : ''}" data-act="season" data-v="${n}">${n}</button>`).join('')}<span>${t('season')}</span></div>` : ''}
+      `<button class="${n === s ? 'on' : ''} ${n < s ? 'past' : ''}" data-act="season" data-v="${n}" aria-pressed="${n === s}" aria-label="${t('season.n', { n })}">${n}</button>`).join('')}<span aria-hidden="true">${t('season')}</span></div>` : ''}
     ${total && total <= 200 ? `<div class="eps">${Array.from({ length: total }, (_, i) =>
-      `<button class="${i + 1 <= ep ? 'on' : ''}" data-act="episode" data-v="${i + 1}" aria-label="${t('episode.n', { n: i + 1 })}">${i + 1}</button>`).join('')}</div>` : ''}
+      `<button class="${i + 1 <= ep ? 'on' : ''}" data-act="episode" data-v="${i + 1}" aria-pressed="${i + 1 <= ep}" aria-label="${t('episode.n', { n: i + 1 })}">${i + 1}</button>`).join('')}</div>` : ''}
     <div class="progress">
       <div class="stepper"><button data-act="step" data-v="season:-1" aria-label="${t('prev.season')}">−</button>
         <label><span>${t('season')}</span><input type="number" inputmode="numeric" min="1" data-num="season" value="${s}"></label>
@@ -137,8 +140,8 @@ function cardHtml(e) {
       <div class="linkrow"><label class="field wide">${icon('link')}<input type="url" data-field="url" placeholder="${t('card.link.ph')}" value="${esc(e.url)}"></label>
         ${url ? `<a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${icon('play')}${t('watch')}</a>` : ''}</div></section>
     <section><h3>${t('card.rec')}</h3>
-      <button class="toggle ${e.rec ? 'on' : ''}" data-act="rec" aria-pressed="${e.rec}">${icon(e.rec ? 'starFill' : 'star')}
-        <span><b>${e.rec ? t('rec.on') : t('rec.off')}</b><small>${e.rec ? t('rec.on.sub') : t('rec.off.sub')}</small></span><i></i></button>
+      <button class="toggle ${e.rec ? 'on' : ''}" data-act="rec" role="switch" aria-checked="${!!e.rec}">${icon(e.rec ? 'starFill' : 'star')}
+        <span><b>${t('rec.on')}</b><small>${e.rec ? t('rec.on.sub') : t('rec.off.sub')}</small></span><i></i></button>
       ${e.rec || e.lists?.length ? `<input class="inp mt" type="text" data-field="recNote" maxlength="500" placeholder="${t('rec.note.ph')}" value="${esc(e.recNote)}">` : ''}
       <div class="lists"><span>${t('lists')}</span>${listNames(store.list()).map(l =>
         `<button class="chip ${(e.lists || []).includes(l) ? 'on' : ''}" data-act="list-toggle" data-v="${esc(l)}" aria-pressed="${(e.lists || []).includes(l)}">${icon('folder')}${esc(l)}</button>`).join('')}
@@ -148,7 +151,7 @@ function cardHtml(e) {
     ${ui.cardExtra?.(e.id) || ''}
     <section><h3>${t('card.note')}</h3><textarea class="inp" data-field="note" rows="3" placeholder="${t('card.note.ph')}">${esc(e.note)}</textarea></section>
     <section><h3>${t('card.about')}</h3>${aboutHtml(m).trim() || `<p class="muted">${e.metaAt ? t('no.plot') : t('loading.plot')}</p>`}
-      <div class="kind-row"><span>${t('type')}</span>${KIND_IDS.map(v => `<button class="chip ${e.kind === v ? 'on' : ''}" data-act="set-kind" data-v="${v}">${kindLabel(v)}</button>`).join('')}</div></section>
+      <div class="kind-row"><span>${t('type')}</span>${KIND_IDS.map(v => `<button class="chip ${e.kind === v ? 'on' : ''}" data-act="set-kind" data-v="${v}" aria-pressed="${e.kind === v}">${kindLabel(v)}</button>`).join('')}</div></section>
   </div>
   <footer class="card-foot">
     <button class="rb" data-act="del" title="${t('card.delete')}" aria-label="${t('card.delete')}">${icon('trash')}</button>
@@ -239,16 +242,26 @@ export const cardActions = {
   },
   refresh: () => refreshMeta(ui.overlay.id, { loud: true }),
   'list-toggle': v => {
-    const cur = store.get(ui.overlay.id).lists || [];
-    cardSave({ lists: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v] });
+    const id = ui.overlay.id, e = store.get(id), cur = e.lists || [], on = !cur.includes(v);
+    // умови читаємо до запису: зі зняттям останньої мітки вони зникають разом із добіркою
+    const def = condDef(v);
+    cardSave({ lists: on ? [...cur, v] : cur.filter(x => x !== v) });
+    // Добірка за умовами: зміну з картки запам'ятовуємо як зроблену рукою (ті самі
+    // plus/minus, що й у діалозі), інакше «Сформувати знову» її скасувало б.
+    if (!def || (store.get(id).lists || []).includes(v) !== on || !listNames(store.list()).includes(v)) return;
+    listdefs.save(def.id, manualNote(def, id, listMatch([e], def.f).length > 0, on));
   },
   'list-new': async () => {
     const id = ui.overlay.id;
-    const name = await promptBox({ title: t('list.new'), text: t('list.new.text'), placeholder: t('list.new.ph'), ok: t('list.create') });
+    const raw = await promptBox({ title: t('list.new'), text: t('list.new.text'), placeholder: t('list.new.ph'), ok: t('list.create') });
+    const name = (raw || '').slice(0, 40).trim();
     if (!name || ui.overlay?.id !== id) return;
+    // та сама назва злила б дві добірки — відмовляємо так само, як діалог «Нова добірка»
+    const dup = nameTaken(listNames(store.list()), name);
+    if (dup) return toast(t('build.err.dup', { name: dup }), { ms: 5000 });
     const cur = store.get(id).lists || [];
     if (cur.length >= 8) return toast(t('list.limit'));
-    cardSave({ lists: [...new Set([...cur, name.slice(0, 40)])] });
+    cardSave({ lists: [...cur, name] });
   },
 };
 
@@ -334,7 +347,7 @@ export function openPalette() {
       ev.preventDefault();
       if (!n) return;
       o.sel = (o.sel + (ev.key === 'ArrowDown' ? 1 : -1) + n) % n;
-      drawPalette();
+      paintPalette();
       $('.res.sel', layer)?.scrollIntoView({ block: 'nearest' });
     }
     if (ev.key === 'Enter' && o.results[o.sel]) pickResult(o.sel);
@@ -348,11 +361,20 @@ function palNote() {
   $('#pal-note').innerHTML = host
     ? `<span class="badge static">${icon('link')}${esc(host)}</span> ${t('pal.url.keep')} <button class="linkbtn" data-act="drop-url">${t('pal.url.drop')}</button>` : '';
 }
-function drawPalette(msg = '') {
+// msg — рядок над видачею: підказка, «Шукаю…», «нічого не знайшлось» або (retry)
+// «каталог недоступний» із кнопкою. Лежить у o.note, щоб стрілки по видачі його не стирали.
+function drawPalette(msg = '', retry = false) {
+  const o = ui.overlay;
+  if (o?.type !== 'palette') return;
+  o.note = { msg, retry };
+  paintPalette();
+}
+function paintPalette() {
   const o = ui.overlay, body = $('#pal-body');
   if (!body) return;
+  const { msg, retry } = o.note || {};
   let prev = '';
-  body.innerHTML = msg ? `<p class="muted pad">${esc(msg)}</p>` : o.results.map((r, i) => {
+  body.innerHTML = (msg ? `<p class="muted pad"${retry ? ' role="alert"' : ''}>${esc(msg)}${retry ? ` <button class="btn sm" data-act="pal-retry">${icon('refresh')}${t('retry')}</button>` : ''}</p>` : '') + o.results.map((r, i) => {
     const have = store.get(r.id);
     const head = r.group !== prev ? `<h4>${t(prev = r.group)}</h4>` : '';
     return `${head}<div class="res ${i === o.sel ? 'sel' : ''}" data-act="pick" data-v="${i}" role="option" aria-selected="${i === o.sel}">${ph(r.id, r.title, 'small')}
@@ -381,23 +403,33 @@ async function runSearch(raw) {
   }
   const body = $('#pal-body');
   body.classList.add('busy');
+  const mine = p.id ? [] : filterSort(store.list(), { q: p.query, kind: o.kind }, 'updated', -1).slice(0, 5).map(e => ({ ...e, group: 'pal.mine' }));
+  const ids = new Set(mine.map(e => e.id));
+  // Своє з полиці видно одразу; поки каталог не відповів, над видачею стоїть «Шукаю…».
+  o.results = mine;
+  drawPalette(t('pal.searching'));
   try {
-    const mine = p.id ? [] : filterSort(store.list(), { q: p.query, kind: o.kind }, 'updated', -1).slice(0, 5).map(e => ({ ...e, group: 'pal.mine' }));
-    const ids = new Set(mine.map(e => e.id));
     // видачу показуємо частинами: спершу те, що вже відомо, далі уточнення
     const put = (found, last) => {
       if (ac.signal.aborted) return;
       const cur = o.results[o.sel]?.id;
       o.results = [...mine, ...found.filter(x => !ids.has(x.id)).map(x => ({ ...x, group: 'nav.discover' }))];
       o.sel = Math.max(0, o.results.findIndex(r => r.id === cur));
-      if (o.results.length || last) drawPalette(o.results.length ? '' : t('pal.none'));
+      drawPalette(last ? (o.results.length ? '' : t('pal.none')) : t('pal.searching'));
     };
     const found = p.id ? [await catalog.fetchMeta(p.id, undefined, ac.signal)] : await catalog.search(p.query, ac.signal, o.kind, put);
     if (ac.signal.aborted) return;
     if (p.url && !p.id) $('#pal-q').value = p.query;
     put(found, true);
   } catch (err) {
-    if (err.name !== 'AbortError') drawPalette(t('pal.fail', { e: err.message }));
+    if (err.name === 'AbortError' || ac.signal.aborted) return;
+    if (err.code === 'notfound') return drawPalette(t('pal.none'));
+    // Каталог не відповів. Тайтл за номером IMDb усе одно можна додати: назвою поки
+    // буде сам номер, решту картка дотягне, коли каталог повернеться.
+    const have = p.id && store.get(p.id);
+    o.results = have ? [{ ...have, group: 'pal.mine' }] : p.id ? [{ id: p.id, title: p.id, year: '', group: 'nav.discover' }] : mine;
+    o.sel = 0;
+    drawPalette(have ? '' : t('pal.down'), !have);
   } finally {
     if (!ac.signal.aborted) body.classList.remove('busy');
   }
@@ -416,6 +448,7 @@ export function pickResult(i) {
   openCard(r.id);
 }
 export const dropUrl = () => { ui.overlay.url = ''; palNote(); };
+export const palRetry = () => runSearch($('#pal-q')?.value || '');
 
 // ── поширення рекомендацій ────────────────────────────────────────
 // list — назва добірки; порожньо — загальні рекомендації.
@@ -483,7 +516,7 @@ export async function openShare(list = '') {
       <div class="pal-head"><h2>${list ? esc(list) : t('share.title')} <small>${items.length}</small></h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
       <div class="share">
         ${names.length ? `<div class="share-tabs">${pool('').length ? tab('', t('share.title'), pool('').length) : ''}${names.map(l => tab(l, l, pool(l).length)).join('')}</div>` : ''}
-        <div class="share-strip">${items.slice(0, 6).map(x => ph(x.id, x.t, 'small')).join('')}${items.length > 6 ? `<span class="morecount">+${items.length - 6}</span>` : ''}</div>
+        <div class="share-strip">${items.slice(0, 6).map(x => ph(x.id, x.t, 'small', '', true)).join('')}${items.length > 6 ? `<span class="morecount">+${items.length - 6}</span>` : ''}</div>
         <p><span class="badge static ${live ? 'ok' : ''}">${live ? t('share.live') : t('share.snap')}</span>
           ${live ? t(!list ? 'share.live.text' : cond ? 'share.live.cond' : 'share.live.manual') : t('share.snap.text') + (cloud.available ? ' ' + t('share.snap.signin') : '')}</p>
         <label class="field wide">${icon('link')}<input class="linkbox" readonly value="${esc(link)}" aria-label="${t('link')}"></label>
@@ -595,7 +628,7 @@ function updateBuild() {
     // що піде до людей без оцінки — видно ще до збереження
     const tag = e.status === 'planned' ? 'build.b.planned' : e.score ? '' : 'build.b.noscore';
     const tags = [!empty && !hit.has(e.id) ? 'build.b.hand' : '', tag].filter(Boolean).map(k => ` <span class="badge static">${t(k)}</span>`).join('');
-    return `<div class="res" role="checkbox" aria-checked="${on}" tabindex="0" data-act="build-tick" data-v="${esc(e.id)}">
+    return `<div class="res" role="checkbox" aria-checked="${on}" aria-label="${esc(e.title)}" tabindex="0" data-act="build-tick" data-v="${esc(e.id)}">
       <span class="tick ${on ? 'on' : ''}">${on ? icon('check') : ''}</span>${ph(e.id, e.title, 'small')}
       <div class="row-main"><div class="row-title"><b>${esc(e.title)}</b></div>
         <div class="row-sub">${esc([e.year, kindLabel(e.kind)].filter(Boolean).join(' · '))}${tags}</div></div>
@@ -742,37 +775,42 @@ store.onLocal((entry, what) => {
 });
 
 // ── показ на прикладі ─────────────────────────────────────────────
+// Базові дані (назва, рік, вид, жанри) вбудовано: приклад лягає на полицю й тоді,
+// коли каталог недоступний. Решту — опис, серії, оцінку IMDb — дотягуємо у фоні.
+// [id, тип, вид, назва, рік, жанри, статус, сезон, серія, оцінка, раджу, коментар]
 const DEMO = [
-  ['tt22248376', 'series', 'watching', 1, 12, 10, true, 'demo.n1'],
-  ['tt0903747', 'series', 'done', 5, 16, 10, true, 'demo.n2'],
-  ['tt2560140', 'series', 'done', 4, 30, 9, true, 'demo.n3'],
-  ['tt11126994', 'series', 'watching', 2, 4, 9, false, ''],
-  ['tt9335498', 'series', 'paused', 1, 19, 8, false, ''],
-  ['tt5180504', 'series', 'dropped', 2, 3, 6, false, ''],
-  ['tt13443470', 'series', 'planned', 1, 0, 0, false, ''],
-  ['tt14452776', 'series', 'watching', 3, 2, 9, true, 'demo.n4'],
-  ['tt0245429', 'movie', 'done', 1, 0, 10, true, 'demo.n5'],
-  ['tt0816692', 'movie', 'done', 1, 0, 9, false, ''],
-  ['tt15239678', 'movie', 'done', 1, 0, 9, false, ''],
-  ['tt6751668', 'movie', 'done', 1, 0, 8, false, ''],
-  ['tt5311514', 'movie', 'planned', 1, 0, 0, false, ''],
-  ['tt1160419', 'movie', 'planned', 1, 0, 0, false, ''],
+  ['tt22248376', 'series', 'anime', 'Frieren: Beyond Journey\'s End', '2023–', ['Animation', 'Adventure', 'Comedy'], 'watching', 1, 12, 10, true, 'demo.n1'],
+  ['tt0903747', 'series', 'series', 'Breaking Bad', '2008–2013', ['Crime', 'Drama', 'Thriller'], 'done', 5, 16, 10, true, 'demo.n2'],
+  ['tt2560140', 'series', 'anime', 'Attack on Titan', '2013–2023', ['Animation', 'Action', 'Adventure'], 'done', 4, 30, 9, true, 'demo.n3'],
+  ['tt11126994', 'series', 'series', 'Arcane', '2021–2024', ['Animation', 'Action', 'Adventure'], 'watching', 2, 4, 9, false, ''],
+  ['tt9335498', 'series', 'anime', 'Demon Slayer: Kimetsu no Yaiba', '2019–2024', ['Animation', 'Action', 'Adventure'], 'paused', 1, 19, 8, false, ''],
+  ['tt5180504', 'series', 'series', 'The Witcher', '2019–', ['Action', 'Adventure', 'Drama'], 'dropped', 2, 3, 6, false, ''],
+  ['tt13443470', 'series', 'series', 'Wednesday', '2022–', ['Comedy', 'Crime', 'Fantasy'], 'planned', 1, 0, 0, false, ''],
+  ['tt14452776', 'series', 'series', 'The Bear', '2022–2026', ['Comedy', 'Drama'], 'watching', 3, 2, 9, true, 'demo.n4'],
+  ['tt0245429', 'movie', 'anime', 'Spirited Away', '2003', ['Animation', 'Adventure', 'Family'], 'done', 1, 0, 10, true, 'demo.n5'],
+  ['tt0816692', 'movie', 'movie', 'Interstellar', '2014', ['Adventure', 'Sci-Fi'], 'done', 1, 0, 9, false, ''],
+  ['tt15239678', 'movie', 'movie', 'Dune: Part Two', '2024', ['Action', 'Adventure', 'Drama'], 'done', 1, 0, 9, false, ''],
+  ['tt6751668', 'movie', 'movie', 'Parasite', '2019', ['Drama', 'Thriller'], 'done', 1, 0, 8, false, ''],
+  ['tt5311514', 'movie', 'anime', 'Your Name.', '2017', ['Animation', 'Drama', 'Fantasy'], 'planned', 1, 0, 0, false, ''],
+  ['tt1160419', 'movie', 'movie', 'Dune', '2021', ['Action', 'Adventure', 'Drama'], 'planned', 1, 0, 0, false, ''],
 ];
 export async function loadDemo() {
+  // обіцяємо рівно стільки, скільки справді буде додано: що вже є на полиці — не рахуємо
+  const fresh = DEMO.filter(d => !store.get(d[0])).length, had = DEMO.length - fresh;
+  if (!fresh) return toast(t('demo.all'));
   const ok = await confirmBox({
     title: t('demo.title'),
-    text: t('demo.text', { n: DEMO.length }) + (cloud.user ? ' ' + t('demo.sync') : '') + ' ' + t('demo.removable'),
+    text: [t('demo.text', { n: fresh }), had ? t('demo.had', { n: had }) : '', cloud.user ? t('demo.sync') : '', t('demo.removable')].filter(Boolean).join(' '),
     ok: t('demo.ok'),
   });
   if (!ok) return;
-  toast(t('demo.loading'));
   const now = Date.now();
-  await Promise.all(DEMO.map(async ([id, type, status, season, episode, score, rec, note], i) => {
+  let n = 0;
+  DEMO.forEach(([id, type, kind, title, year, genres, status, season, episode, score, rec, note], i) => {
     if (store.get(id)) return;
-    try {
-      const x = await catalog.fetchMeta(id, type);
-      addItem(x, { status, season, episode, score, rec, recNote: note ? t(note) : '', added: now - i * 864e5 });
-    } catch { /* один тайтл не завантажився — не страшно */ }
-  }));
-  toast(t('demo.done'));
+    // thin — довідка неповна: addItem сам дотягне її з каталогу у фоні
+    const item = { id, type, kind, title, year, thin: true, meta: { imdb: null, plot: '', genres, country: '', runtime: '', state: '', cast: [], trailer: '', seasons: {} } };
+    if (addItem(item, { status, season, episode, score, rec, recNote: note ? t(note) : '', added: now - i * 864e5 })) n++;
+  });
+  toast(n < DEMO.length ? t('demo.added.some', { n, m: DEMO.length - n }) : t('demo.added', { n }));
 }

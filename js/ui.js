@@ -54,8 +54,11 @@ export const icon = (name, cls = '') =>
 
 // ── постер із запасним виглядом ───────────────────────────────────
 const initials = t => esc(String(t || '?').trim().slice(0, 2).toUpperCase());
-export const ph = (id, title, size = 'medium', cls = '') =>
-  `<span class="ph ${cls}"><em>${initials(title)}</em>${isId(id) ? `<img loading="lazy" decoding="async" alt="" src="${poster(id, size)}">` : ''}</span>`;
+// named — постер стоїть сам, без назви поруч (смужка на картці добірки): тоді назву
+// несуть підказка й alt, інакше екранний читач бачив би лише «зображення».
+export const ph = (id, title, size = 'medium', cls = '', named = false) =>
+  `<span class="ph ${cls}"${named ? ` title="${esc(title)}"` : ''}><em${named ? ' aria-hidden="true"' : ''}>${initials(title)}</em>${isId(id)
+    ? `<img loading="lazy" decoding="async" alt="${named ? esc(title) : ''}" src="${poster(id, size)}">` : named ? `<span class="sr">${esc(title)}</span>` : ''}</span>`;
 document.addEventListener('error', e => {
   if (e.target.tagName === 'IMG') (e.target.closest('.ph') || e.target.closest('[data-img]'))?.classList.add('noimg');
 }, true);
@@ -82,8 +85,28 @@ export function toast(text, { ms = 2800, label = '', action = null } = {}) {
   t.innerHTML = `<span>${esc(text)}</span>${label ? `<button type="button">${esc(label)}</button>` : ''}`;
   if (label) $('button', t).onclick = () => { t.classList.remove('on'); action?.(); };
   t.classList.add('on');
+  placeToast();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('on'), label ? Math.max(ms, 6000) : ms);
+}
+// Повідомлення стосується сторінки, на якій з'явилось: перехід на іншу його прибирає.
+export function hideToast() {
+  clearTimeout(toastTimer);
+  $('#toast').classList.remove('on');
+}
+// Повідомлення не має лягати на головну кнопку відкритої картки чи діалогу
+// («Готово», «У планах», «Копіювати», «Зберегти добірку»): коли воно її перекрило б,
+// піднімаємо його над нею — над усім низом картки, якщо кнопка там, — із відступом 16 px.
+function placeToast() {
+  const t = $('#toast');
+  if (!t) return;
+  t.style.bottom = '';
+  const btn = [...layer.querySelectorAll('.btn.primary')].pop();
+  if (!btn || !t.classList.contains('on')) return;
+  // своє місце рахуємо зі стилів, а не міряємо: повідомлення саме в цю мить виїжджає
+  const box = (btn.closest('.card-foot, .build-foot') || btn).getBoundingClientRect();
+  const low = innerHeight - (parseFloat(getComputedStyle(t).bottom) || 0), high = low - t.offsetHeight;
+  if (low > box.top - 16 && high < box.bottom + 16) t.style.bottom = `${Math.round(innerHeight - box.top + 16)}px`;
 }
 
 // ── реєстр дій ────────────────────────────────────────────────────
@@ -104,6 +127,7 @@ export function showOverlay(o, html) {
   ui.overlay = o;
   layer.innerHTML = `<div class="scrim" data-act="close"></div>${html}`;
   document.documentElement.classList.add('locked');
+  setTimeout(placeToast, 0);   // вміст картки домальовують одразу після відкриття
 }
 export function closeOverlay() {
   if (!ui.overlay) return;
@@ -112,6 +136,7 @@ export function closeOverlay() {
   ui.overlay = null;
   layer.innerHTML = '';
   document.documentElement.classList.remove('locked');
+  placeToast();
   ui.afterClose?.();
 }
 

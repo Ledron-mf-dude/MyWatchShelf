@@ -621,7 +621,7 @@ const drawManage = () => {
   $('.palette', layer).innerHTML = `
     <div class="pal-head"><h2>${t('fr.manage')}</h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
     <div class="pal-body fr-manage">
-      ${cloud.user ? `<button class="toggle ${open ? 'on' : ''}" data-act="fr-open" aria-pressed="${open}"><span><b>${t('fr.open')}</b><small>${t(open ? 'fr.vis.open' : 'fr.vis.closed')}</small></span><i></i></button>`
+      ${cloud.user ? `<button class="toggle ${open ? 'on' : ''}" data-act="fr-open" role="switch" aria-checked="${open}"><span><b>${t('fr.open')}</b><small>${t(open ? 'fr.vis.open' : 'fr.vis.closed')}</small></span><i></i></button>`
         : cloud.available ? `<p class="muted small">${t('fr.vis.signin')}</p>` : ''}
       ${tb.cols.length ? tb.cols.map(friend).join('') : `<p class="muted small">${t('fr.nofriends')}</p>`}
       ${gone.length || tb.hidden ? `<h4>${t('fr.hidden')}</h4>` : ''}

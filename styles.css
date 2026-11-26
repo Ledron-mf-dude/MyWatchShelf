@@ -51,6 +51,7 @@ img{display:block}
 
 .wrap{max-width:1360px; margin:0 auto; padding:0 32px 120px; min-height:70vh}
 .grow{flex:1}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap}
 .muted{color:var(--muted)} .small{font-size:13px} .pad{padding:16px} .mt{margin-top:10px} .center{display:grid; justify-items:center; gap:10px; padding:28px 0}
 .ic{width:18px; height:18px; flex:none}
 
@@ -282,7 +283,7 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
 .z:empty{display:none}
 .rec-main>.z{justify-self:stretch; min-width:0}
 .rec-acts{display:flex; flex-wrap:wrap; align-items:center; gap:8px}
-.rec-sm{display:none}
+.rec-sm{display:none} .rec-score.none small{font-size:12px}
 .reply{width:100%; display:grid; gap:8px; margin-top:6px; cursor:default}
 .reply:not(:has(>.z:not(:empty))){display:none}
 .reply h4,.others h4{font-size:12px; font-weight:800; color:var(--faint); text-transform:uppercase; letter-spacing:.04em} .reply h4 small{color:var(--accent); font-size:13px}
@@ -397,7 +398,7 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
 
 #toast{position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom)); transform:translate(-50%,24px); z-index:70; display:flex; align-items:center; gap:14px;
   max-width:calc(100% - 32px); padding:12px 18px; border-radius:14px; background:var(--text); color:var(--bg); font-size:14px; font-weight:700;
-  box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:.22s cubic-bezier(.2,.8,.2,1)}
+  box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .22s cubic-bezier(.2,.8,.2,1),transform .22s cubic-bezier(.2,.8,.2,1)}
 #toast.on{opacity:1; transform:translate(-50%,0); pointer-events:auto}
 #toast button{border:0; background:none; color:var(--accent); font-weight:800; padding:0; white-space:nowrap}
 :root[data-theme="dark"] #toast button{color:#0B7A68}
@@ -480,7 +481,7 @@ button.more .ic{width:16px; height:16px}
   .tile{padding:16px} .tile b{font-size:32px} .hbar{grid-template-columns:104px 1fr 28px}
   .rcard{flex-wrap:wrap; gap:12px; padding:14px} .rcard .ph{width:76px} .rec-n{display:none} .rec-main{flex:1 1 60%} .rcard h3{font-size:16px}
   /* оцінка автора лишається біля назви, а не внизу картки; бали — у два ряди, під палець */
-  .rec-score{display:none} .rec-sm{display:inline-flex; align-items:center; gap:3px; margin-left:8px; color:var(--accent); font-size:15px; white-space:nowrap; vertical-align:baseline} .rec-sm .ic{width:14px; height:14px}
+  .rec-score{display:none} .rec-sm{display:inline-flex; align-items:center; gap:3px; margin-left:8px; color:var(--accent); font-size:15px; white-space:nowrap; vertical-align:baseline} .rec-sm .ic{width:14px; height:14px} .rec-sm.none{color:var(--faint); font-size:12px; font-weight:700}
   .reply .scores{grid-template-columns:repeat(6,minmax(30px,1fr))} .reply .scores button{height:42px; font-size:14px}
   .reply h4 .rb{min-width:32px; height:32px} .btn.sm{height:36px}
   .who-box{flex-direction:column; align-items:stretch}

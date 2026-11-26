@@ -4,7 +4,7 @@
 // він не може імпортувати їх у відповідь (цикл). Розмітку віддаємо шматками
 // (replyParts), а views.js міняє на сторінці лише ті шматки, що змінились.
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { outboxPut, outboxDrop, outboxRelease, outboxMerge, outboxPatch, outboxDone, outboxSettle, replyItem, replyMode, replyPatch, sendList, scoreLines, openNotice, ownView, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, recsFor, needsKeep, addList, hasKept, wantsRecs, friendLink, cutNote, replyStats, FRIENDS_MAX } from './social.js';
+import { outboxPut, outboxDrop, outboxRelease, outboxMerge, outboxPatch, outboxDone, outboxSettle, givenScores, replyItem, replyMode, replyPatch, sendList, scoreLines, openNotice, ownView, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, recsFor, needsKeep, addList, hasKept, wantsRecs, friendLink, cutNote, replyStats, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs, socialCache, replyMem, outbox } from './synced.js';
@@ -502,13 +502,14 @@ const later = () => {
   });
 };
 
-const tableOf = c => friendTable({ entries: store.list(), friends: friends.raw(), replies: c.replies, recs: c.recs });
+// given — мої оцінки зі списків друзів (для стовпця «Я»); лічильнику «нове» вони ні до чого.
+const tableOf = (c, given = givenScores(outbox.all())) => friendTable({ entries: store.list(), friends: friends.raw(), replies: c.replies, recs: c.recs, given });
 export const social = {
   table: () => tableOf(socialCache.get()),
   // Крапка «нове»: хтось відповів після останнього перегляду екрана «Друзі».
   unseen: () => {
     const c = socialCache.get();
-    return unseenCount(tableOf(c), c.replies, seenAt());
+    return unseenCount(tableOf(c, {}), c.replies, seenAt());
   },
   start(redrawFn) {
     socialRedraw = redrawFn;
@@ -559,6 +560,8 @@ const fr = { who: '', kind: 'all' };
 const cellOf = (r, id) => (Object.hasOwn(r.cells, id) ? r.cells[id] : null);
 const chip = (act, v, on, label) => `<button class="chip ${on ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}" aria-pressed="${on}">${label}</button>`;
 const colName = c => c.name || t('fr.unsigned');
+// Моя оцінка не з полиці, а зі списку друга — з позначкою, щоб їх не плутати.
+const givenMark = r => (r.given ? ` <small class="fr-g" title="${t('fr.given.hint')}">${t('fr.given')}</small>` : '');
 
 // Коментар у клітинці — значок і початок тексту; повний — у підказці й по кліку.
 const frNote = n => `<button class="fr-n" data-act="fr-note" title="${esc(n)}" aria-expanded="false">${icon('chat')}<span class="cut">${esc(cutNote(n))}</span><span class="full">${esc(n)}</span></button>`;
@@ -576,23 +579,25 @@ function frRow(r, cols, showAvg) {
   // тайтла немає на полиці — запам'ятовуємо для перегляду й дії take (за data-id)
   if (!r.have) remember({ id: r.id, type: r.k === 'movie' ? 'movie' : 'series', kind: r.k, title: r.t, year: r.y });
   const cells = cols.map(c => [c, cellOf(r, c.id)]);
-  const own = `${r.mine ? `<span>${t('fr.me')} <span class="fr-s me">${fmtScore(r.mine)}</span></span>` : ''}${showAvg && r.n ? `<span>${t('fr.avg')} <span class="fr-s avg">${fmtScore(r.avg)}</span></span>` : ''}`;
+  const own = `${r.mine ? `<span>${t('fr.me')} <span class="fr-s me">${fmtScore(r.mine)}</span>${givenMark(r)}</span>` : ''}${showAvg && r.n ? `<span>${t('fr.avg')} <span class="fr-s avg">${fmtScore(r.avg)}</span></span>` : ''}`;
   return `<tr class="fr-row" data-id="${esc(r.id)}" data-act="${r.have ? 'open' : 'preview'}" tabindex="0">
     <th scope="row" class="fr-t"><div>${ph(r.id, r.t, 'small')}<span><b>${esc(r.t)}</b><small>${esc([kindLabel(r.k), r.y].filter(Boolean).join(' · '))}</small></span>
       ${r.have ? '' : `<button class="rb" data-act="take" title="${t('take')}" aria-label="${t('take')}">${icon('plus')}</button>`}</div>
       <div class="fr-stack">${own ? `<p class="fr-own">${own}</p>` : ''}${cells.filter(([, c]) => c).map(([f, c]) => `<p><strong>${esc(colName(f))}</strong>${facts(c)}</p>`).join('')}</div></th>
-    <td class="fr-c me"><span class="fr-s">${r.mine ? fmtScore(r.mine) : ''}</span></td>
+    <td class="fr-c me"><span class="fr-s">${r.mine ? fmtScore(r.mine) : ''}</span>${givenMark(r)}</td>
     ${cells.map(([, c]) => `<td class="fr-c">${c ? facts(c) : ''}</td>`).join('')}
     ${showAvg ? `<td class="fr-c avg"${r.n ? ` title="${esc(t('fr.avg.n', { n: r.n }))}"` : ''}><span class="fr-s">${r.n ? fmtScore(r.avg) : ''}</span></td>` : ''}</tr>`;
 }
 
 // Секція картки: середня й оцінки друзів цього тайтла; без жодної оцінки — нічого.
-// Та сама секція — і в перегляді тайтла, якого на полиці ще немає.
+// Та сама секція — і в перегляді тайтла, якого на полиці ще немає. Середня — лише
+// з кількох оцінок (одна повторює саму себе); моя оцінка зі списку друга — окремим рядком.
 function friendsBlock(id) {
   const tb = social.table(), r = tb.rows.find(x => x.id === id);
   const list = r ? tb.cols.map(c => [c, cellOf(r, c.id)]).filter(([, c]) => c && (c.s || c.n || c.rec)) : [];
   if (!list.length) return '';
-  return `<section class="fr-card"><h3>${t('nav.friends')} <small>${r.n ? `${t('fr.avg')} ${fmtScore(r.avg)}` : ''}</small></h3>
+  return `<section class="fr-card"><h3>${t('nav.friends')} <small>${r.n > 1 ? `${t('fr.avg')} ${fmtScore(r.avg)}` : ''}</small></h3>
+    ${r.given ? `<p class="fr-mine"><b>${t('fr.me')}</b><span class="fr-s">${fmtScore(r.mine)}</span>${givenMark(r)}</p>` : ''}
     ${list.map(([f, c]) => `<p><b>${esc(colName(f))}</b>${facts(c)}</p>`).join('')}
     <button class="more" data-act="fr-all" data-v="${esc(id)}">${t('fr.card.all')} ${icon('chevR')}</button></section>`;
 }

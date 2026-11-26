@@ -259,6 +259,7 @@ const D = {
   'sh.dropped': ['“{name}” deleted', '«{name}» видалено'],
   'sh.empty.title': ['Nothing to share yet', 'Ділитись поки нічим'],
   'sh.empty.text': ['Create a collection — by conditions (only anime, only new, anime and series) or by hand — and send its link to friends. They will be able to put their scores next to yours.', 'Створи добірку — за умовами (лише аніме, лише нове, аніме й серіали) або вручну — і надішли посилання друзям. Вони зможуть поставити свої оцінки поруч із твоїми.'],
+  'fr.given': ['from rating', 'з оцінювання'], 'fr.given.hint': ['Your score from a friend’s list — there is no score on your shelf', 'Твоя оцінка зі списку друга — на полиці оцінки немає'],
   'fr.all': ['Everyone', 'Усі'], 'fr.title': ['Title', 'Тайтл'], 'fr.me': ['Me', 'Я'], 'fr.avg': ['Avg', 'Сер.'],
   'fr.rec': ['Recommended by them', 'Радить'], 'fr.none': ['Nothing matches this filter', 'За цим фільтром нічого немає'],
   'fr.empty.title': ['No friends’ scores yet', 'Оцінок друзів ще немає'],

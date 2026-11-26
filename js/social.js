@@ -346,7 +346,9 @@ const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
 // з рекомендації. Рекомендації читаємо лише в тих, за ким стежимо (або зі знімка).
 // only — рядок існує лише завдяки рекомендаціям і тайтла в мене немає: такі
 // йдуть після моїх, окремою групою «Радять друзі».
-export function friendTable({ entries, friends, replies, recs }) {
+// «Я» (mine) — оцінка з полиці, а коли її немає — та, що я поставив на списку друга
+// (given — мапа з givenScores; тоді row.given, щоб ці два види оцінок розрізнялись).
+export function friendTable({ entries, friends, replies, recs, given = {} }) {
   const all = liveFriends(friends), shown = all.slice(0, FRIENDS_MAX);
   const mine = new Map(entries.map(e => [e.id, e]));
   const cols = shown.map(f => ({ id: f.id, name: own(replies, f.uid)?.name || f.name }));
@@ -355,8 +357,8 @@ export function friendTable({ entries, friends, replies, recs }) {
     const reply = f.kind === 'live' ? own(replies, f.uid)?.items || {} : {};
     const rec = new Map(f.kind === 'snap' || wantsRecs(f) ? recsFor(f, own(recs, f.id) ?? f.items ?? []).map(x => [x.id, x]) : []);
     for (const id of new Set([...Object.keys(reply), ...rec.keys()])) {
-      const a = reply[id], b = rec.get(id), e = mine.get(id), src = a || b;
-      const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || 0, have: !!e, only: !e, cells: new Map(), avg: 0, n: 0 };
+      const a = reply[id], b = rec.get(id), e = mine.get(id), src = a || b, g = own(given, id) || 0;
+      const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || g, given: !e?.score && g > 0, have: !!e, only: !e, cells: new Map(), avg: 0, n: 0 };
       if (a) row.only = false;
       row.cells.set(f.id, { s: a?.s || 0, n: a?.n || '', rec: !!b, rs: b?.s || 0, rn: b?.n || '' });
       rows.set(id, row);
@@ -478,4 +480,14 @@ export function outboxDone(box, patch) {
 export function outboxSettle(box, loaded) {
   const hit = ([id, p]) => (p.x ? Object.hasOwn(loaded, id) && same(loaded[id], p.x) : !Object.hasOwn(loaded, id));
   return { ...box, pending: Object.fromEntries(Object.entries(box.pending).filter(r => !hit(r))), sent: { ...loaded } };
+}
+
+// Мої оцінки, поставлені на списках друзів (скриньки всіх авторів): ще не
+// підтверджене поверх підтвердженого; коли тайтл оцінено в кількох — найсвіжіша.
+export function givenScores(boxes) {
+  const best = new Map();
+  for (const box of Object.values(boxes)) {
+    for (const [id, x] of Object.entries(outboxMerge(box.sent, box.pending))) if (x.s > 0 && !(best.get(id)?.at >= x.at)) best.set(id, x);
+  }
+  return Object.fromEntries([...best].map(([id, x]) => [id, x.s]));
 }

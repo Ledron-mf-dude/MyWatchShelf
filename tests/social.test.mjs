@@ -836,3 +836,27 @@ test('outbox: запис лягає у сховище одразу й переж
     assert.deepEqual(outbox.get('alice'), emptyBox());
   } finally { delete globalThis.localStorage; }
 });
+
+// ── стовпець «Я»: оцінка з полиці, а без неї — поставлена на списку друга ──
+import { givenScores } from '../js/social.js';
+test('givenScores: мої оцінки зі списків друзів — черга поверх підтвердженого, найсвіжіша на тайтл', () => {
+  const boxes = {
+    alice: { sent: { tt0000001: oi(7, 100), tt0000002: oi(6, 100), tt0000003: oi(0, 100, 'лише слова') }, pending: { tt0000002: { x: null, at: 150 }, tt0000004: { x: oi(9, 160), at: 160 } }, at: 1 },
+    bob: { sent: { tt0000001: oi(8, 200) }, pending: {}, at: 2 },
+  };
+  assert.deepEqual(givenScores(boxes), { tt0000001: 8, tt0000004: 9 });
+  assert.deepEqual(givenScores({}), {});
+});
+test('friendTable: «Я» — оцінка з полиці, інакше поставлена на списку друга (з позначкою)', () => {
+  const F = id => ({ id, uid: id, name: id, kind: 'live', follow: true, kept: true, added: 1, lists: [] });
+  const recs = { oleh: [{ id: 'tt0000001', t: 'A', k: 'movie', s: 9 }, { id: 'tt0000002', t: 'B', k: 'movie', s: 8 }, { id: 'tt0000003', t: 'C', k: 'movie', s: 7 }] };
+  const entries = [{ id: 'tt0000001', title: 'A', kind: 'movie', score: 6 }, { id: 'tt0000003', title: 'C', kind: 'movie', score: 0 }];
+  const tb = friendTable({ entries, friends: [F('oleh')], replies: {}, recs, given: { tt0000001: 10, tt0000002: 7.5, tt0000003: 5, constructor: 3 } });
+  const row = id => tb.rows.find(r => r.id === id);
+  assert.deepEqual([row('tt0000001').mine, row('tt0000001').given], [6, false]);    // полиця важить більше
+  assert.deepEqual([row('tt0000002').mine, row('tt0000002').given], [7.5, true]);   // тайтла в мене немає, але я його оцінив
+  assert.equal(row('tt0000002').only, true);                                        // лишається серед «Радять друзі», але вже з моєю оцінкою
+  assert.deepEqual([row('tt0000003').mine, row('tt0000003').given], [5, true]);     // на полиці без оцінки
+  const plain = friendTable({ entries, friends: [F('oleh')], replies: {}, recs });
+  assert.deepEqual([plain.rows.find(r => r.id === 'tt0000002').mine, plain.rows.find(r => r.id === 'tt0000002').given], [0, false]);
+});

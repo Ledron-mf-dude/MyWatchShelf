@@ -577,6 +577,8 @@ button.more .ic{width:16px; height:16px}
 .fr-row.flash th,.fr-row.flash td{background:var(--accent-soft)}
 .fr-sub th{padding:14px 12px 8px; text-align:left; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--faint); background:var(--surface)}
 .fr-s{font-weight:800; font-size:16px; font-variant-numeric:tabular-nums}
+.fr-g{display:block; font-size:10.5px; font-weight:600; color:var(--faint); white-space:nowrap} .fr-card .fr-g,.fr-stack .fr-g{display:inline}
+.fr-card .fr-mine .fr-s{color:var(--accent)}
 .fr-c.me .fr-s{color:var(--accent)} .fr-c.avg .fr-s{color:var(--amber)}
 .fr-rec{display:inline-block; vertical-align:middle; color:var(--amber)} .fr-rec .ic{width:13px; height:13px}
 /* у клітинці два окремі рядки: оцінка мого списку й власна рекомендація друга */

@@ -290,6 +290,8 @@ const D = {
   'fr.hide.check': ['Also delete this person’s scores on my lists (forever)', 'Також видалити оцінки цієї людини на моїх списках (назавжди)'],
   'fr.hide.done': ['{name}: hidden. Restore from “Manage friends”', '{name}: сховано. Повернути можна в «Керувати друзями»'],
   'fr.hide.deleted': ['{name}: hidden, scores deleted', '{name}: сховано, оцінки видалено'],
+  'fr.hide.unsure': ['{name}: hidden, but the deletion of the scores could not be confirmed — it will complete when the connection returns; check later.',
+    '{name}: сховано, але підтвердити видалення оцінок не вдалося — воно завершиться, коли повернеться зв’язок; перевір пізніше.'],
   'fr.hide.kept': ['{name}: hidden, but the scores were NOT deleted — that needs sign-in and a connection. Restore from the hidden list and try again.',
     '{name}: сховано, але оцінки НЕ видалено — для цього потрібні вхід і мережа. Поверни зі списку прихованих і спробуй ще раз.'],
   'fr.avg.n': ['Scores: {n}', 'Оцінок: {n}'], 'fr.avg.hint': ['friends’ average, without your score', 'середнє друзів, без твоєї оцінки'],

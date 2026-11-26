@@ -720,13 +720,15 @@ Object.assign(friendActions, {
     socialCache.set(prunedCache());
     manageDone();
     if (!res.checked) { toast(t('fr.hide.done', { name }), { ms: 4200 }); return; }
+    // ok: true — видалено; null — за 8 с підтвердження не дочекались, але запит лишився
+    // в черзі й дійде сам (казати «не видалено» було б неправдою); false — не видаляли.
     let ok = false;
     if (cloud.user && navigator.onLine !== false) {
       try {
-        ok = await Promise.race([cloud.deleteReply(cloud.user.uid, v).then(() => true), new Promise(done => setTimeout(() => done(false), 8000))]);
+        ok = await Promise.race([cloud.deleteReply(cloud.user.uid, v).then(() => true), new Promise(done => setTimeout(() => done(null), 8000))]);
       } catch (e) { console.warn('видалення відповіді', e); }
     }
-    toast(t(ok ? 'fr.hide.deleted' : 'fr.hide.kept', { name }), { ms: ok ? 4200 : 8000 });
+    toast(t(ok ? 'fr.hide.deleted' : ok === null ? 'fr.hide.unsure' : 'fr.hide.kept', { name }), { ms: ok ? 4200 : 8000 });
   },
   // Мітка видалення імені не має: ім'я підтягнеться з відповіді, коли вона є (friendTable).
   // Запам'ятане в людини (kept, lists) мітка зберегла — повертаємо його й знову показуємо.

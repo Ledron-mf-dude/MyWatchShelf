@@ -115,6 +115,7 @@ const D = {
   'recs.fail.title': ['The list could not be opened', 'Список не відкрився'],
   'recs.bad.text': ['There is no such list. Check the link or ask the author to send it again.', 'Такого списку немає. Перевір посилання або попроси автора надіслати його ще раз.'],
   'recs.net.text': ['The list did not load. Check your connection and try again.', 'Список не завантажився. Перевір мережу й спробуй ще раз.'],
+  'recs.gone': ['This list is no longer available — the page will change when you leave the comment field.', 'Цей список уже недоступний — сторінка зміниться, коли вийдеш із поля коментаря.'],
   'recs.nolist.title': ['No such collection', 'Такої добірки немає'],
   'recs.nolist.text': ['{owner} has no collection at this link — it may have been deleted.', '{owner} не має добірки за цим посиланням — можливо, її видалено.'],
   'recs.nolist.go': ['Open their recommendations', 'Відкрити загальні рекомендації'],

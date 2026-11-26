@@ -13,6 +13,7 @@ import {
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
 import { replyActions, friendActions, loadReplyState, leaveReplies, refreshReplies, flushReplies, resendReplies, takeScore, social, renderFriends } from './friends.js';
 import { renderShare, shareActions } from './shared.js';
+import { goneStep } from './social.js';
 
 const S = store.settings;
 const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['friends', 'user'], ['share', 'share'], ['discover', 'compass'], ['stats', 'chart']];
@@ -127,16 +128,42 @@ async function loadRecs(raw) {
 }
 // Живий список оновлюється сам: коли вкладка знову на видноті й раз на хвилину.
 // Змінився — перемальовуємо, але не тоді, коли саме набирають коментар.
-let refreshing = false;
+// Список зник (добірку видалили, публікацію зняли) — показуємо сторінку «не
+// відкрився»; коли саме набирають коментар — лише рядок біля поля, а сторінку
+// міняємо після виходу з нього (gone — відмова, що цього чекає).
+let refreshing = false, gone = null;
+const typingNote = () => !!document.activeElement?.matches?.('[data-reply-note]');
+function showGone(fail) {
+  gone = null;
+  Object.assign(view, { recs: null, fail });
+  setTitle(); leaveReplies(); renderRecs();
+}
+function dropGone() { gone = null; $('[data-gone]', app)?.remove(); }
+document.addEventListener('focusout', ev => {
+  const g = gone;
+  if (!g || !ev.target.matches?.('[data-reply-note]')) return;
+  // після події: коментар уже пішов у чергу, а фокус міг перейти в сусіднє поле
+  setTimeout(() => { if (gone === g && view.recs === g.of && !typingNote()) showGone(g.fail); }, 0);
+});
 async function refreshRecs() {
   const was = view.recs, raw = location.hash.slice(1);
   if (view.route !== 'recs' || !was?.uid || document.hidden || refreshing) return;
   refreshing = true;
   try {
-    const { recs } = await loadRecs(raw);
-    if (!recs || view.recs !== was || location.hash.slice(1) !== raw) return;
+    const { recs, fail } = await loadRecs(raw);
+    if (view.recs !== was || location.hash.slice(1) !== raw) return;
+    const step = goneStep(fail, typingNote());
+    if (step === 'show') return showGone(fail);
+    if (step === 'wait') {
+      gone = { fail, of: was };
+      const box = document.activeElement.closest('.reply');
+      if (box && !$('[data-gone]', app)) box.insertAdjacentHTML('beforeend', `<p class="who-line bad" data-gone role="status">${t('recs.gone')}</p>`);
+      return;
+    }
+    dropGone();   // список знову на місці
+    if (!recs) return;
     if (JSON.stringify(recs) !== JSON.stringify(was)) {
-      if (document.activeElement?.matches?.('[data-reply-note]')) return;
+      if (typingNote()) return;
       // змінився лише перемикач «оцінки бачать усі» — досить оновити шматки
       const full = JSON.stringify({ ...recs, open: 0 }) !== JSON.stringify({ ...was, open: 0 });
       view.recs = recs;

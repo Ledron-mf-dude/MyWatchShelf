@@ -736,3 +736,16 @@ test('схована людина: мітка видалення зберіга�
   plain.save('oleh', { kind: 'live', kept: true }); plain.remove('oleh');
   assert.equal('kept' in plain.raw()[0], false);
 });
+
+import * as socialAll from '../js/social.js';
+test('goneStep: список зник під час живого оновлення — показати відмову або зачекати з поля коментаря', () => {
+  const { goneStep } = socialAll;
+  assert.equal(goneStep({ kind: 'nolist', name: 'Аліса', uid: 'a' }, false), 'show');
+  assert.equal(goneStep({ kind: 'bad' }, false), 'show');
+  assert.equal(goneStep({ kind: 'nolist' }, true), 'wait');
+  assert.equal(goneStep({ kind: 'bad' }, true), 'wait');
+  // збій мережі чи вдале оновлення — список лишається на екрані
+  assert.equal(goneStep({ kind: 'net' }, false), '');
+  assert.equal(goneStep(undefined, false), '');
+  assert.equal(goneStep(null, true), '');
+});

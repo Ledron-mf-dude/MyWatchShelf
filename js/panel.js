@@ -266,10 +266,12 @@ export const cardActions = {
 };
 
 // ── перегляд тайтла, якого ще немає на полиці ─────────────────────
-export async function openPreview(id) {
+// ro — лише перегляд (власник дивиться свій список очима гостя): картки редагування
+// не відкриваємо й «додати» не пропонуємо, навіть коли тайтл є на полиці.
+export async function openPreview(id, ro = false) {
   const x = recall(id);
   if (!x) return;
-  if (store.get(id)) return openCard(id);
+  if (store.get(id) && !ro) return openCard(id);
   const ac = new AbortController();
   const draw = (m, loading) => {
     const r = x.rec, ns = Object.keys(m.seasons || {}).length;
@@ -281,10 +283,10 @@ export async function openPreview(id) {
         <section><h3>${t('card.about')}</h3>${aboutHtml(m).trim() || `<p class="muted">${loading ? t('loading.plot') : t('no.plot')}</p>`}
           ${ns ? `<p class="muted small">${ns} ${tn('season', ns)} · ${Object.values(m.seasons).reduce((a, b) => a + b, 0)} ${tn('episode', Object.values(m.seasons).reduce((a, b) => a + b, 0))}</p>` : ''}</section>
       </div>
-      <footer class="card-foot fwrap"><span class="muted small">${t('add.as')}</span><span class="grow"></span>
+      ${ro ? `<footer class="card-foot fwrap"><span class="muted small">${t('recs.own.ro')}</span></footer>` : `<footer class="card-foot fwrap"><span class="muted small">${t('add.as')}</span><span class="grow"></span>
         <button class="btn" data-act="add-as" data-v="watching">${t('st.watching')}</button>
         <button class="btn" data-act="add-as" data-v="done">${t('st.done')}</button>
-        <button class="btn primary" data-act="add-as" data-v="planned">${icon('plus')}${t('st.planned')}</button></footer>`;
+        <button class="btn primary" data-act="add-as" data-v="planned">${icon('plus')}${t('st.planned')}</button></footer>`}`;
   };
   showOverlay({ type: 'preview', id, abort: ac }, `<aside class="card" role="dialog" aria-label="${t('card.about')}"></aside>`);
   draw(x.meta || {}, !x.meta || !!x.thin);

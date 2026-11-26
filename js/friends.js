@@ -69,10 +69,11 @@ function stateHtml(id) {
   return '';
 }
 // Оцінки інших — лише коли автор відкрив список. Це не обов'язково мої друзі.
-function othersHtml(id) {
+// cap — підпис під заголовком: власникові на закритому списку кажемо, що це бачить лише він.
+function othersHtml(id, cap = '') {
   const rows = Object.entries(rs.others).filter(([uid, r]) => uid !== meUid() && r.items[id]).slice(0, 10);
   if (!rows.length) return '';
-  return `<div class="others"><h4>${t('reply.others')}</h4>${rows.map(([, r]) => {
+  return `<div class="others"><h4>${t('reply.others')}</h4>${cap ? `<small class="muted">${cap}</small>` : ''}${rows.map(([, r]) => {
     const it = r.items[id];
     return `<p><b>${esc(r.name || t('fr.unsigned'))}</b>${it.s ? ` · <span class="sc">${fmtScore(it.s)}</span>` : ''}${it.n ? ` — <span class="muted">${t('quote', { x: esc(it.n) })}</span>` : ''}</p>`;
   }).join('')}</div>`;
@@ -100,8 +101,10 @@ function barHtml(recs) {
 // оцінка), 'n:' (коментар), 't:' (стан збереження). my(id) — моя оцінка тут.
 export function replyParts(recs) {
   const mode = modeOf(recs), own = isOwn(recs), rate = mode === 'rate' && !own;
-  // власник бачить оцінки інших так само, як друг, якому їх відкрито
-  const others = !!recs.open && rs.ready && (rate || ownSigned(recs));
+  // Власник бачить оцінки всіх друзів завжди (читати відповіді він може й так) — тим
+  // самим блоком, що й друг, якому їх відкрито; на закритому списку — з підписом.
+  const mineList = ownSigned(recs), others = rs.ready && (mineList || (!!recs.open && rate));
+  const cap = mineList && !recs.open ? t('reply.others.own') : '';
   const signin = mode === 'signin' && !own ? `<button class="btn" data-act="rate-signin">${icon('user')}${t('reply.signin')}</button>` : '';
   const zones = new Map([
     ['banner', own ? `<div class="own-banner">${icon('user')}<span>${t('recs.own')}</span></div>` : ''],
@@ -110,7 +113,7 @@ export function replyParts(recs) {
     ['bar', rate ? barHtml(recs) : ''],
   ]);
   for (const x of recs.items) {
-    zones.set('o:' + x.id, others ? othersHtml(x.id) : '');
+    zones.set('o:' + x.id, others ? othersHtml(x.id, cap) : '');
     zones.set('r:' + x.id, rate ? scoreHtml(x) : signin);
     zones.set('n:' + x.id, rate ? noteHtml(x) : '');
     zones.set('t:' + x.id, rate ? stateHtml(x.id) : '');
@@ -118,6 +121,8 @@ export function replyParts(recs) {
   return { own, zones, my: id => (rate && rs.ready ? rs.mine.items[id]?.s || 0 : 0) };
 }
 // Моя оцінка тайтла на відкритому зараз списку (0 — немає): з нею тайтл іде на полицю.
+// Чи відкрита зараз сторінка — власний список очима гостя: рядки там лише для перегляду.
+export const ownPreview = () => !!cur && isOwn(cur);
 export const takeScore = id => (cur && rs.ready && modeOf(cur) === 'rate' && !isOwn(cur) ? rs.mine.items[id]?.s || 0 : 0);
 
 // ── стан ──────────────────────────────────────────────────────────
@@ -153,7 +158,7 @@ function fetchReply() {
   Promise.all([
     own ? null : cloud.loadReply(st.owner, st.me),
     // чужі оцінки — додаток: їхня відсутність не заважає оцінювати
-    recs.open ? cloud.loadReplies(st.owner).catch(e => { console.warn('оцінки інших', e); return {}; }) : {},
+    recs.open || own ? cloud.loadReplies(st.owner).catch(e => { console.warn('оцінки інших', e); return {}; }) : {},
   ]).then(([mine, others]) => {
     const loaded = mine || blank();
     // Завантажене — підтверджений стан; поверх нього те, що з цього пристрою ще не
@@ -200,7 +205,7 @@ const reload = () => { if (rs.ready) return; rs.tries = 0; rs.failed = false; re
 export function refreshReplies() {
   const st = rs, recs = cur;
   if (!recs || !st.ready || !(modeOf(recs) === 'rate' || ownSigned(recs))) return;
-  if (!recs.open) { if (Object.keys(st.others).length) { st.others = {}; redraw(); } return; }
+  if (!recs.open && !ownSigned(recs)) { if (Object.keys(st.others).length) { st.others = {}; redraw(); } return; }
   cloud.loadReplies(st.owner).then(others => { if (st === rs && !same(others, st.others)) { st.others = others; redraw(); } })
     .catch(e => console.warn('оцінки інших', e));
 }

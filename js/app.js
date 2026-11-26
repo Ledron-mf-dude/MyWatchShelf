@@ -11,7 +11,7 @@ import {
   cardActions, buildActions, loadDemo, flushCard, palRetry,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
-import { replyActions, friendActions, loadReplyState, leaveReplies, refreshReplies, flushReplies, resendReplies, replayOutbox, takeScore, social, renderFriends } from './friends.js';
+import { replyActions, friendActions, loadReplyState, leaveReplies, refreshReplies, flushReplies, resendReplies, replayOutbox, takeScore, ownPreview, social, renderFriends } from './friends.js';
 import { renderShare, shareActions } from './shared.js';
 import { goneStep } from './social.js';
 
@@ -271,7 +271,7 @@ on({
   import: importFile,
   // списки
   open: (v, el) => openCard(idOf(el)),
-  preview: (v, el) => openPreview(idOf(el)),
+  preview: (v, el) => openPreview(idOf(el), view.route === 'recs' && ownPreview()),
   plus: (v, el) => plus(idOf(el)),
   'quick-add': (v, el) => {
     const x = recall(idOf(el));

@@ -444,7 +444,7 @@ function renderRecsFail() {
 }
 export function renderRecs() {
   if (!view.recs) return renderRecsFail();
-  const { name, items, title } = view.recs, parts = recParts(view.recs);
+  const { name, items, title } = view.recs, parts = recParts(view.recs), own = !!parts.get('banner');
   zoneHtml.clear();
   const z = (key, cls = '') => {
     const html = parts.get(key) || '';
@@ -459,7 +459,7 @@ export function renderRecs() {
     ${lead ? `<img class="hero-bg" alt="" src="${backdrop(lead.id)}">` : ''}
     <div class="hero-in"><span class="kicker">${title ? (name ? t('recs.list.by', { name: esc(name) }) : t('recs.list')) : t('recs.kicker')}</span>
       <h1>${title ? esc(title) : name ? t('recs.title.by', { name: esc(name) }) : t('recs.title')}</h1>
-      <p class="hero-plot">${t('recs.text', { n: count('title', items.length) })}</p>
+      <p class="hero-plot">${t(own ? 'recs.text.own' : 'recs.text', { n: count('title', items.length) })}</p>
       ${z('keep', 'hero-act')}</div>
   </section>
   ${z('who')}${z('taste')}${z('bar', 'reply-bar')}

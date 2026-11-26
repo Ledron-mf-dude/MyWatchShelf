@@ -321,6 +321,7 @@ const D = {
   'build.picked': ['Selected: {n}', 'Вибрано: {n}'], 'build.name.ph': ['Collection name', 'Назва добірки'], 'build.save': ['Save collection', 'Зберегти добірку'],
   'build.err.name': ['Enter a collection name', 'Введи назву добірки'], 'build.err.pick': ['Select at least one title', 'Познач хоча б один запис'],
   'build.over': ['Too many shared titles: {n} over the limit of {max}. Nothing was saved.', 'Забагато записів для поширення: на {n} більше за межу {max}. Нічого не збережено.'],
+  'build.err.full': ['Not saved — every selected title is already in 8 collections', 'Не збережено — усі позначені записи вже у 8 добірках'],
   'build.skipped': ['{n} skipped — already in 8 collections', 'Пропущено {n} — уже в 8 добірках'],
   'rebuild.btn': ['Rebuild', 'Сформувати знову'], 'rebuild.none': ['No changes', 'Змін немає'],
   'rebuild.title': ['Rebuild “{name}”?', 'Сформувати «{name}» знову?'],

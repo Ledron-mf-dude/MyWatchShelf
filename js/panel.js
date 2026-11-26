@@ -717,13 +717,14 @@ function buildSave() {
   if (dup) return toast(t('build.err.dup', { name: dup }), { ms: 5000 });
   if (!picked.length) return toast(t('build.err.pick'));
   const plan = listPlan(all, o.edit, name, picked);
+  // усе позначене вже у 8 добірках: назви не ніс би жоден запис, а редагована добірка зникла б
+  if (!plan.left) return toast(t('build.err.full'), { ms: 5000 });
   const over = publicOver(all, plan.added);
   if (over > 0) return toast(t('build.over', { n: over, max: PUBLIC_MAX }), { ms: 4500 });
   // старі умови читаємо до запису: коли зі старої назви зникне остання мітка, їх прибере слухач нижче
   const old = o.edit ? listdefs.get(defId(o.edit)) : null;
   plan.set.forEach(([id, lists]) => store.save(id, { lists }));
   if (plan.skipped) toast(t('build.skipped', { n: plan.skipped }), { ms: 4000 });
-  if (!listNames(store.list()).includes(name)) return;   // усе позначене вже у 8 добірках — добірки не вийшло
   if (o.edit && o.edit !== name && listdefs.get(defId(o.edit))) listdefs.remove(defId(o.edit));
   const hit = buildHit(o.f), empty = isEmptyFilter(o.f), pk = new Set(picked);
   listdefs.save(defId(name), {

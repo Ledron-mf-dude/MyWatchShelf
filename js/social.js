@@ -85,17 +85,20 @@ export const nameList = (titles, max = 6) =>
 // Збереження добірки: які записи отримують який перелік міток. old — стара назва
 // (порожньо — нова добірка), name — нова, picked — позначені id. Під час
 // редагування склад замінюється рівно позначеним, а мітка перейменовується на місці.
+// left — скільки записів нестиме назву після плану: нуль — добірки не стало б
+// (усе позначене вже у 8 добірках), такий план застосовувати не можна.
 export function listPlan(entries, old, name, picked) {
-  const want = new Set(picked), out = { set: [], added: [], skipped: 0 };
+  const want = new Set(picked), out = { set: [], added: [], skipped: 0, left: 0 };
   for (const e of entries) {
     const cur = e.lists || [], has = !!old && cur.includes(old);
     let next = cur;
     if (want.has(e.id)) {
       if (has) next = [...new Set(cur.map(l => (l === old ? name : l)))];
-      else if (cur.includes(name)) continue;
-      else if (cur.length >= LISTS_MAX) { out.skipped++; continue; }
+      else if (cur.includes(name)) next = cur;
+      else if (cur.length >= LISTS_MAX) out.skipped++;
       else { next = [...cur, name]; out.added.push(e.id); }
     } else if (has) next = cur.filter(l => l !== old);
+    if (next.includes(name)) out.left++;
     if (next.length !== cur.length || next.some((l, i) => l !== cur[i])) out.set.push([e.id, next]);
   }
   return out;

@@ -702,3 +702,13 @@ test('listView: ключ важить більше за назву, а без н
   assert.deepEqual(listView({ name: 'Аліса', items }, 'abcdef12', 'Нема'), { missing: true, name: 'Аліса' });
   assert.deepEqual(listView({ name: 'Аліса', items }, 'abcdef12', ''), { missing: true, name: 'Аліса' });
 });
+test('listPlan: left — скільки записів нестиме назву; нуль означає, що добірка зникла б', () => {
+  const full = ['1', '2', '3', '4', '5', '6', '7', '8'];
+  const list = [{ id: 'tt0000001', lists: ['Х'] }, { id: 'tt0000002', lists: full }, { id: 'tt0000003', lists: ['Х', 'Інша'] }];
+  // зняли всіх учасників, позначили лише тайтл, що вже у 8 добірках — назви не нестиме ніхто
+  assert.equal(listPlan(list, 'Х', 'Х', ['tt0000002']).left, 0);
+  assert.equal(listPlan(list, '', 'Нова', ['tt0000002']).left, 0);
+  assert.equal(listPlan(list, 'Х', 'Y', ['tt0000001', 'tt0000002']).left, 1);
+  assert.equal(listPlan(list, '', 'Інша', ['tt0000003']).left, 1);   // уже з міткою — теж рахується
+  assert.equal(listPlan(list, '', 'Нова', ['tt0000001', 'tt0000003']).left, 2);
+});

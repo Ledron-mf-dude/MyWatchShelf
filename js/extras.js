@@ -7,6 +7,7 @@ import {
 import { t, tn, getLang } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
+import { scoreFrom } from './social.js';
 import { $, app, layer, icon, ph, toast, ui, showOverlay, closeOverlay } from './ui.js';
 import { openCard } from './panel.js';
 
@@ -132,7 +133,7 @@ export const pickActions = {
 // зі спільних оцінок від TASTE_MIN: за одним тайтлом він нічого не каже.
 export function taste(items, replyScores = {}) {
   const m = tasteMatch(store.list(), items, replyScores);
-  const tags = new Map(m.rows.map(r => [r.x.id, { tag: matchTag(r), mine: r.mine }]));
+  const tags = new Map(m.rows.map(r => [r.x.id, { tag: matchTag(r), mine: r.mine, shelf: r.shelf }]));
   if ((!store.list().length && !m.scored) || !items.length) return { panel: '', tags };
   const enough = m.scored >= TASTE_MIN;
   const panel = `<section class="taste">
@@ -141,11 +142,13 @@ export function taste(items, replyScores = {}) {
       <p>${t('taste.line', { a: m.common, b: m.unseen })}${m.scored ? ' ' + t('taste.scored', { n: `${m.scored} ${tn('title', m.scored)}` }) : ''}</p></div></section>`;
   return { panel, tags };
 }
-export const tasteBadge = info => {
+// sent — моя оцінка, надіслана на цей список; canRate — чи можу тут оцінювати.
+// Оцінку, що є лише на полиці, так і називаємо: «на твоїй полиці 7 · не надіслано».
+export const tasteBadge = (info, sent = 0, canRate = false) => {
   if (!info) return '';
   const label = { match: t('taste.tag.match'), close: t('taste.tag.close'), differ: t('taste.tag.differ'), new: t('taste.tag.new'), have: '' }[info.tag];
   if (!label) return '';
-  return `<span class="badge static ${{ match: 'ok', close: '', differ: 'warn', new: 'add' }[info.tag]}">${label}${info.mine ? ` · ${t('taste.mine', { n: fmtScore(info.mine) })}` : ''}</span>`;
+  return `<span class="badge static ${{ match: 'ok', close: '', differ: 'warn', new: 'add' }[info.tag]}">${label}${info.mine ? ` · ${t({ here: 'taste.mine', shelf: 'taste.mine.shelf', unsent: 'taste.mine.unsent' }[scoreFrom({ shelf: info.shelf, sent, canRate })], { n: fmtScore(info.mine) })}` : ''}</span>`;
 };
 
 // ── картка-підсумок ───────────────────────────────────────────────

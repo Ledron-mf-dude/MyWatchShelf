@@ -211,6 +211,7 @@ const D = {
   'taste.line': ['{a} in common · {b} not in your list yet.', 'Спільних: {a} · ще не в тебе: {b}.'], 'taste.scored': ['Rated by both: {n}.', 'Спільно оцінених: {n}.'],
   'taste.few': ['Too few scores in common', 'Замало спільних оцінок'],
   'taste.tag.match': ['you agree', 'збіг'], 'taste.tag.close': ['close', 'близько'], 'taste.tag.differ': ['you differ', 'розійшлись'], 'taste.tag.new': ['new for you', 'нове для тебе'], 'taste.mine': ['yours {n}', 'твоя {n}'],
+  'taste.mine.shelf': ['on your shelf {n}', 'на твоїй полиці {n}'], 'taste.mine.unsent': ['on your shelf {n} · not sent', 'на твоїй полиці {n} · не надіслано'],
   // картка-підсумок
   'wrap.btn': ['Share card', 'Картка-підсумок'], 'wrap.title': ['My watching in numbers', 'Мої перегляди в цифрах'], 'wrap.kicker': ['My watching in numbers', 'Мої перегляди в цифрах'],
   'wrap.hours': ['hours', 'годин'], 'wrap.top': ['Top rated', 'Найвищі оцінки'], 'wrap.genre': ['Favourite genre', 'Улюблений жанр'],

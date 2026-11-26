@@ -860,3 +860,13 @@ test('friendTable: «Я» — оцінка з полиці, інакше пос�
   const plain = friendTable({ entries, friends: [F('oleh')], replies: {}, recs });
   assert.deepEqual([plain.rows.find(r => r.id === 'tt0000002').mine, plain.rows.find(r => r.id === 'tt0000002').given], [0, false]);
 });
+
+// ── позначка збігу: звідки «моя оцінка» ──
+import { scoreFrom } from '../js/social.js';
+test('scoreFrom: оцінка з полиці, не надіслана на цей список, так і називається', () => {
+  assert.equal(scoreFrom({ shelf: 7, sent: 0, canRate: true }), 'unsent');    // на полиці є, тут нічого не надіслано
+  assert.equal(scoreFrom({ shelf: 7, sent: 7, canRate: true }), 'here');      // надіслана та сама
+  assert.equal(scoreFrom({ shelf: 7, sent: 9, canRate: true }), 'shelf');     // для збігу береться полиця — так і кажемо
+  assert.equal(scoreFrom({ shelf: 7, sent: 0, canRate: false }), 'shelf');    // без входу чи на знімку надсилати нікуди
+  assert.equal(scoreFrom({ shelf: 0, sent: 8, canRate: true }), 'here');      // на полиці оцінки немає — рахується поставлена тут
+});

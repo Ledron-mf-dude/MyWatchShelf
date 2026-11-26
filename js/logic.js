@@ -363,7 +363,7 @@ export function tasteMatch(mine, items, replyScores = {}) {
   const by = new Map(mine.map(e => [e.id, e]));
   const rows = items.map(x => {
     const e = by.get(x.id), s = e?.score || (Object.hasOwn(replyScores, x.id) ? replyScores[x.id] : 0) || 0;
-    return { x, have: !!e, mine: s, d: s && x.s ? s - x.s : null };
+    return { x, have: !!e, mine: s, shelf: e?.score || 0, d: s && x.s ? s - x.s : null };
   });
   const scored = rows.filter(r => r.d !== null);
   return {

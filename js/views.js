@@ -419,14 +419,14 @@ export function renderStats() {
 // постери не блимають, прокрутка й поле коментаря лишаються на місці.
 const zoneHtml = new Map();
 function recParts(recs) {
-  const { own, zones, my } = replyParts(recs), { items } = recs;
+  const { own, zones, my, rate } = replyParts(recs), { items } = recs;
   // «моя оцінка» для збігу смаків — з полиці, а коли там немає, то поставлена тут
   const tm = taste(items, Object.fromEntries(items.map(x => [x.id, my(x.id)]).filter(([, s]) => s)));
   zones.set('taste', own ? '' : tm.panel);
   for (const x of items) {
     const have = store.get(x.id);
     // власникові ні «збіг», ні «Уже в тебе» ні до чого
-    zones.set('a:' + x.id, own ? '' : `${tasteBadge(tm.tags.get(x.id))}<button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : my(x.id) ? t('take.scored') : t('take')}</button>`);
+    zones.set('a:' + x.id, own ? '' : `${tasteBadge(tm.tags.get(x.id), my(x.id), rate)}<button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : my(x.id) ? t('take.scored') : t('take')}</button>`);
   }
   return zones;
 }

@@ -118,7 +118,8 @@ export function replyParts(recs) {
     zones.set('n:' + x.id, rate ? noteHtml(x) : '');
     zones.set('t:' + x.id, rate ? stateHtml(x.id) : '');
   }
-  return { own, zones, my: id => (rate && rs.ready ? rs.mine.items[id]?.s || 0 : 0) };
+  // rate — оцінювати можна й власну відповідь уже завантажено (доти не знаємо, що надіслано)
+  return { own, zones, rate: rate && rs.ready, my: id => (rate && rs.ready ? rs.mine.items[id]?.s || 0 : 0) };
 }
 // Моя оцінка тайтла на відкритому зараз списку (0 — немає): з нею тайтл іде на полицю.
 // Чи відкрита зараз сторінка — власний список очима гостя: рядки там лише для перегляду.

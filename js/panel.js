@@ -8,7 +8,9 @@ import { t, tn, getLang } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
 import { listdefs, defId } from './synced.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, LISTS_MAX, PUBLIC_MAX } from './social.js';
+import {
+  cleanListFilter, isEmptyFilter, listDiff, listMatch, manualPick, tickManual, nameTaken, listKey, nameList, listPlan, publicOver, canWrite, PUBLIC_MAX,
+} from './social.js';
 import { cloud } from './cloud.js';
 import { $, layer, icon, ph, toast, ui, showOverlay, closeOverlay, remember, recall, confirmBox, promptBox } from './ui.js';
 import { view } from './views.js';
@@ -418,6 +420,37 @@ export const dropUrl = () => { ui.overlay.url = ''; palNote(); };
 // Що потрапляє за посиланням: записи добірки або (list порожній) усе з позначкою «раджу».
 export const sharePool = (all, l) => (l ? all.filter(e => (e.lists || []).includes(l)) : all.filter(e => e.rec));
 const byScore = (a, b) => (b.score || 0) - (a.score || 0) || a.title.localeCompare(b.title, getLang());
+
+// Умови добірки словами: «Аніме, серіали · від 2024 · моя оцінка 8+».
+export function filterText(f) {
+  const years = f.from && f.to ? (f.from === f.to ? f.from : `${f.from}–${f.to}`)
+    : f.from ? t('year.from.n', { n: f.from }) : f.to ? t('year.to.n', { n: f.to }) : '';
+  return [
+    f.kinds.map(k => t('kinds.' + k)).join(', '),
+    f.status !== 'all' ? statusLabel(f.status) : '',
+    f.genres.map(genreName).join(', '),
+    years,
+    f.mine ? t('mine.min', { n: f.mine }) : '',
+    f.rec ? t('build.rec') : '',
+  ].filter(Boolean).join(' · ');
+}
+// Запис умов є в кожної добірки (у зібраної вручну умови порожні), тож «добірка
+// за умовами» — це запис із непорожніми умовами. Повертає його або null.
+export const condDef = name => {
+  const d = name ? listdefs.get(defId(name)) : null;
+  return d && !isEmptyFilter(d.f) ? d : null;
+};
+const mayKey = () => canWrite(!!cloud.user, cloud.synced('listdefs'));
+// Сталий ключ добірки для посилання: створюється один раз і не змінюється з назвою.
+// Добірка, створена раніше чи міткою з картки, отримує його тут, коли знадобилось
+// посилання. З входом — лише після стану з хмари: інакше два пристрої вигадали б
+// різні ключі й одне з посилань зламалось би. Немає ключа — посилання за назвою.
+export function ensureKey(name) {
+  const def = listdefs.get(defId(name));
+  if (def?.key) return def.key;
+  if (!mayKey() || !listNames(store.list()).includes(name)) return '';
+  return listdefs.save(defId(name), { name, key: listKey() })?.key || '';
+}
 // Посилання на список: живе (з входом) або знімок у самому посиланні.
 export async function shareLink(list = '') {
   const items = sharePool(store.list(), list).sort(byScore).map(recItem);
@@ -425,7 +458,12 @@ export async function shareLink(list = '') {
   const base = location.origin + location.pathname;
   let link, live = false;
   if (cloud.user) {
-    try { await cloud.publishNow(); link = `${base}#u=${cloud.user.uid}${list ? '&l=' + encodeURIComponent(list) : ''}`; live = true; } catch { /* нижче — знімок */ }
+    try {
+      // ключ мусить бути в публічному документі раніше, ніж посилання піде до людей
+      const key = list ? ensureKey(list) : '';
+      await cloud.publishNow();
+      link = `${base}#u=${cloud.user.uid}${list ? (key ? '&c=' + key : '&l=' + encodeURIComponent(list)) : ''}`; live = true;
+    } catch { /* нижче — знімок */ }
   }
   link ??= `${base}#r=${await encodeRecs(S.name, items, list)}`;
   return { link, live, items };
@@ -436,7 +474,7 @@ export async function openShare(list = '') {
   if (!list && !pool('').length && names.length) list = names[0];
   const sl = await shareLink(list);
   if (!sl) return toast(t('share.none'), { ms: 4200 });
-  const { link, live, items } = sl;
+  const { link, live, items } = sl, cond = condDef(list);
   const tab = (l, label, n) => `<button class="chip ${l === list ? 'on' : ''}" data-act="share-list" data-v="${esc(l)}">${l ? icon('folder') : icon('starFill')}${esc(label)}<small>${n}</small></button>`;
   showOverlay({ type: 'share', link, list }, `
     <div class="palette narrow" role="dialog" aria-label="${t('menu.share')}">
@@ -445,13 +483,13 @@ export async function openShare(list = '') {
         ${names.length ? `<div class="share-tabs">${pool('').length ? tab('', t('share.title'), pool('').length) : ''}${names.map(l => tab(l, l, pool(l).length)).join('')}</div>` : ''}
         <div class="share-strip">${items.slice(0, 6).map(x => ph(x.id, x.t, 'small')).join('')}${items.length > 6 ? `<span class="morecount">+${items.length - 6}</span>` : ''}</div>
         <p><span class="badge static ${live ? 'ok' : ''}">${live ? t('share.live') : t('share.snap')}</span>
-          ${live ? t('share.live.text') : t('share.snap.text') + (cloud.available ? ' ' + t('share.snap.signin') : '')}</p>
+          ${live ? t(!list ? 'share.live.text' : cond ? 'share.live.cond' : 'share.live.manual') : t('share.snap.text') + (cloud.available ? ' ' + t('share.snap.signin') : '')}</p>
         <label class="field wide">${icon('link')}<input class="linkbox" readonly value="${esc(link)}" aria-label="${t('link')}"></label>
         <div class="hero-act">
           <button class="btn primary" data-act="copy">${icon('link')}${t('copy')}</button>
           ${navigator.share ? `<button class="btn" data-act="native-share">${icon('share')}${t('send')}</button>` : ''}
-          <button class="btn" data-act="list-build">${icon('filter')}${t('build.btn')}</button>
-          ${list && listdefs.get(defId(list)) ? `<button class="btn" data-act="list-rebuild" data-v="${esc(list)}">${icon('refresh')}${t('rebuild.btn')}</button>` : ''}
+          ${list ? `<button class="btn" data-act="list-edit" data-v="${esc(list)}">${icon('filter')}${t('edit')}</button>` : ''}
+          ${cond ? `<button class="btn" data-act="list-rebuild" data-v="${esc(list)}">${icon('refresh')}${t('rebuild.btn')}</button>` : ''}
           <a class="btn" href="${esc(link)}" target="_blank" rel="noopener">${icon('external')}${t('share.preview')}</a>
         </div>
         <p class="muted small">${t('share.privacy')}${S.name ? ' ' + t('share.signed', { name: esc(S.name) }) : ''}</p>
@@ -459,14 +497,34 @@ export async function openShare(list = '') {
     </div>`);
 }
 
-// ── збирання добірки за умовами ───────────────────────────────────
-// Умови лежать у o.f (завжди крізь cleanListFilter). Зміна умов ставить
-// галочки на всьому знайденому, а порожні умови — це ручний вибір без галочок.
-const buildFound = f => filterSort(store.list(), f, 'score', -1);
+// ── нова добірка й редагування наявної ────────────────────────────
+// Умови лежать у o.f (завжди крізь cleanListFilter). Позначене = (те, що підходить
+// під умови ∪ o.plus) \ o.minus: plus — позначене рукою, minus — зняте рукою, тож
+// зміна умов ручного вибору не стирає. Порожні умови — лише ручний вибір.
+const buildHit = f => new Set(isEmptyFilter(f) ? [] : listMatch(store.list(), f).map(e => e.id));
+const buildPicked = o => manualPick(buildHit(o.f), o.plus, o.minus);
+// У переліку — те, що підходить під умови, і додане рукою; без умов — уся полиця.
+function buildRows(o) {
+  const all = filterSort(store.list(), {}, 'score', -1), hit = buildHit(o.f);
+  return isEmptyFilter(o.f) ? all : all.filter(e => hit.has(e.id) || o.plus.has(e.id));
+}
 
-export function openBuild() {
-  showOverlay({ type: 'build', f: cleanListFilter({}), picked: new Set(), name: '' },
-    `<div class="palette" role="dialog" aria-label="${t('build.title')}"></div>`);
+// edit — назва добірки, яку редагують; без неї — нова добірка.
+export function openBuild(edit = '') {
+  const all = store.list();
+  if (typeof edit !== 'string' || !listNames(all).includes(edit)) edit = '';
+  const def = edit ? listdefs.get(defId(edit)) : null;
+  // back — редагування відкрили з діалогу «Поділитись»: після збереження повертаємось туди
+  const o = { type: 'build', edit, back: ui.overlay?.type === 'share', f: cleanListFilter(def?.f), name: edit, plus: new Set(), minus: new Set(), pending: new Set() };
+  if (edit) {
+    // Галочки = теперішній склад: зайве щодо умов — «позначене рукою», чого бракує —
+    // «зняте рукою». Те, що підійшло під умови вже після останнього формування
+    // (pending), рукою ніхто не знімав: у збережені вилучення воно не піде.
+    const has = new Set(sharePool(all, edit).map(e => e.id)), hit = buildHit(o.f), cut = new Set(def?.minus);
+    for (const id of has) if (!hit.has(id)) o.plus.add(id);
+    for (const id of hit) if (!has.has(id)) { o.minus.add(id); if (!cut.has(id)) o.pending.add(id); }
+  }
+  showOverlay(o, `<div class="palette build-pal" role="dialog" aria-label="${t(edit ? 'list.edit' : 'list.new')}"></div>`);
   drawBuild();
 }
 // Каркас малюємо один раз: поля року, назва й кнопка «Зберегти» лишаються тими
@@ -475,83 +533,132 @@ function drawBuild() {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
   const f = o.f;
-  const genres = insights(store.list()).genres.slice(0, 6).map(g => g[0]);
+  // жанри з умов добірки показуємо завжди, навіть коли вони вже не серед найчастіших
+  const genres = [...new Set([...insights(store.list()).genres.slice(0, 6).map(g => g[0]), ...f.genres])];
   const chip = (k, v, label) => `<button class="chip" data-act="build-set" data-v="${k}:${esc(v)}" aria-pressed="false">${label}</button>`;
   const year = (k, key) => `<input class="inp" type="text" inputmode="numeric" maxlength="4" data-build-year="${k}" placeholder="${t(key)}" aria-label="${t(key)}" value="${esc(f[k])}">`;
+  // на низькому чи вузькому екрані умови згорнуті, щоб було видно сам перелік
+  const small = matchMedia('(max-width:720px), (max-height:640px)').matches;
   $('.palette', layer).innerHTML = `
-    <div class="pal-head"><h2>${t('build.title')}</h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
+    <div class="pal-head"><h2>${t(o.edit ? 'list.edit' : 'list.new')}</h2><button class="rb" data-act="close" aria-label="${t('close')}">${icon('close')}</button></div>
     <div class="build">
       <div class="build-body">
-        <div class="build-f">
-          <div><b>${t('type')}</b>${KIND_IDS.map(k => chip('kinds', k, t('kinds.' + k))).join('')}</div>
-          <div><b>${t('build.status')}</b>${['all', ...STATUS_IDS].map(v => chip('status', v, v === 'all' ? t('all.statuses') : statusLabel(v))).join('')}</div>
-          ${genres.length ? `<div><b>${t('genres')}</b>${genres.map(g => chip('genres', g, esc(genreName(g)))).join('')}</div>` : ''}
-          <div><b>${t('year')}</b>${year('from', 'year.from')}${year('to', 'year.to')}<small class="muted">${t('build.years.hint')}</small></div>
-          <div><b>${t('card.score')}</b>${[7, 8, 9].map(n => chip('mine', n, t('mine.min', { n }))).join('')}</div>
-        </div>
-        <p class="muted small" id="build-note"></p>
-        <div id="build-res"></div>
+        <details class="build-cond"${small ? '' : ' open'}>
+          <summary><b>${t('build.cond')}</b><span class="muted small" id="build-cond"></span>${icon('chevD', 'caret')}</summary>
+          <div class="build-f">
+            <div><b>${t('type')}</b>${KIND_IDS.map(k => chip('kinds', k, t('kinds.' + k))).join('')}</div>
+            <div><b>${t('build.status')}</b>${['all', ...STATUS_IDS].map(v => chip('status', v, v === 'all' ? t('all.statuses') : statusLabel(v))).join('')}</div>
+            ${genres.length ? `<div><b>${t('genres')}</b>${genres.map(g => chip('genres', g, esc(genreName(g)))).join('')}</div>` : ''}
+            <div><b>${t('year')}</b>${year('from', 'year.from')}${year('to', 'year.to')}<small class="muted">${t('build.years.hint')}</small></div>
+            <div><b>${t('card.score')}</b>${[7, 8, 9].map(n => chip('mine', n, t('mine.min', { n }))).join('')}</div>
+            <div><b>${t('card.rec')}</b>${chip('rec', '1', t('build.rec'))}</div>
+          </div>
+        </details>
+        <div class="build-main"><p class="muted small" id="build-note"></p><div id="build-res"></div></div>
       </div>
       <div class="build-foot">
         <span class="muted small" id="build-count"></span>
+        <p class="muted small" id="build-keep" hidden>${t('build.keep')}</p>
         <div class="build-save"><input class="inp" type="text" maxlength="40" data-build-name placeholder="${t('build.name.ph')}" aria-label="${t('build.name.ph')}" value="${esc(o.name)}">
-          <button class="btn primary" data-act="build-save">${t('build.save')}</button></div>
+          <span class="muted small" id="build-n"></span>
+          <button class="btn primary" data-act="build-save">${t(o.edit ? 'save' : 'build.save')}</button></div>
         <p class="muted small">${t('lists.note')}</p>
       </div>
     </div>`;
+  buildNameCount(o);
   updateBuild();
 }
-const buildCount = o => { $('#build-count', layer).textContent = t('build.picked', { n: [...o.picked].filter(id => store.get(id)).length }); };
+const buildNameCount = o => { $('#build-n', layer).textContent = `${o.name.length}/40`; };
+// Лічильник і примітка: коли є і умови, і ручні зміни, кажемо, що «Сформувати знову» їх не чіпає.
+function buildCount(o) {
+  $('#build-count', layer).textContent = t('build.picked', { n: [...buildPicked(o)].filter(id => store.get(id)).length });
+  $('#build-keep', layer).hidden = isEmptyFilter(o.f) || !(o.plus.size || o.minus.size > o.pending.size);
+}
 function updateBuild() {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
-  const f = o.f, list = buildFound(f);
+  const f = o.f, rows = buildRows(o), picked = buildPicked(o), hit = buildHit(f), empty = isEmptyFilter(f);
   const scroll = $('.build-body', layer).scrollTop;
   // чипи лише перемикають вигляд; рік чіпаємо, хіба що поле не в фокусі
   for (const b of layer.querySelectorAll('[data-act="build-set"]')) {
     const i = b.dataset.v.indexOf(':'), k = b.dataset.v.slice(0, i), x = b.dataset.v.slice(i + 1);
-    const on = k === 'kinds' || k === 'genres' ? f[k].includes(x) : f[k] === x;
+    const on = k === 'kinds' || k === 'genres' ? f[k].includes(x) : k === 'rec' ? !!f.rec : f[k] === x;
     b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
   }
   for (const inp of layer.querySelectorAll('[data-build-year]')) if (inp !== document.activeElement) inp.value = f[inp.dataset.buildYear];
-  $('#build-note', layer).textContent = isEmptyFilter(f) ? t('build.manual') : '';
-  $('#build-res', layer).innerHTML = list.length ? `<div class="build-list">${list.map(e => {
-    const on = o.picked.has(e.id);
+  $('#build-cond', layer).textContent = empty ? t('build.cond.none') : filterText(f);
+  $('#build-note', layer).textContent = empty ? t('build.manual') : '';
+  $('#build-res', layer).innerHTML = rows.length ? `<div class="build-list">${rows.map(e => {
+    const on = picked.has(e.id);
+    // що піде до людей без оцінки — видно ще до збереження
+    const tag = e.status === 'planned' ? 'build.b.planned' : e.score ? '' : 'build.b.noscore';
+    const tags = [!empty && !hit.has(e.id) ? 'build.b.hand' : '', tag].filter(Boolean).map(k => ` <span class="badge static">${t(k)}</span>`).join('');
     return `<div class="res" role="checkbox" aria-checked="${on}" tabindex="0" data-act="build-tick" data-v="${esc(e.id)}">
       <span class="tick ${on ? 'on' : ''}">${on ? icon('check') : ''}</span>${ph(e.id, e.title, 'small')}
       <div class="row-main"><div class="row-title"><b>${esc(e.title)}</b></div>
-        <div class="row-sub">${esc([e.year, kindLabel(e.kind)].filter(Boolean).join(' · '))}</div></div>
+        <div class="row-sub">${esc([e.year, kindLabel(e.kind)].filter(Boolean).join(' · '))}${tags}</div></div>
       ${e.score ? `<span class="badge static score">${fmtScore(e.score)}</span>` : ''}</div>`;
   }).join('')}</div>` : `<p class="muted pad">${t('build.none')}</p>`;
   buildCount(o);
   $('.build-body', layer).scrollTop = scroll;
 }
+// Нові умови: ручний вибір лишається, а «ще не сформоване» перестає бути знятим —
+// умови застосовуються наново.
+function buildApply(f) {
+  const o = ui.overlay;
+  o.f = cleanListFilter(f);
+  for (const id of o.pending) o.minus.delete(id);
+  o.pending.clear();
+  updateBuild();
+}
+// Роки беремо з обох полів разом: навпаки вписані міняються місцями й у полях теж.
+let yearTimer;
+function buildYears() {
+  clearTimeout(yearTimer);
+  const o = ui.overlay;
+  if (o?.type !== 'build') return;
+  const [a, b] = ['from', 'to'].map(k => $(`[data-build-year="${k}"]`, layer));
+  const next = cleanListFilter({ ...o.f, from: a.value, to: b.value });
+  if (a.value.length === 4 && b.value.length === 4 && a.value > b.value) { a.value = next.from; b.value = next.to; }
+  if (next.from !== o.f.from || next.to !== o.f.to) buildApply(next);
+}
 layer.addEventListener('input', ev => {
-  if (ui.overlay?.type === 'build' && ev.target.matches('[data-build-name]')) ui.overlay.name = ev.target.value;
+  const o = ui.overlay, el = ev.target;
+  if (o?.type !== 'build') return;
+  if (el.matches('[data-build-name]')) { o.name = el.value; buildNameCount(o); }
+  if (el.matches('[data-build-year]')) {
+    // лише цифри; застосовуємо невдовзі після останньої, не чекаючи виходу з поля
+    const v = el.value.replace(/\D/g, '');
+    if (v !== el.value) el.value = v;
+    clearTimeout(yearTimer);
+    yearTimer = setTimeout(buildYears, 300);
+  }
 });
-// Рік застосовуємо, коли поле віддали (change), а не на кожну літеру.
 layer.addEventListener('change', ev => {
-  if (ui.overlay?.type === 'build' && ev.target.matches('[data-build-year]')) buildSet(`${ev.target.dataset.buildYear}:${ev.target.value.trim()}`);
+  if (ui.overlay?.type === 'build' && ev.target.matches('[data-build-year]')) buildYears();
+});
+// Enter у назві зберігає добірку.
+layer.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && ui.overlay?.type === 'build' && ev.target.matches('[data-build-name]')) { ev.preventDefault(); buildSave(); }
 });
 function buildSet(v) {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
   const i = v.indexOf(':'), k = v.slice(0, i), x = v.slice(i + 1), f = o.f;
   const flip = a => (a.includes(x) ? a.filter(y => y !== x) : [...a, x]);
-  o.f = cleanListFilter({
+  buildApply({
     ...f,
     ...(k === 'kinds' || k === 'genres' ? { [k]: flip(f[k]) }
-      : k === 'status' || k === 'mine' ? { [k]: f[k] === x ? (k === 'status' ? 'all' : '') : x }
-        : { [k]: x }),
+      : k === 'rec' ? { rec: !f.rec }
+        : { [k]: f[k] === x ? (k === 'status' ? 'all' : '') : x }),
   });
-  o.picked = new Set(isEmptyFilter(o.f) ? [] : buildFound(o.f).map(e => e.id));
-  updateBuild();
 }
 function buildTick(id) {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
-  const on = !o.picked.delete(id);
-  if (on) o.picked.add(id);
+  const on = !buildPicked(o).has(id);
+  tickManual(o, id, buildHit(o.f).has(id), on);
+  o.pending.delete(id);
   // міняємо лише цей рядок і лічильник — решта діалогу не перемальовується
   const row = [...layer.querySelectorAll('[data-act="build-tick"]')].find(r => r.dataset.v === id);
   if (row) {
@@ -561,48 +668,68 @@ function buildTick(id) {
   }
   buildCount(o);
 }
+// Нова добірка лише додає мітку; редагування замінює склад рівно позначеним і
+// переносить нову назву на всі записи та на умови (ключ посилання лишається тим самим).
 function buildSave() {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
-  const name = o.name.trim().slice(0, 40), rows = [...o.picked].map(id => store.get(id)).filter(Boolean);
+  buildYears();   // рік могли щойно вписати — застосуємо, не чекаючи таймера
+  const all = store.list(), name = o.name.trim().slice(0, 40);
+  const picked = [...buildPicked(o)].filter(id => store.get(id));
   if (!name) return toast(t('build.err.name'));
-  if (!rows.length) return toast(t('build.err.pick'));
-  const todo = rows.filter(e => !(e.lists || []).includes(name));
-  const room = todo.filter(e => (e.lists || []).length < LISTS_MAX);
-  const over = publicOver(store.list(), room.map(e => e.id));
+  // та сама назва злила б дві добірки в одну — відмовляємо, нічого не пишучи
+  const dup = nameTaken(listNames(all), name, o.edit);
+  if (dup) return toast(t('build.err.dup', { name: dup }), { ms: 5000 });
+  if (!picked.length) return toast(t('build.err.pick'));
+  const plan = listPlan(all, o.edit, name, picked);
+  const over = publicOver(all, plan.added);
   if (over > 0) return toast(t('build.over', { n: over, max: PUBLIC_MAX }), { ms: 4500 });
-  room.forEach(e => store.save(e.id, { lists: [...(e.lists || []), name] }));
-  if (todo.length > room.length) toast(t('build.skipped', { n: todo.length - room.length }), { ms: 4000 });
-  // порожні умови — ручний вибір, переформовувати нічим; без жодної мітки добірки теж нема
-  if (!isEmptyFilter(o.f) && listNames(store.list()).includes(name)) listdefs.save(defId(name), { name, f: o.f });
-  // ручний вибір під старою назвою не лишає старих умов (інакше з'явилось б «Сформувати знову»)
-  else if (isEmptyFilter(o.f) && listdefs.get(defId(name))) listdefs.remove(defId(name));
-  openShare(name);
+  // старі умови читаємо до запису: коли зі старої назви зникне остання мітка, їх прибере слухач нижче
+  const old = o.edit ? listdefs.get(defId(o.edit)) : null;
+  plan.set.forEach(([id, lists]) => store.save(id, { lists }));
+  if (plan.skipped) toast(t('build.skipped', { n: plan.skipped }), { ms: 4000 });
+  if (!listNames(store.list()).includes(name)) return;   // усе позначене вже у 8 добірках — добірки не вийшло
+  if (o.edit && o.edit !== name && listdefs.get(defId(o.edit))) listdefs.remove(defId(o.edit));
+  const hit = buildHit(o.f), empty = isEmptyFilter(o.f), pk = new Set(picked);
+  listdefs.save(defId(name), {
+    name, f: o.f, key: old?.key || listdefs.get(defId(name))?.key || (mayKey() ? listKey() : undefined),
+    plus: empty ? [] : picked.filter(id => !hit.has(id)),
+    minus: empty ? [] : [...hit].filter(id => !pk.has(id) && !o.pending.has(id)),
+  });
+  if (!o.edit || o.back) return openShare(name);
+  closeOverlay();
+  if (!plan.skipped) toast(t('build.saved', { name }));
 }
 
 // «Сформувати знову»: порівняти полицю з умовами добірки й оновити мітки.
+// Додане рукою лишається, зняте рукою не повертається (listDiff).
 async function rebuild(name) {
-  const def = listdefs.get(defId(name));
+  const def = condDef(name);
   if (!def) return;
-  const d = listDiff(store.list(), name, def.f);
+  const d = listDiff(store.list(), name, def.f, def);
   if (!d.add.length && !d.drop.length) return toast(t('rebuild.none'));
   const over = publicOver(store.list(), d.add.map(e => e.id));
   if (over > 0) return toast(t('build.over', { n: over, max: PUBLIC_MAX }), { ms: 4500 });
+  const part = (key, list) => (list.length ? t(key, { n: list.length, names: nameList(list.map(e => e.title)) }) : '');
   const ok = await confirmBox({
     title: t('rebuild.title', { name }),
-    text: t('rebuild.text', { a: d.add.length, d: d.drop.length }) + (d.skip.length ? ' ' + t('rebuild.skip', { n: d.skip.length }) : ''),
+    text: [part('rebuild.add', d.add), part('rebuild.drop', d.drop), d.skip.length ? t('rebuild.skip', { n: d.skip.length }) : ''].filter(Boolean).join(' '),
     ok: t('rebuild.btn'),
   });
   if (!ok) return;
   for (const e of d.add) { const c = store.get(e.id); if (c) store.save(c.id, { lists: [...new Set([...(c.lists || []), name])] }); }
   for (const e of d.drop) { const c = store.get(e.id); if (c) store.save(c.id, { lists: (c.lists || []).filter(l => l !== name) }); }
-  // якщо мітку зняли з усіх, добірки вже нема — показуємо загальний вигляд
-  openShare(listNames(store.list()).includes(name) ? name : '');
+  // Лишаємось там, де були: відкритий діалог «Поділитись» лише оновлюємо
+  // (якщо мітку зняли з усіх, добірки вже нема — діалог закриваємо).
+  if (ui.overlay?.type === 'share') { if (listNames(store.list()).includes(name)) await openShare(name); else closeOverlay(); }
+  toast(t('rebuild.done', { a: d.add.length, d: d.drop.length }));
 }
 
-export const buildActions = { 'list-build': openBuild, 'build-set': buildSet, 'build-tick': buildTick, 'build-save': buildSave, 'list-rebuild': rebuild };
+export const buildActions = {
+  'list-build': () => openBuild(), 'list-edit': v => openBuild(v), 'build-set': buildSet, 'build-tick': buildTick, 'build-save': buildSave, 'list-rebuild': rebuild,
+};
 
-// Остання мітка добірки знята (в картці чи тут) — її умови більше нічого не значать.
+// Остання мітка добірки знята (в картці чи тут) — її умови й ключ більше нічого не значать.
 // Лише зміни людини на цьому пристрої й не під час першого злиття з хмарою:
 // інакше умови, що приїхали раніше за записи з міткою, стерлись би, а мітка
 // видалення поїхала б у хмару.

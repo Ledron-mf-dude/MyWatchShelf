@@ -7,8 +7,8 @@
 import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
 import { friends, listdefs, prefs, socialCache } from './synced.js';
-import { recItem, cleanRecs } from './logic.js';
-import { cleanReply, returnHash, isUid, replyWrite, publishOpen } from './social.js';
+import { recItem, cleanRecs, listNames } from './logic.js';
+import { cleanReply, returnHash, isUid, replyWrite, publishOpen, colsOf } from './social.js';
 import { t, getLang } from './i18n.js';
 
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
@@ -117,6 +117,8 @@ function init() {
   // «open» живе в публічному документі: перевидаємо і коли перемикач приїхав з
   // іншого пристрою (однаковий вміст schedulePublish удруге не пише).
   prefs.onChange(() => { if (cloud.user) schedulePublish(); });
+  // Ключі добірок теж у публічному документі: новий ключ чи нова назва мають туди доїхати.
+  listdefs.onChange(() => { if (cloud.user) schedulePublish(); });
   // Увійти могли в іншій вкладці (так буває в застосунку з головного
   // екрана): повернувшись сюди, підхоплюємо вже наявний вхід.
   const wake = () => {
@@ -268,6 +270,9 @@ function recsPayload() {
   // До першого знімка налаштувань із хмари публікуємо закритим: локальний перемикач
   // може бути застарілим, а помилитись краще в бік приватності.
   if (publishOpen(cloud.synced('prefs'), prefs.get('social'))) payload.open = true;
+  // Ключ добірки → її назва: посилання #u=…&c=<ключ> переживає перейменування.
+  const cols = colsOf(listdefs.list(), listNames(store.list()));
+  if (Object.keys(cols).length) payload.cols = cols;
   return payload;
 }
 const wasPublished = () => { try { return localStorage.getItem(PUBLISHED) === cloud.user?.uid; } catch { return false; } };

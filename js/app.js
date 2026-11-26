@@ -1,5 +1,5 @@
 // Каркас застосунку: шапка, навігація, маршрути, глобальні події.
-import { esc, decodeRecs } from './logic.js';
+import { esc, decodeRecs, colName } from './logic.js';
 import { t, tn, setLang, getLang, LANGS } from './i18n.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
@@ -114,13 +114,15 @@ async function route() {
     app.innerHTML = `<div class="empty"><b>${t('recs.loading')}</b></div>`;
     try {
       if (raw.startsWith('u=')) {
-        // #u=<uid> — загальні рекомендації; #u=<uid>&l=<назва> — одна добірка
-        const q = new URLSearchParams(raw), list = (q.get('l') || '').slice(0, 40);
+        // #u=<uid> — загальні рекомендації; #u=<uid>&c=<ключ> — одна добірка за сталим
+        // ключем (назву дає мапа cols автора); #u=<uid>&l=<назва> — старі посилання за назвою
+        const q = new URLSearchParams(raw), key = q.get('c') || '';
         const uid = (q.get('u') || '').replace(/[^\w-]/g, '').slice(0, 128);
         const data = await cloud.loadPublic(uid);
+        const list = key ? colName(data?.cols, key) : (q.get('l') || '').slice(0, 40);
         // uid і open потрібні оцінюванню: чий це список і чи бачать друзі оцінки одне одного
-        view.recs = data && { name: data.name, title: list, uid, open: !!data.open,
-          items: data.items.filter(x => (list ? (x.l || []).includes(list) : x.p !== 0)) };
+        view.recs = data && (!key || list) ? { name: data.name, title: list, uid, open: !!data.open,
+          items: data.items.filter(x => (list ? (x.l || []).includes(list) : x.p !== 0)) } : null;
         if (view.recs && list && !view.recs.items.length) view.recs = null;
       } else {
         view.recs = await decodeRecs(raw.slice(2));

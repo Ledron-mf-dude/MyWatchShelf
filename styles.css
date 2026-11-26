@@ -486,7 +486,30 @@ button.more .ic{width:16px; height:16px}
 .tick{display:grid; place-items:center; flex:none; width:22px; height:22px; border:1.5px solid var(--line); border-radius:7px; color:var(--bg)}
 .tick.on{background:var(--accent); border-color:var(--accent)} .tick .ic{width:14px; height:14px}
 .build-foot{display:grid; gap:8px; padding:12px 18px calc(14px + env(safe-area-inset-bottom)); border-top:1px solid var(--line2); background:var(--bg2)}
-.build-save{display:flex; gap:8px} .build-save .inp{flex:1; min-width:0}
+.build-save{display:flex; align-items:center; gap:8px} .build-save .inp{flex:1; min-width:0}
+#build-n{flex:none; font-variant-numeric:tabular-nums}
+/* перелік не розпирає діалог ушир (на телефоні з'являлась горизонтальна прокрутка) */
+.build-body{grid-template-columns:minmax(0,1fr); overflow-x:hidden}
+.build-main{display:grid; gap:8px; min-width:0} #build-note:empty{display:none}
+.build-list .res{min-width:0} .build-list .row-sub .badge{margin-left:2px; padding:1px 6px; font-size:10.5px; vertical-align:1px}
+/* умови згортаються, щоб на низькому екрані було видно сам перелік */
+.build-cond summary{display:flex; align-items:center; gap:8px; padding:2px 0; cursor:pointer; list-style:none}
+.build-cond summary::-webkit-details-marker{display:none}
+.build-cond summary b{flex:none; font-size:13px; font-weight:800}
+.build-cond summary span{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.build-cond summary .caret{flex:none; width:16px; height:16px; color:var(--faint); transition:.15s}
+.build-cond[open] summary .caret{transform:rotate(180deg)}
+.build-cond .build-f{margin-top:8px}
+@media (min-width:721px){ .palette.build-pal{width:min(960px,calc(100% - 24px))} }
+@media (min-width:900px){
+  .build-body{grid-template-columns:280px minmax(0,1fr); gap:18px}
+  .build-cond{position:sticky; top:0; align-self:start}
+}
+/* діалог «Поділитись»: довге посилання, назви й постери не виштовхують його за край екрана */
+.share{grid-template-columns:minmax(0,1fr)} .share>*{min-width:0} .share p{overflow-wrap:anywhere}
+.share-strip{min-width:0; overflow:hidden} .share-strip .ph{flex:0 1 56px; min-width:0} .morecount{flex:none}
+.share-tabs .chip{flex:0 1 auto; min-width:0; max-width:100%; overflow:hidden}
+.share .hero-act{margin-top:0} .share .hero-act .btn{max-width:100%}
 
 /* ── екран «Друзі» ─────────────────────────────────── */
 .fnew{position:relative}
@@ -544,7 +567,7 @@ button.more .ic{width:16px; height:16px}
 .sh-card h2 .ic{flex:none; width:18px; height:18px; color:var(--accent)}
 .sh-card p .ic{width:14px; height:14px; vertical-align:-2px}
 .sh-card .hero-act{flex-wrap:wrap}
-.sh-card .share-strip{overflow:hidden}
+.sh-card{grid-template-columns:minmax(0,1fr)} .sh-card>*{min-width:0}
 /* сім розділів у шапці: на вужчому екрані стискаємо пошук і відступи, щоб нічого не вилазило */
 .searchbtn{min-width:40px}
 @media (min-width:1001px) and (max-width:1300px){

@@ -5,9 +5,32 @@ import {
   safeUrl, parseInput, sanitize, mergeEntry, nextEpisode, progressText,
   filterSort, encodeRecs, decodeRecs, cleanRecs, fmtRating, statusLabel, kindLabel,
   episodesWatched, episodesTotal, progressPct, minutesWatched, insights, fmtRuntime, genreName,
-  agenda, dayDiff, tasteMatch, matchTag, pickCandidates, listNames, recItem,
+  agenda, dayDiff, tasteMatch, matchTag, pickCandidates, listNames, recItem, listView, recsHash,
 } from '../js/logic.js';
-import { setLang, getLang, t, tn } from '../js/i18n.js';
+import { setLang, getLang, t, tn, defaultLang } from '../js/i18n.js';
+
+test('listView: загальні рекомендації, добірка за ключем і за назвою, невідома добірка', () => {
+  const data = { name: 'Аліса', open: true, cols: { abcdef12: 'Нові' }, items: [{ id: 'tt0000001', l: ['Нові'], p: 0 }, { id: 'tt0000002' }, { id: 'tt0000003', l: ['Старі'] }] };
+  assert.equal(listView(null, '', ''), null);
+  assert.deepEqual(listView(data, '', '').items.map(x => x.id), ['tt0000002', 'tt0000003']);
+  assert.deepEqual(listView(data, 'abcdef12', ''), { name: 'Аліса', title: 'Нові', open: true, items: [data.items[0]] });
+  assert.deepEqual(listView(data, '', 'Старі').items.map(x => x.id), ['tt0000003']);
+  assert.deepEqual(listView(data, 'zzzzzz99', ''), { missing: true, name: 'Аліса' });
+  assert.deepEqual(listView(data, '', 'Нема'), { missing: true, name: 'Аліса' });
+  assert.equal(listView({ name: '', items: [] }, '', '').open, false);
+});
+test('recsHash: частини адреси чужого списку', () => {
+  assert.deepEqual(recsHash('u=abc_1-2&c=abcdef12&me=1'), { uid: 'abc_1-2', key: 'abcdef12', list: '', me: true });
+  assert.deepEqual(recsHash('u=abc&l=%D0%9D%D0%BE%D0%B2%D1%96'), { uid: 'abc', key: '', list: 'Нові', me: false });
+  assert.equal(recsHash('u=').uid, '');
+  assert.equal(recsHash('u=a/b').uid, '');
+  assert.equal(recsHash('u=' + 'a'.repeat(200)).uid, '');
+  assert.deepEqual(recsHash('r=AbC-_&me=1'), { snap: 'AbC-_', me: true });
+  assert.deepEqual(recsHash('r=AbC'), { snap: 'AbC', me: false });
+});
+test('defaultLang: українська лише коли браузер українською', () => {
+  assert.deepEqual([defaultLang('uk-UA'), defaultLang('uk'), defaultLang('en-US'), defaultLang('ru'), defaultLang(undefined)], ['uk', 'uk', 'en', 'en', 'en']);
+});
 
 // Основна частина тестів перевіряє українські підписи; англійські — окремо внизу.
 setLang('uk');
@@ -245,6 +268,14 @@ test('збіг смаків', () => {
   assert.equal(m.unseen, 1);
   assert.equal(m.pct, 83);                       // середня різниця 1,5 з 9
   assert.deepEqual(m.rows.map(matchTag), ['match', 'differ', 'have', 'new']);
+  // збіг — різниця до 0,5; 1–2 — близько; більше — розійшлись
+  const tag = (a, b) => matchTag(tasteMatch([{ id: 'tt1', score: a }], [{ id: 'tt1', s: b }]).rows[0]);
+  assert.deepEqual([tag(8, 8.5), tag(8, 9), tag(8, 6), tag(8, 5.5)], ['match', 'close', 'close', 'differ']);
+  // «моя оцінка» — з полиці, а коли її немає — моя оцінка на цьому списку
+  const r = tasteMatch(mine, items, { tt3: 8, tt4: 5, tt1: 2 });
+  assert.equal(r.scored, 4);
+  assert.deepEqual(r.rows.map(x => x.mine), [10, 6, 8, 5]);
+  assert.deepEqual([r.common, r.unseen], [3, 1]);
   assert.equal(tasteMatch([], items).pct, null);
   assert.equal(tasteMatch([{ id: 'tt1', score: 1 }], [{ id: 'tt1', s: 10 }]).pct, 0);
 });

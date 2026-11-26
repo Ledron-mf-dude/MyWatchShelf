@@ -4,6 +4,8 @@ export const LANGS = [['en', 'English'], ['uk', 'Українська']];
 let cur = 0;
 export const setLang = l => { cur = l === 'uk' ? 1 : 0; };
 export const getLang = () => LANGS[cur][0];
+// Мова для першого візиту — за мовою браузера: українська лише для українського.
+export const defaultLang = nav => (String(nav || '').toLowerCase().startsWith('uk') ? 'uk' : 'en');
 
 const D = {
   brand: ['Ovion', 'Ovion'],
@@ -109,9 +111,16 @@ const D = {
     '{n} з особистими оцінками й коментарями. Натисни «Собі у список» — і запис опиниться у твоєму власному списку.'],
   take: ['Add to my list', 'Собі у список'], 'have.already': ['In your list', 'Уже в тебе'], 'author.score': ['their score', 'оцінка автора'],
   'recs.empty.title': ['Nothing here yet', 'Тут поки порожньо'], 'recs.empty.text': ['The author has not recommended anything yet.', 'Автор ще нічого не порадив.'],
-  'recs.loading': ['Loading recommendations…', 'Завантажую рекомендації…'], 'recs.missing': ['this list does not exist', 'такого списку немає'],
+  'recs.loading': ['Loading recommendations…', 'Завантажую рекомендації…'],
   'recs.fail.title': ['The list could not be opened', 'Список не відкрився'],
-  'recs.fail.text': ['{e}. Ask the author to send the link again.', '{e}. Попроси автора надіслати посилання ще раз.'],
+  'recs.bad.text': ['There is no such list. Check the link or ask the author to send it again.', 'Такого списку немає. Перевір посилання або попроси автора надіслати його ще раз.'],
+  'recs.net.text': ['The list did not load. Check your connection and try again.', 'Список не завантажився. Перевір мережу й спробуй ще раз.'],
+  'recs.nolist.title': ['No such collection', 'Такої добірки немає'],
+  'recs.nolist.text': ['{owner} has no collection at this link — it may have been deleted.', '{owner} не має добірки за цим посиланням — можливо, її видалено.'],
+  'recs.nolist.go': ['Open their recommendations', 'Відкрити загальні рекомендації'],
+  'recs.own': ['This is your list — this is how guests see it', 'Це твій список — так його бачать гості'],
+  'take.scored': ['Add to my list with this score', 'Додати собі з цією оцінкою'],
+  'toast.taken.score': ['“{title}” added as completed, score {n}', '«{title}» додано як «Переглянуто» з оцінкою {n}'],
   'title.recs': ['Recommendations', 'Рекомендації'], 'title.recs.by': ['Recommendations by {name}', 'Рекомендації від {name}'],
   // картка запису
   'card.aria': ['Title card', 'Картка запису'], trailer: ['trailer', 'трейлер'], cast: ['Cast', 'У ролях'],
@@ -193,8 +202,9 @@ const D = {
   // збіг смаків
   'taste.match': ['taste match', 'збіг смаків'], 'taste.high': ['You watch very much alike', 'Ви дивитесь дуже схоже'], 'taste.mid': ['You agree on a lot', 'У вас багато спільного'],
   'taste.low': ['You see things differently', 'У вас різні погляди'], 'taste.none': ['Compare with your own list', 'Порівняння з твоїм списком'],
-  'taste.line': ['{a} in common · {b} you have not seen yet.', 'Спільних: {a} · ще не бачив: {b}.'], 'taste.scored': ['Based on {n} titles you both rated.', 'За {n} тайтлами, які оцінили обоє.'],
-  'taste.tag.match': ['you agree', 'збіг'], 'taste.tag.differ': ['you disagree', 'сперечаєтесь'], 'taste.tag.new': ['new for you', 'нове для тебе'], 'taste.mine': ['yours {n}', 'твоя {n}'],
+  'taste.line': ['{a} in common · {b} you have not seen yet.', 'Спільних: {a} · ще не бачив: {b}.'], 'taste.scored': ['Rated by both: {n}.', 'Спільно оцінених: {n}.'],
+  'taste.few': ['Too few scores in common', 'Замало спільних оцінок'],
+  'taste.tag.match': ['you agree', 'збіг'], 'taste.tag.close': ['close', 'близько'], 'taste.tag.differ': ['you differ', 'розійшлись'], 'taste.tag.new': ['new for you', 'нове для тебе'], 'taste.mine': ['yours {n}', 'твоя {n}'],
   // картка-підсумок
   'wrap.btn': ['Share card', 'Картка-підсумок'], 'wrap.title': ['My watching in numbers', 'Мої перегляди в цифрах'], 'wrap.kicker': ['My watching in numbers', 'Мої перегляди в цифрах'],
   'wrap.hours': ['hours', 'годин'], 'wrap.top': ['Top rated', 'Найвищі оцінки'], 'wrap.genre': ['Favourite genre', 'Улюблений жанр'],
@@ -210,10 +220,23 @@ const D = {
   'reply.signin': ['Sign in to rate', 'Увійти, щоб оцінити'], 'reply.label': ['Your score', 'Твоя оцінка'],
   'reply.note.ph': ['Your comment for the author', 'Твій коментар для автора'],
   'reply.all': ['Send my scores', 'Надіслати мої оцінки'],
-  'reply.open.title': ['This list is open to friends', 'Список відкрито для друзів'],
-  'reply.open.text': ['All of the author’s friends will see your scores and comments here.', 'Твої оцінки й коментарі побачать усі друзі автора.'],
+  'reply.all.title': ['Send {n} scores?', 'Надіслати оцінок: {n}?'], 'reply.all.ok': ['Send', 'Надіслати'],
+  'reply.all.text': ['{owner} will see these scores from your shelf:', '{owner} побачить ці оцінки з твоєї полиці:'],
+  'reply.open.title': ['Scores on this list are open', 'Оцінки на цьому списку відкриті'],
+  'reply.open.text': ['Everyone who has this link and is signed in will see your scores and comments here.', 'Твої оцінки й коментарі побачать усі, хто має це посилання і ввійшов.'],
   'reply.open.ok': ['Continue', 'Продовжити'],
-  'reply.others': ['Friends’ scores', 'Оцінки друзів'], 'reply.anon': ['A friend', 'Друг'],
+  'reply.others': ['Others’ scores', 'Оцінки інших'], 'quote': ['“{x}”', '„{x}“'],
+  'reply.author': ['the author', 'автор'], 'reply.clear': ['Remove my score', 'Прибрати оцінку'],
+  'reply.st.sending': ['sending…', 'надсилається…'], 'reply.st.saved': ['saved ✓', 'збережено ✓'], 'reply.st.shelf': ['and on your shelf', 'і на твоїй полиці'],
+  'reply.st.failed': ['not saved', 'не збережено'], 'reply.retry': ['Retry', 'Повторити'],
+  'reply.st.unsigned': ['A name is needed to send your score', 'Щоб надіслати оцінку, потрібен підпис'], 'reply.sign': ['Add a name', 'Вказати підпис'],
+  'reply.name.title': ['Your name', 'Твій підпис'],
+  'reply.name.text': ['{owner} will see this name next to your scores.', '{owner} побачить цей підпис поруч із твоїми оцінками.'],
+  'reply.loading': ['Loading your scores…', 'Завантажую твої оцінки…'], 'reply.load.fail': ['Could not load your scores.', 'Не вдалося завантажити твої оцінки.'],
+  'who.closed': ['Only {owner} sees your scores here', 'Твої оцінки тут бачить лише {owner}'],
+  'who.open': ['{owner} shows scores to everyone who has this link and is signed in: yours are visible too', '{owner} показує оцінки всім, хто має це посилання і ввійшов: твої оцінки теж видно'],
+  'who.signin': ['Sign in to rate and to see others’ scores', 'Увійди, щоб оцінити й побачити оцінки інших'],
+  'who.changed': ['Scores on this list are now open', 'Оцінки на цьому списку тепер відкриті'], 'who.ok': ['Got it', 'Зрозуміло'],
   // екран «Друзі»
   'nav.friends': ['Friends', 'Друзі'],
   'nav.share': ['Recommendations', 'Рекомендації'],
@@ -251,7 +274,6 @@ const D = {
   'fr.card.all': ['All scores', 'Усі оцінки'],
   'fr.keep': ['Remember', 'Запам’ятати'], 'fr.unsigned': ['Unsigned', 'Без підпису'],
   'toast.reply.fail': ['Could not save your score ({e})', 'Не вдалося зберегти оцінку ({e})'],
-  'toast.reply.load': ['Could not load your ratings ({e})', 'Не вдалося завантажити твої оцінки ({e})'],
   'toast.reply.offline': ['No connection — rating not saved', 'Немає зʼєднання — оцінку не збережено'],
   'toast.reply.sent': ['Scores sent: {n}', 'Надіслано оцінок: {n}'],
   'toast.syncing': ['Still syncing — try again in a moment', 'Ще синхронізується — спробуй за мить'],

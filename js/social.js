@@ -177,7 +177,40 @@ export function shelfScores(entries, items) {
 
 // Куди повернути людину після входу: лише адреса чужого списку (#u=…).
 // Значення лежить у localStorage, тож перевіряємо і при записі, і при читанні.
-export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^#&]{1,400}|&c=[a-z0-9]{6,16})?$/.test(h) ? h : '');
+export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^#&]{1,400}|&c=[a-z0-9]{6,16})?(&me=1)?$/.test(h) ? h : '');
+
+// «Надіслати мої оцінки»: тайтли списку, які я оцінив на полиці, а тут ще ні.
+// skip — id, з яких я навмисно зняв оцінку на списках цього автора: їх не пропонуємо.
+export function sendList(entries, items, mineItems, skip) {
+  const sc = shelfScores(entries, items), no = new Set(skip);
+  return items.filter(x => Object.hasOwn(sc, x.id) && !no.has(x.id) && !(Object.hasOwn(mineItems, x.id) && mineItems[x.id].s))
+    .map(x => ({ id: x.id, t: x.t, s: sc[x.id] }));
+}
+// Перелік «назва — оцінка» для підтвердження; довгий обрізаємо до «+N».
+export const scoreLines = (rows, max = 12) =>
+  [...rows.slice(0, max).map(r => `${r.t} — ${r.s}`), ...(rows.length > max ? [`+${rows.length - max}`] : [])].join('\n');
+
+// Пам'ять оцінювача на цьому пристрої, за автором списку: skip — з яких тайтлів я
+// сам зняв оцінку, open — яким я востаннє бачив перемикач «оцінки бачать усі».
+// Лежить у localStorage, тож чистимо: справжні uid та id, не більше 50 авторів
+// (найсвіжіші за at) і 500 тайтлів на автора; мапа без прототипа.
+export function cleanReplyMem(raw) {
+  const rows = Object.entries(raw && typeof raw === 'object' ? raw : {})
+    .filter(([k, v]) => isUid(k) && !(k in Object.prototype) && v && typeof v === 'object')
+    .map(([k, v]) => [k, { skip: ids(v.skip), at: Number.isFinite(v.at) ? v.at : 0, ...(typeof v.open === 'boolean' ? { open: v.open } : {}) }]);
+  return Object.assign(Object.create(null), Object.fromEntries(rows.sort((a, b) => b[1].at - a[1].at).slice(0, 50)));
+}
+// Чи казати помітно, що список тепер відкритий: у мене вже є оцінки на ньому, а
+// відкритим я його ще не бачив (seen — останнє побачене значення перемикача).
+export const openNotice = (open, nRated, seen) => open === true && nRated > 0 && seen !== true;
+
+// Чи це власник дивиться власне посилання: з входом — за uid; без входу чи на
+// знімку — коли відкрито кнопкою «Як бачить гість» (me) і всі тайтли є на полиці.
+export const ownView = ({ uid, meUid, me, items, shelfIds }) => {
+  if (uid && meUid) return uid === meUid;
+  const have = new Set(shelfIds);
+  return !!me && items.length > 0 && items.every(x => have.has(x.id));
+};
 
 // Записи сховища prefs: 'social' — чи відкриті оцінки друзям, 'seen' — коли
 // власник востаннє дивився відповіді. Окремо, бо запис цілком замінюється

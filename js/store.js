@@ -2,6 +2,7 @@
 // потім, якщо людина ввійшла, — у хмару. Тож без мережі й без входу все
 // працює так само.
 import { sanitize, mergeEntry, sameVersion } from './logic.js';
+import { defaultLang } from './i18n.js';
 
 const KEY = 'mws.entries.v1', SKEY = 'mws.settings.v1';
 
@@ -17,7 +18,8 @@ for (const e of Object.values(load(KEY, {}))) {
   const c = sanitize(e);
   if (c) entries[c.id] = c;
 }
-const settings = { view: 'grid', sort: 'updated', dir: -1, theme: 'dark', lang: 'en', name: '', hint: true, ...load(SKEY, {}) };
+// Мова першого візиту — за браузером; далі діє збережений вибір людини.
+const settings = { view: 'grid', sort: 'updated', dir: -1, theme: 'dark', lang: defaultLang(globalThis.navigator?.language), name: '', hint: true, ...load(SKEY, {}) };
 
 const subs = new Set(), localSubs = new Set();
 const emit = () => subs.forEach(fn => fn());

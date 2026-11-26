@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSynced, defId } from '../js/synced.js';
 import { sanitize, filterSort } from '../js/logic.js';
-import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyPatch, replyWrite, recsMissing, publishOpen, recsFor, needsKeep, addList, seenAtOf, canWrite } from '../js/social.js';
+import { cleanListFilter, isEmptyFilter, listDiff, publicOver, cleanListDef, cleanReply, cleanFriend, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, SKEW, replyItem, replyMode, shelfScores, returnHash, cleanPrefs, isUid, replyPatch, replyWrite, recsMissing, publishOpen, recsFor, needsKeep, addList, seenAtOf, canWrite, sendList, scoreLines, cleanReplyMem, openNotice, ownView } from '../js/social.js';
 
 test('synced: свіжіше перемагає, видалене лишається міткою', () => {
   const s = makeSynced('t1', r => (typeof r?.id === 'string' ? r : null));
@@ -518,4 +518,59 @@ test('listPlan: редагування замінює склад і перейм
   assert.deepEqual(listPlan(list, '', 'Ще', ['tt0000005']).set, [['tt0000005', ['Інша', 'Ще']]]);
   // без змін — порожній план
   assert.deepEqual(listPlan(list, 'Стара', 'Стара', ['tt0000001', 'tt0000002']).set, []);
+});
+
+// ── оцінювання чужого списку ──────────────────────────────────────
+test('sendList: оцінки з полиці, яких ще немає у відповіді; зняте навмисно не пропонуємо', () => {
+  const shelf = [{ id: 'tt0000001', score: 8, title: 'A' }, { id: 'tt0000002', score: 7, title: 'B' }, { id: 'tt0000003', score: 0, title: 'C' }, { id: 'tt0000004', score: 9, title: 'D' }, { id: 'tt0000009', score: 5, title: 'Z' }];
+  const items = [{ id: 'tt0000001', t: 'A' }, { id: 'tt0000002', t: 'B' }, { id: 'tt0000003', t: 'C' }, { id: 'tt0000004', t: 'D' }];
+  const mine = { tt0000002: { s: 6, n: '' }, tt0000004: { s: 0, n: 'лише коментар' } };
+  assert.deepEqual(sendList(shelf, items, mine, []), [{ id: 'tt0000001', t: 'A', s: 8 }, { id: 'tt0000004', t: 'D', s: 9 }]);
+  assert.deepEqual(sendList(shelf, items, mine, ['tt0000001']), [{ id: 'tt0000004', t: 'D', s: 9 }]);
+  assert.deepEqual(sendList([], items, {}, []), []);
+});
+test('scoreLines: «назва — оцінка» рядками, далі «+N»', () => {
+  const rows = Array.from({ length: 14 }, (_, i) => ({ t: 'T' + i, s: i === 0 ? 8.5 : 7 }));
+  const lines = scoreLines(rows, 12).split('\n');
+  assert.equal(lines.length, 13);
+  assert.equal(lines[0], 'T0 — 8.5');
+  assert.equal(lines[12], '+2');
+  assert.equal(scoreLines(rows.slice(0, 2)), 'T0 — 8.5\nT1 — 7');
+});
+test('cleanReplyMem: лише справжні власники й id, межі, без службових ключів', () => {
+  const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => ['u' + i, { skip: [], at: i }]));
+  const m = cleanReplyMem({
+    alice: { skip: ['tt0000001', 'tt0000001', 'x', 5], open: false, at: 5 },
+    'bad/uid': { skip: ['tt0000001'] }, constructor: { skip: ['tt0000002'] }, bob: 'x', carl: { open: 'yes' },
+  });
+  assert.deepEqual(Object.keys(m).sort(), ['alice', 'carl']);
+  assert.deepEqual({ ...m.alice }, { skip: ['tt0000001'], at: 5, open: false });
+  assert.deepEqual({ ...m.carl }, { skip: [], at: 0 });            // open — лише булеве
+  const kept = Object.keys(cleanReplyMem(many));
+  assert.equal(kept.length, 50);
+  assert.ok(kept.includes('u59') && !kept.includes('u0'));          // лишаються найсвіжіші
+  assert.deepEqual(Object.keys(cleanReplyMem(null)), []);
+  assert.equal(cleanReplyMem({ a: { skip: Array.from({ length: 600 }, (_, i) => 'tt' + String(1000000 + i)) } }).a.skip.length, 500);
+});
+test('openNotice: помітне повідомлення, лише коли список відкрили вже після моїх оцінок', () => {
+  assert.equal(openNotice(true, 3, false), true);       // бачив закритим, тепер відкрито
+  assert.equal(openNotice(true, 3, undefined), true);   // оцінки є, а про відкритість ще не казали
+  assert.equal(openNotice(true, 3, true), false);       // уже знає
+  assert.equal(openNotice(true, 0, false), false);      // оцінок немає — досить рядка
+  assert.equal(openNotice(false, 3, false), false);
+});
+test('ownView: власник на власному посиланні', () => {
+  const items = [{ id: 'tt0000001' }, { id: 'tt0000002' }], all = ['tt0000001', 'tt0000002', 'tt0000003'];
+  assert.equal(ownView({ uid: 'a', meUid: 'a', me: false, items, shelfIds: [] }), true);
+  assert.equal(ownView({ uid: 'a', meUid: 'b', me: true, items, shelfIds: all }), false);   // увійшов хтось інший
+  assert.equal(ownView({ uid: 'a', meUid: '', me: true, items, shelfIds: all }), true);     // без входу, «Як бачить гість»
+  assert.equal(ownView({ uid: '', meUid: 'a', me: true, items, shelfIds: all }), true);     // знімок
+  assert.equal(ownView({ uid: '', meUid: '', me: true, items, shelfIds: ['tt0000001'] }), false);
+  assert.equal(ownView({ uid: '', meUid: '', me: false, items, shelfIds: all }), false);
+  assert.equal(ownView({ uid: '', meUid: '', me: true, items: [], shelfIds: all }), false);
+});
+test('returnHash пускає й позначку перегляду власником', () => {
+  assert.equal(returnHash('#u=abc&me=1'), '#u=abc&me=1');
+  assert.equal(returnHash('#u=abc&c=abcdef12&me=1'), '#u=abc&c=abcdef12&me=1');
+  assert.equal(returnHash('#u=abc&me=2'), '');
 });

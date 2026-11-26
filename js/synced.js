@@ -4,7 +4,7 @@
 // даних і без DOM — тож працює й під Node. Хмара тут не імпортується:
 // вона сама підписується через onLocal і кличе applyRemote.
 
-import { cleanListDef, cleanPrefs, cleanFriend, cleanReply, defId } from './social.js';
+import { cleanListDef, cleanPrefs, cleanFriend, cleanReply, cleanReplyMem, defId } from './social.js';
 import { cleanRecs } from './logic.js';
 
 function load(key) {
@@ -95,6 +95,20 @@ export const socialCache = {
   // patch ({ replies } і/або { recs }) замінює відповідну частину цілком
   set(patch) { persist(CACHE_KEY, { ...socialCache.get(), ...patch }); },
   clear() { try { localStorage.removeItem(CACHE_KEY); } catch { /* нічого */ } },
+};
+
+// Пам'ять оцінювача за автором списку (cleanReplyMem): зняті навмисно оцінки й
+// останній побачений стан «оцінки бачать усі». Лише цей пристрій; при зміні
+// власника пристрою cloud.js її стирає разом із кешем.
+const MEM_KEY = 'mws.replymem.v1';
+export const replyMem = {
+  get(owner) { const all = cleanReplyMem(load(MEM_KEY)); return Object.hasOwn(all, owner) ? all[owner] : { skip: [], at: 0 }; },
+  set(owner, patch) {
+    const all = cleanReplyMem(load(MEM_KEY));
+    all[owner] = { ...replyMem.get(owner), ...patch, at: Date.now() };
+    persist(MEM_KEY, cleanReplyMem(all));
+  },
+  clear() { try { localStorage.removeItem(MEM_KEY); } catch { /* нічого */ } },
 };
 
 export const friends = makeSynced('friends', cleanFriend);

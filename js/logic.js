@@ -319,6 +319,28 @@ export function cleanRecs(data) {
   return out;
 }
 
+// Адреса чужого списку: #u=<uid>[&c=<ключ>|&l=<назва>][&me=1] або #r=<знімок>[&me=1].
+// me — власник відкрив своє посилання кнопкою «Як бачить гість» (міняє лише вигляд).
+// Негодящий uid стає порожнім: у шлях Firestore він не піде.
+export function recsHash(raw) {
+  if (raw.startsWith('r=')) {
+    const [snap, ...rest] = raw.slice(2).split('&');
+    return { snap, me: rest.includes('me=1') };
+  }
+  const q = new URLSearchParams(raw), uid = q.get('u') || '';
+  return { uid: /^[\w-]{1,128}$/.test(uid) ? uid : '', key: q.get('c') || '', list: (q.get('l') || '').slice(0, 40), me: q.get('me') === '1' };
+}
+// Що показати за живим посиланням: data — очищений публічний документ (або null),
+// key — сталий ключ добірки, name — її назва зі старого посилання. Добірки немає
+// (невідомий ключ, порожня чи видалена) — { missing }, щоб сказати про це по-людськи.
+export function listView(data, key, name) {
+  if (!data) return null;
+  const title = key ? colName(data.cols, key) : name;
+  const items = data.items.filter(x => (title ? (x.l || []).includes(title) : x.p !== 0));
+  if ((key || name) && (!title || !items.length)) return { missing: true, name: data.name };
+  return { name: data.name, title, open: !!data.open, items };
+}
+
 // ── добірки ───────────────────────────────────────────────────────
 // Добірка — це просто мітка на записах: існує, доки нею позначено хоч
 // один запис. Окремого сховища для неї не треба, тож і синхронізується
@@ -329,11 +351,14 @@ export const listNames = list =>
 // ── збіг смаків ───────────────────────────────────────────────────
 // Порівнюємо оцінки автора рекомендацій з моїми. Відсоток — наскільки
 // близькі оцінки на спільних тайтлах (різниця 0 → 100%, різниця 9 → 0%).
-export function tasteMatch(mine, items) {
+// «Моя оцінка» всюди одна: з полиці, а коли там її немає — та, що я поставив
+// на цьому списку (replyScores: { id: оцінка }).
+export const TASTE_MIN = 3;   // зі скількох спільних оцінок показуємо відсоток
+export function tasteMatch(mine, items, replyScores = {}) {
   const by = new Map(mine.map(e => [e.id, e]));
   const rows = items.map(x => {
-    const e = by.get(x.id);
-    return { x, have: !!e, mine: e?.score || 0, d: e?.score && x.s ? e.score - x.s : null };
+    const e = by.get(x.id), s = e?.score || (Object.hasOwn(replyScores, x.id) ? replyScores[x.id] : 0) || 0;
+    return { x, have: !!e, mine: s, d: s && x.s ? s - x.s : null };
   });
   const scored = rows.filter(r => r.d !== null);
   return {
@@ -344,7 +369,8 @@ export function tasteMatch(mine, items) {
     unseen: rows.filter(r => !r.have).length,
   };
 }
-export const matchTag = r => (r.d === null ? (r.have ? 'have' : 'new') : Math.abs(r.d) <= 1 ? 'match' : 'differ');
+// «збіг» — оцінки майже однакові (до пів бала), 1–2 бали — «близько», далі — «розійшлись».
+export const matchTag = r => (r.d === null ? (r.have ? 'have' : 'new') : Math.abs(r.d) <= 0.5 ? 'match' : Math.abs(r.d) <= 2 ? 'close' : 'differ');
 
 // ── «що подивитись сьогодні» ──────────────────────────────────────
 export function pickCandidates(list, { max = 0, kind = 'all', genre = '' } = {}) {

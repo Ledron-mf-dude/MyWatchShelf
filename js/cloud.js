@@ -6,7 +6,7 @@
 //   public/{uid}                  — її рекомендації, читати може будь-хто
 import { FIREBASE, GOOGLE_CLIENT_ID, SITE_URL } from './config.js';
 import { store } from './store.js';
-import { friends, listdefs, prefs, socialCache } from './synced.js';
+import { friends, listdefs, prefs, socialCache, replyMem } from './synced.js';
 import { recItem, cleanRecs, listNames } from './logic.js';
 import { cleanReply, returnHash, isUid, replyWrite, publishOpen, colsOf } from './social.js';
 import { t, getLang } from './i18n.js';
@@ -179,6 +179,7 @@ function onUser(c, u) {
     store.setSetting('name', '');   // підпис рекомендацій теж був чужий
     SYNCED.forEach(([, s]) => s.clear());
     socialCache.clear();   // відповіді й рекомендації друзів теж чужі
+    replyMem.clear();
     try { localStorage.removeItem(PUBLISHED); } catch { /* нічого */ }
   }
   lastPub = '';

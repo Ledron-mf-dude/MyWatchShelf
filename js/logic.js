@@ -238,6 +238,10 @@ export function stats(list) {
 export const runtimeMin = e => parseInt(e.meta?.runtime, 10) || 0;
 export function episodesWatched(e) {
   if (e.type !== 'series') return 0;
+  // переглянутий серіал переглянуто весь, навіть коли сезон і серію не вказано
+  // (інакше картка каже «0 з 62 серій · 100%»)
+  const all = e.status === 'done' ? Object.values(e.meta?.seasons || {}).reduce((a, b) => a + b, 0) : 0;
+  if (all) return all;
   let n = 0;
   for (const [k, v] of Object.entries(e.meta?.seasons || {})) if (+k < (e.season || 1)) n += v;
   return n + (e.episode || 0);

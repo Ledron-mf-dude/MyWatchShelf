@@ -649,3 +649,29 @@ test('socialCache: мапи добірок друзів (cols) чистятьс�
     assert.deepEqual(socialCache.get().cols, { oleh: { abc123def0: 'Нові' } });   // інша секція вціліла
   } finally { delete globalThis.localStorage; }
 });
+
+// ── добірка за умовами: зміни з картки тайтла ──
+import { manualNote } from '../js/social.js';
+test('manualNote: додане й зняте з картки лягає в plus/minus добірки', () => {
+  const def = { plus: ['tt0000001'], minus: ['tt0000002'] };
+  // додали те, що умовам не підходить — «додано рукою»
+  assert.deepEqual(manualNote(def, 'tt0000003', false, true), { plus: ['tt0000001', 'tt0000003'], minus: ['tt0000002'] });
+  // зняли те, що підходить — «знято рукою»: «Сформувати знову» його не поверне
+  assert.deepEqual(manualNote(def, 'tt0000004', true, false), { plus: ['tt0000001'], minus: ['tt0000002', 'tt0000004'] });
+  // повернули зняте, що підходить; зняли додане рукою — записи про них зникають
+  assert.deepEqual(manualNote(def, 'tt0000002', true, true), { plus: ['tt0000001'], minus: [] });
+  assert.deepEqual(manualNote(def, 'tt0000001', false, false), { plus: [], minus: ['tt0000002'] });
+  // запис без списків і сам def не змінюється
+  assert.deepEqual(manualNote({}, 'tt0000005', true, true), { plus: [], minus: [] });
+  assert.deepEqual(def, { plus: ['tt0000001'], minus: ['tt0000002'] });
+  // разом із listDiff: зняте з картки не додається назад, додане не прибирається
+  const shelf = [
+    { id: 'tt0000004', title: 'А', kind: 'anime', type: 'series', status: 'done', lists: [] },
+    { id: 'tt0000003', title: 'Б', kind: 'movie', type: 'movie', status: 'done', lists: ['Л'] },
+  ];
+  const f = { kinds: ['anime'] };
+  assert.equal(listDiff(shelf, 'Л', f).add.length + listDiff(shelf, 'Л', f).drop.length, 2);
+  let m = manualNote({}, 'tt0000004', true, false);
+  m = manualNote(m, 'tt0000003', false, true);
+  assert.deepEqual(listDiff(shelf, 'Л', f, m), { add: [], drop: [], skip: [] });
+});

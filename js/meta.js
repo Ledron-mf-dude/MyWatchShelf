@@ -8,10 +8,25 @@ import { t } from './i18n.js';
 
 const BASE = 'https://v3-cinemeta.strem.io';
 
-async function getJson(url, signal) {
-  const r = await fetch(url, { signal });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
+// Кожен запит до каталогу має межу часу: без неї «мовчазна» мережа лишала б
+// заглушки назавжди. Обрив за часом — це TimeoutError, а не AbortError: скасоване
+// викликачем мовчки пропускають, а про каталог, що не відповів, треба сказати.
+const TIMEOUT = 8000;
+export async function getJson(url, signal, ms = TIMEOUT) {
+  const ac = new AbortController(), stop = () => ac.abort();
+  if (signal?.aborted) ac.abort(); else signal?.addEventListener('abort', stop, { once: true });
+  let late = false;
+  const timer = setTimeout(() => { late = true; ac.abort(); }, ms);
+  try {
+    const r = await fetch(url, { signal: ac.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } catch (err) {
+    throw late ? Object.assign(new Error(t('err.timeout')), { name: 'TimeoutError' }) : err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', stop);
+  }
 }
 
 // Кеш відповідей каталогу: спершу пам'ять вкладки, далі сховище браузера
@@ -70,11 +85,11 @@ export const meta = (id, type) => cached(`m|${type || ''}|${id}`, 24 * HOUR, () 
 // впорядковані за популярністю. Довідка в них скорочена (thin): лише
 // оцінка й жанри, решту дотягуємо, коли тайтл відкривають чи додають.
 const INDEX = typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'data/' : INDEX_URL;
-const indexMem = new Map();
+const indexMem = new Map(), INDEX_TIMEOUT = 20000;
 export function index(kind) {
   if (!indexMem.has(kind)) {
     const p = cached('i|' + kind, 12 * HOUR, async () => {
-      const j = await getJson(`${INDEX}${kind}.json`);
+      const j = await getJson(`${INDEX}${kind}.json`, undefined, INDEX_TIMEOUT);   // файл індексу великий — йому довша межа
       if (j?.v !== 1 || !Array.isArray(j.items) || !Array.isArray(j.genres)) throw new Error('bad index');
       return j;
     }).then(j => j.items.map(([id, title, year, g, imdb, pop, flags]) => ({
@@ -237,7 +252,8 @@ export async function fetchMeta(id, type, signal) {
     m = (await getJson(`${BASE}/meta/movie/${id}.json`, signal)).meta;
     ty = 'movie';
   }
-  if (!m || !m.name) throw new Error(t('err.notfound'));
+  // code — щоб пошук відрізнив «такого тайтла немає» від «каталог недоступний»
+  if (!m || !m.name) throw Object.assign(new Error(t('err.notfound')), { code: 'notfound' });
   return normalize(m, ty);
 }
 

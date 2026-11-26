@@ -54,6 +54,15 @@ export function tickManual(m, id, matches, on) {
   else { m.plus.delete(id); if (matches) m.minus.add(id); }
 }
 
+// Тайтл додали до добірки за умовами чи зняли з неї просто з картки: та сама
+// позначка «рукою», що й у діалозі, — щоб «Сформувати знову» цього не скасувало.
+// Повертає нові plus/minus для запису умов; сам def не змінює.
+export function manualNote(def, id, matches, on) {
+  const m = { plus: new Set(def?.plus), minus: new Set(def?.minus) };
+  tickManual(m, id, matches, on);
+  return { plus: [...m.plus], minus: [...m.minus] };
+}
+
 // Чи зайнята назва добірки (без огляду на регістр і пробіли по краях); except —
 // добірка, яку саме редагують. Повертає наявну назву або ''.
 export const nameTaken = (names, name, except = '') => {

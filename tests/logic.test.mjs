@@ -327,3 +327,13 @@ test('cleanRecs пропускає open лише як true', () => {
   assert.equal(cleanRecs({ items: [], open: true }).open, true);
   assert.equal('open' in cleanRecs({ items: [], open: 'так' }), false);
 });
+
+test('переглянутий серіал: серій стільки, скільки всього, навіть коли сезон і серію не вказано', () => {
+  const e = { type: 'series', kind: 'series', status: 'done', season: 1, episode: 0, meta: { seasons: { 1: 30, 2: 32 } } };
+  assert.equal(episodesWatched(e), 62);
+  assert.equal(progressPct(e), 100);
+  // кількість серій невідома — рахуємо, як і раніше, за сезоном і серією
+  assert.equal(episodesWatched({ type: 'series', status: 'done', season: 1, episode: 7 }), 7);
+  assert.equal(episodesWatched({ ...e, status: 'watching' }), 0);
+  assert.equal(episodesWatched({ type: 'movie', status: 'done' }), 0);
+});

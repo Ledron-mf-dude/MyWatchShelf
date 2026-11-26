@@ -14,6 +14,19 @@ import { t, getLang } from './i18n.js';
 const V = '10.14.1', CDN = `https://www.gstatic.com/firebasejs/${V}/`;
 const RETURN = 'mws.returnTo', FLAG = 'mws.signedIn', OWNER = 'mws.owner', PUBLISHED = 'mws.published', STATE = 'mws.oauthState';
 
+// Тестовий режим: лише на localhost і лише коли його ввімкнули адресою ?emu=<імʼя>.
+// Тоді вхід і база — локальний емулятор Firebase (firebase.json у корені), а «Увійти» входить
+// вигаданою людиною без Google. На справжньому сайті EMU завжди порожній.
+const EMU = (() => {
+  const h = location.hostname;
+  if (h !== 'localhost' && h !== '127.0.0.1' && !h.endsWith('.localhost')) return '';
+  try {
+    const q = new URLSearchParams(location.search).get('emu');
+    if (q !== null) { if (/^\w{1,20}$/.test(q)) localStorage.setItem('mws.emu', q); else localStorage.removeItem('mws.emu'); }
+    return localStorage.getItem('mws.emu') || '';
+  } catch { return ''; }
+})();
+
 let signingIn = false, sdkPromise = null, unsub = null, unsubs = [], pubTimer = null, lastPub = '';
 // Які з додаткових сховищ уже отримали перший знімок із сервера (для поточної людини).
 let syncedNow = new Set();
@@ -43,6 +56,10 @@ function sdk() {
   ]).then(([a, au, fs]) => {
     const app = a.initializeApp(FIREBASE);
     const ctx = { au, fs, auth: au.getAuth(app), db: fs.getFirestore(app) };
+    if (EMU) {
+      au.connectAuthEmulator(ctx.auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+      fs.connectFirestoreEmulator(ctx.db, '127.0.0.1', 8080);
+    }
     au.onAuthStateChanged(ctx.auth, u => onUser(ctx, u));
     return ctx;
   });
@@ -210,6 +227,14 @@ function onUser(c, u) {
 }
 
 function signIn() {
+  if (EMU) {
+    // емулятор приймає непідписаний «токен Google» — звичайний JSON з ідентифікатором
+    const token = JSON.stringify({ sub: 'emu-' + EMU, email: EMU + '@example.test', email_verified: true, name: EMU });
+    cloud.justSignedIn = true; signingIn = true; set('connecting');
+    sdk().then(c => c.au.signInWithCredential(c.auth, c.au.GoogleAuthProvider.credential(token)))
+      .catch(e => { console.warn('вхід', e); cloud.lastError = e?.code || 'sign-in'; signingIn = false; set('error'); });
+    return;
+  }
   const rnd = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
   const state = rnd();
   try { localStorage.setItem(STATE, state); } catch { throw new Error(t('err.private')); }

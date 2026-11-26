@@ -127,6 +127,10 @@ export function loadReplyState(recs, redrawFn) {
   fetchReply();
   return true;
 }
+// Пішли зі сторінки списку — стан оцінювання забуваємо: інакше підпис чи повторне
+// надсилання (повернулась мережа) вискочили б поверх бібліотеки. Записи, що вже
+// в черзі, доходять зі своїм старим станом.
+export function leaveReplies() { cur = null; redraw = () => {}; rs = fresh(); }
 // Запам'ятовуємо, яким оцінювач бачив перемикач автора: закритим чи відкритим.
 // Поки висить повідомлення «список відкрили», відкритим його не вважаємо.
 function trackOpen() {
@@ -313,7 +317,8 @@ document.addEventListener('click', ev => {
   toast(t('reply.st.sending'));
   Promise.race([chain, new Promise(done => setTimeout(done, 4000))]).then(() => location.assign(url.href));
 }, true);
-addEventListener('online', () => { reload(); resend(); });
+// Мережа повернулась: дозавантажуємо й досилаємо лише на відкритій сторінці живого списку.
+addEventListener('online', () => { if (cur && location.hash.startsWith('#u=')) { reload(); resend(); } });
 
 // ── запам'ятати друга ─────────────────────────────────────────────
 // Живе посилання — за uid, знімок — за відбитком підпису й тайтлів. Видалений

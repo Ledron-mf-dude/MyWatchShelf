@@ -11,7 +11,7 @@ import {
   cardActions, buildActions, loadDemo, flushCard, palRetry,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
-import { replyActions, friendActions, loadReplyState, refreshReplies, flushReplies, resendReplies, takeScore, social, renderFriends } from './friends.js';
+import { replyActions, friendActions, loadReplyState, leaveReplies, refreshReplies, flushReplies, resendReplies, takeScore, social, renderFriends } from './friends.js';
 import { renderShare, shareActions } from './shared.js';
 
 const S = store.settings;
@@ -164,7 +164,7 @@ async function route() {
     if (location.hash.slice(1) !== raw) return;   // поки вантажилось, людина пішла далі
     Object.assign(view, { recs: res.recs || null, fail: res.fail || null });
     setTitle();
-    if (view.recs) loadReplyState(view.recs, recsRedraw);
+    if (view.recs) loadReplyState(view.recs, recsRedraw); else leaveReplies();   // списку немає — оцінювати нічого
     renderRecs();
     return;
   }
@@ -173,6 +173,7 @@ async function route() {
   if (r === 'discover' && ['series', 'anime', 'movie'].includes(sub) && view.disc.type !== sub) Object.assign(view.disc, { type: sub, genre: '', from: '', to: '', min: '', sort: 'pop' });
   view.route = RENDER[r] && r !== 'recs' ? r : 'home';
   view.recs = view.fail = null;
+  leaveReplies();   // стан оцінювання чужого списку за межами його сторінки не живе
   setTitle(); drawChrome(); draw();
   scrollTo(0, 0);
 }

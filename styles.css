@@ -502,7 +502,11 @@ button.more .ic{width:16px; height:16px}
 @media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important; scroll-behavior:auto !important} }
 /* збирання добірки за умовами */
 .build{display:flex; flex-direction:column; min-height:0; flex:1}
-.build-body{overflow-y:auto; overscroll-behavior:contain; flex:1; min-height:0; padding:14px 18px 6px; display:grid; gap:12px; align-content:start}
+/* умови й перелік гортаються окремо, низ (кількість, назва, «Зберегти») завжди на видноті */
+.build-body{overflow:hidden; flex:1; min-height:0; padding:14px 18px 0; display:flex; flex-direction:column; gap:12px}
+.build-cond,.build-main{overflow-y:auto; overscroll-behavior:contain; min-height:0; padding-bottom:6px}
+/* розгорнуті умови на вузькому екрані — не більше ніж близько 45% висоти, щоб перелік лишався видним */
+.build-cond{flex:none; max-height:40vh; max-height:40dvh} .build-main{flex:1; align-content:start}
 .build-f{display:grid; gap:8px}
 .build-f>div{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
 .build-f>div>b{flex:0 0 100%; font-size:12px; font-weight:800; color:var(--faint)}
@@ -516,11 +520,10 @@ button.more .ic{width:16px; height:16px}
 .build-save{display:flex; align-items:center; gap:8px} .build-save .inp{flex:1; min-width:0}
 #build-n{flex:none; font-variant-numeric:tabular-nums}
 /* перелік не розпирає діалог ушир (на телефоні з'являлась горизонтальна прокрутка) */
-.build-body{grid-template-columns:minmax(0,1fr); overflow-x:hidden}
-.build-main{display:grid; gap:8px; min-width:0} #build-note:empty{display:none}
+.build-main{display:grid; gap:8px; min-width:0; overflow-x:hidden} #build-note:empty{display:none}
 .build-list .res{min-width:0} .build-list .row-sub .badge{margin-left:2px; padding:1px 6px; font-size:10.5px; vertical-align:1px}
 /* умови згортаються, щоб на низькому екрані було видно сам перелік */
-.build-cond summary{display:flex; align-items:center; gap:8px; padding:2px 0; cursor:pointer; list-style:none}
+.build-cond summary{position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px; padding:2px 0; cursor:pointer; list-style:none; background:var(--surface)}
 .build-cond summary::-webkit-details-marker{display:none}
 .build-cond summary b{flex:none; font-size:13px; font-weight:800}
 .build-cond summary span{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -529,8 +532,9 @@ button.more .ic{width:16px; height:16px}
 .build-cond .build-f{margin-top:8px}
 @media (min-width:721px){ .palette.build-pal{width:min(960px,calc(100% - 24px))} }
 @media (min-width:900px){
-  .build-body{grid-template-columns:280px minmax(0,1fr); gap:18px}
-  .build-cond{position:sticky; top:0; align-self:start}
+  /* два стовпці, кожен зі своєю прокруткою */
+  .build-body{display:grid; grid-template-columns:280px minmax(0,1fr); grid-template-rows:minmax(0,1fr); gap:18px}
+  .build-cond{max-height:none}
 }
 /* діалог «Поділитись»: довге посилання, назви й постери не виштовхують його за край екрана */
 .share{grid-template-columns:minmax(0,1fr)} .share>*{min-width:0} .share p{overflow-wrap:anywhere}

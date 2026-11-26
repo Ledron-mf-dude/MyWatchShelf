@@ -615,7 +615,7 @@ function updateBuild() {
   const o = ui.overlay;
   if (o?.type !== 'build') return;
   const f = o.f, rows = buildRows(o), picked = buildPicked(o), hit = buildHit(f), empty = isEmptyFilter(f);
-  const scroll = $('.build-body', layer).scrollTop;
+  const scroll = $('.build-main', layer).scrollTop;
   // чипи лише перемикають вигляд; рік чіпаємо, хіба що поле не в фокусі
   for (const b of layer.querySelectorAll('[data-act="build-set"]')) {
     const i = b.dataset.v.indexOf(':'), k = b.dataset.v.slice(0, i), x = b.dataset.v.slice(i + 1);
@@ -637,7 +637,7 @@ function updateBuild() {
       ${e.score ? `<span class="badge static score">${fmtScore(e.score)}</span>` : ''}</div>`;
   }).join('')}</div>` : `<p class="muted pad">${t('build.none')}</p>`;
   buildCount(o);
-  $('.build-body', layer).scrollTop = scroll;
+  $('.build-main', layer).scrollTop = scroll;
 }
 // Нові умови: ручний вибір лишається, а «ще не сформоване» перестає бути знятим —
 // умови застосовуються наново.

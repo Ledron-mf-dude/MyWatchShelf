@@ -693,7 +693,8 @@ Object.assign(friendActions, {
     manageDone();
     toast(t('fr.dropped'));
   },
-  // Сховати — це лише прибрати стовпець (повертається з прихованих разом з оцінками).
+  // Сховати — це лише прибрати стовпець (повертається з прихованих разом з оцінками
+  // й запам'ятаним: воно лишається на мітці видалення — friendTomb).
   // Видалити оцінки людини з хмари — окремий свідомий вибір галочкою; коли зараз це
   // неможливо (немає входу чи мережі, запис не пройшов), кажемо про це прямо.
   'fr-del': async v => {
@@ -723,9 +724,11 @@ Object.assign(friendActions, {
     toast(t(ok ? 'fr.hide.deleted' : 'fr.hide.kept', { name }), { ms: ok ? 4200 : 8000 });
   },
   // Мітка видалення імені не має: ім'я підтягнеться з відповіді, коли вона є (friendTable).
+  // Запам'ятане в людини (kept, lists) мітка зберегла — повертаємо його й знову показуємо.
   'fr-restore': v => {
-    if (!friends.raw().some(f => f.id === v && f.deleted && !SNAP_ID.test(v))) return;
-    friends.save(v, { uid: v, name: '', kind: 'live', follow: false, added: Date.now() });
+    const gone = friends.raw().find(f => f.id === v && f.deleted && !SNAP_ID.test(v));
+    if (!gone) return;
+    friends.save(v, { uid: v, name: '', kind: 'live', follow: hasKept(gone), kept: !!gone.kept, lists: gone.lists || [], added: Date.now() });
     manageDone();
   },
 });

@@ -4,7 +4,7 @@
 // даних і без DOM — тож працює й під Node. Хмара тут не імпортується:
 // вона сама підписується через onLocal і кличе applyRemote.
 
-import { cleanListDef, cleanPrefs, cleanFriend, cleanReply, cleanReplyMem, defId } from './social.js';
+import { cleanListDef, cleanPrefs, cleanFriend, friendTomb, cleanReply, cleanReplyMem, defId } from './social.js';
 import { cleanRecs, cleanCols } from './logic.js';
 
 function load(key) {
@@ -16,13 +16,15 @@ function persist(key, value) {
 
 // Мітка видалення — це лише { id, deleted, updated } і йде повз clean;
 // updated мусить бути числом, інакше рядок із хмари вигравав би порівняння.
-const tomb = r => (typeof r.id === 'string' && r.id ? { id: r.id, deleted: true, updated: Number.isFinite(r.updated) ? r.updated : 0 } : null);
+// keep — що сховище лишає на мітці понад це (у друзів — запам'ятане, щоб сховану
+// людину можна було повернути); воно саме чистить те, що віддає.
+const tomb = (r, keep) => (typeof r.id === 'string' && r.id ? { id: r.id, deleted: true, updated: Number.isFinite(r.updated) ? r.updated : 0, ...keep(r) } : null);
 
 // clean — функція очищення запису: усе, що прийшло з хмари, посилання чи
 // localStorage, проходить крізь неї; null — запис відкинуто.
-export function makeSynced(name, clean) {
+export function makeSynced(name, clean, keep = () => ({})) {
   // «__proto__» як ключ мапи записів задав би прототип замість запису.
-  const cleanRec = r => (r?.id === '__proto__' ? null : r?.deleted ? tomb(r) : clean(r));
+  const cleanRec = r => (r?.id === '__proto__' ? null : r?.deleted ? tomb(r, keep) : clean(r));
   const KEY = `mws.${name}.v1`;
   // Мапа без прототипа: id «constructor» чи «toString» не має знаходити
   // успадковане замість запису.
@@ -53,7 +55,7 @@ export function makeSynced(name, clean) {
     // воскресила б викинутий запис.
     remove(id) {
       if (id === '__proto__') return;
-      const next = { id, deleted: true, updated: Date.now() };
+      const next = { id, deleted: true, updated: Date.now(), ...keep(recs[id] || {}) };
       recs[id] = next; save(); emit(); emitLocal(next);
     },
     // Свіжіший за `updated` перемагає; при рівних — той, що приїхав.
@@ -113,6 +115,6 @@ export const replyMem = {
   clear() { try { localStorage.removeItem(MEM_KEY); } catch { /* нічого */ } },
 };
 
-export const friends = makeSynced('friends', cleanFriend);
+export const friends = makeSynced('friends', cleanFriend, friendTomb);
 export const listdefs = makeSynced('listdefs', cleanListDef);
 export const prefs = makeSynced('prefs', cleanPrefs);

@@ -712,3 +712,27 @@ test('listPlan: left — скільки записів нестиме назву
   assert.equal(listPlan(list, '', 'Інша', ['tt0000003']).left, 1);   // уже з міткою — теж рахується
   assert.equal(listPlan(list, '', 'Нова', ['tt0000001', 'tt0000003']).left, 2);
 });
+
+import { friendTomb } from '../js/social.js';
+test('схована людина: мітка видалення зберігає запамʼятане, і воно ніде не показується', () => {
+  const s = makeSynced('t_hide', cleanFriend, friendTomb);
+  s.save('oleh', { name: 'Олег', kind: 'live', follow: true, kept: true, lists: ['Нові', 'Нові', 7] });
+  s.remove('oleh');
+  const gone = s.raw()[0];
+  assert.deepEqual({ ...gone, updated: 0 }, { id: 'oleh', deleted: true, updated: 0, kept: true, lists: ['Нові'] });
+  assert.equal(s.get('oleh'), null);
+  // поки сховано — рекомендацій не тягнемо й не показуємо
+  assert.equal(wantsRecs(gone), false);
+  assert.deepEqual(recsMissing([gone], {}), []);
+  assert.equal(friendTable({ entries: [], friends: [gone], replies: {}, recs: { oleh: [{ id: 'tt0000001', t: 'A', s: 9, l: ['Нові'] }] } }).rows.length, 0);
+  // мітка з хмари проходить те саме очищення: зайве відпадає, запам'ятане лишається
+  s.applyRemote([{ id: 'ira', deleted: true, updated: 5, kept: 'так', lists: ['Х', { a: 1 }], name: 'Іра', items: [1] }]);
+  assert.deepEqual(s.raw().find(r => r.id === 'ira'), { id: 'ira', deleted: true, updated: 5, kept: false, lists: ['Х'] });
+  // нічого не запам'ятали — мітка лишається голою, як і в решти сховищ
+  s.save('max', { kind: 'live' }); s.remove('max');
+  assert.deepEqual(Object.keys(s.raw().find(r => r.id === 'max')).sort(), ['deleted', 'id', 'updated']);
+  assert.deepEqual(friendTomb({ id: 'snap_1', kind: 'snap', lists: ['Х'] }), {});
+  const plain = makeSynced('t_hide2', cleanFriend);
+  plain.save('oleh', { kind: 'live', kept: true }); plain.remove('oleh');
+  assert.equal('kept' in plain.raw()[0], false);
+});

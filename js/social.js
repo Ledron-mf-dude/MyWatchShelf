@@ -273,6 +273,13 @@ export function cleanFriend(r) {
   return out;
 }
 
+// Сховану людину можна повернути, тож на її мітці видалення лишається запам'ятане
+// (kept, lists) — очищене тут само, бо мітка йде повз cleanFriend. Знімок не
+// повертається, і людині, в якої нічого не запам'ятали, лишати нічого.
+export const friendTomb = r => {
+  const c = r?.kind === 'snap' ? null : cleanFriend({ id: r?.id, kept: r?.kept === true, lists: r?.lists });
+  return c && (c.kept || c.lists.length) ? { kept: c.kept, lists: c.lists } : {};
+};
 // Назва щойно запам'ятаної добірки — в кінець; коли місця немає, випадає найстаріша.
 export const addList = (lists, name) => [...new Set([...(lists || []), ...(name ? [name] : [])])].slice(-LISTS_MAX);
 

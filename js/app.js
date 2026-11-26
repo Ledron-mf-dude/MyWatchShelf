@@ -11,7 +11,7 @@ import {
   cardActions, buildActions, loadDemo, flushCard, palRetry,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
-import { replyActions, friendActions, loadReplyState, leaveReplies, refreshReplies, flushReplies, resendReplies, takeScore, social, renderFriends } from './friends.js';
+import { replyActions, friendActions, loadReplyState, leaveReplies, refreshReplies, flushReplies, resendReplies, replayOutbox, takeScore, social, renderFriends } from './friends.js';
 import { renderShare, shareActions } from './shared.js';
 import { goneStep } from './social.js';
 
@@ -261,7 +261,8 @@ on({
   name: async () => {
     const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: S.name || '', placeholder: t('name.ph') });
     if (v !== null) { store.setSetting('name', v.slice(0, 80)); cloud.publishNow().catch(() => {}); toast(t('toast.name.saved')); }
-    if (v && view.route === 'recs') resendReplies();   // оцінки, що чекали підпису
+    // оцінки, що чекали підпису: на відкритому списку й у черзі решти авторів
+    if (v) { if (view.route === 'recs') resendReplies(); replayOutbox(); }
   },
   'recs-retry': route,
   share: () => openShare(),

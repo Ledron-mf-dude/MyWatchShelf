@@ -415,3 +415,67 @@ export function replyWrite(patch, name, now, DEL) {
   if (!Object.keys(items).length) return null;
   return { name: str(name, 80), items, updated: now };
 }
+
+// ── вихідні оцінки (скринька на пристрої) ─────────────────────────
+// Щоб оцінка не залежала від того, чи встигла мережа до виходу зі сторінки: кожна
+// зміна спершу лягає в localStorage, а вже тоді йде в хмару. На автора списку —
+// pending: ще не підтверджені зміни (id → { x, at }; x — елемент відповіді або null,
+// коли оцінку знято; h — чекає згоди «оцінки бачать усі» й без людини не надсилається)
+// і sent — останній підтверджений хмарою стан моєї відповіді (id → елемент).
+// Лежить у localStorage, тож чистимо як пам'ять оцінювача: справжні uid та id, не
+// більше 50 авторів і 500 тайтлів (найсвіжіші), мапа без прототипа.
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const boxItems = (v, now) => cleanReply({ items: v }, now).items;
+export const emptyBox = () => ({ pending: {}, sent: {}, at: 0 });
+function cleanBox(v, now) {
+  const rows = Object.entries(v.pending && typeof v.pending === 'object' ? v.pending : {})
+    .filter(([id, p]) => isId(id) && p && typeof p === 'object')
+    .map(([id, p]) => [id, { x: p.x === null ? null : boxItems({ [id]: p.x }, now)[id], at: stamp(p.at, now), ...(p.h === true ? { h: true } : {}) }])
+    .filter(([, p]) => p.x !== undefined);
+  return {
+    pending: Object.fromEntries(rows.sort((a, b) => b[1].at - a[1].at).slice(0, 500)),
+    sent: boxItems(v.sent, now), at: Number.isFinite(v.at) ? v.at : 0,
+  };
+}
+export function cleanOutbox(raw, now = Date.now()) {
+  const rows = Object.entries(raw && typeof raw === 'object' ? raw : {})
+    .filter(([k, v]) => isUid(k) && !(k in Object.prototype) && v && typeof v === 'object')
+    .map(([k, v]) => [k, cleanBox(v, now)]);
+  return Object.assign(Object.create(null), Object.fromEntries(rows.sort((a, b) => b[1].at - a[1].at).slice(0, 50)));
+}
+// Нова дія людини: x — елемент відповіді або null (оцінку й коментар знято).
+export const outboxPut = (box, id, x, at, hold = false) =>
+  ({ ...box, pending: { ...box.pending, [id]: { x, at, ...(hold ? { h: true } : {}) } } });
+// Людина відмовилась надсилати (не погодилась, що оцінки бачать усі) — з черги геть.
+export const outboxDrop = (box, ids) =>
+  ({ ...box, pending: Object.fromEntries(Object.entries(box.pending).filter(([id]) => !ids.includes(id))) });
+// Згоду дано: ці зміни більше не чекають людини.
+export const outboxRelease = (box, ids) =>
+  ({ ...box, pending: Object.fromEntries(Object.entries(box.pending).map(([id, p]) => [id, ids.includes(id) ? { x: p.x, at: p.at } : p])) });
+// Моя відповідь на екрані: завантажене з хмари, а поверх — ще не підтверджене. Черга
+// перемагає завжди, навіть коли в хмарі новіше значення з іншого пристрою: вона —
+// остання дія людини саме тут, і мовчки підмінити її чужим значенням було б гірше.
+export function outboxMerge(loaded, pending) {
+  const out = { ...loaded };
+  for (const [id, p] of Object.entries(pending)) if (p.x) out[id] = p.x; else delete out[id];
+  return out;
+}
+// Що надсилати з черги без відкритої сторінки списку (після запуску застосунку).
+export function outboxPatch(pending) {
+  const rows = Object.entries(pending).filter(([, p]) => !p.h);
+  return { set: Object.fromEntries(rows.filter(([, p]) => p.x).map(([id, p]) => [id, p.x])), del: rows.filter(([, p]) => !p.x).map(([id]) => id) };
+}
+// Хмара підтвердила запис patch: він стає підтвердженим станом, а з черги зникає
+// лише те, що за цей час не змінилось знову.
+export function outboxDone(box, patch) {
+  const pending = { ...box.pending }, sent = { ...box.sent };
+  for (const [id, x] of Object.entries(patch.set)) { sent[id] = x; if (Object.hasOwn(pending, id) && same(pending[id].x, x)) delete pending[id]; }
+  for (const id of patch.del) { delete sent[id]; if (Object.hasOwn(pending, id) && !pending[id].x) delete pending[id]; }
+  return { ...box, pending, sent };
+}
+// Власну відповідь завантажено: це і є підтверджений стан. З черги знімаємо те, що
+// вже збігається з хмарою (запис дійшов, а підтвердження сторінка не дочекалась).
+export function outboxSettle(box, loaded) {
+  const hit = ([id, p]) => (p.x ? Object.hasOwn(loaded, id) && same(loaded[id], p.x) : !Object.hasOwn(loaded, id));
+  return { ...box, pending: Object.fromEntries(Object.entries(box.pending).filter(r => !hit(r))), sent: { ...loaded } };
+}

@@ -4,10 +4,10 @@
 // він не може імпортувати їх у відповідь (цикл). Розмітку віддаємо шматками
 // (replyParts), а views.js міняє на сторінці лише ті шматки, що змінились.
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { replyItem, replyMode, replyPatch, sendList, scoreLines, openNotice, ownView, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, recsFor, needsKeep, addList, hasKept, wantsRecs, friendLink, cutNote, replyStats, FRIENDS_MAX } from './social.js';
+import { outboxPut, outboxDrop, outboxRelease, outboxMerge, outboxPatch, outboxDone, outboxSettle, replyItem, replyMode, replyPatch, sendList, scoreLines, openNotice, ownView, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, recsFor, needsKeep, addList, hasKept, wantsRecs, friendLink, cutNote, replyStats, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
-import { friends, listdefs, prefs, socialCache, replyMem } from './synced.js';
+import { friends, listdefs, prefs, socialCache, replyMem, outbox } from './synced.js';
 import { cloud } from './cloud.js';
 import { setCardExtra } from './panel.js';
 import { $, app, layer, ui, icon, ph, remember, showOverlay, closeOverlay, toast, promptBox, confirmBox } from './ui.js';
@@ -18,11 +18,12 @@ const blank = () => ({ name: '', items: {} });
 // доходять зі своїм старим. ready — власну відповідь завантажено; поки ні,
 // оцінювати не можна: не знаємо, що вже стоїть. saved — останній підтверджений
 // хмарою стан: у хмару йде лише різниця з ним. state — що зараз з оцінкою
-// тайтла: 'sending' | 'saved' | 'failed' | 'unsigned' (чекає підпису);
-// shelf — оцінку поставлено й на власній полиці.
+// тайтла: 'sending' | 'resending' (досилається з черги після повернення) | 'saved' |
+// 'failed' | 'unsigned' (чекає підпису); shelf — оцінку поставлено й на власній
+// полиці; busy — запис у хмару, що саме триває (один на стан).
 const fresh = (key = '', owner = '', me = '') => ({
   key, owner, me, ready: false, loading: false, failed: false, tries: 0,
-  mine: blank(), saved: {}, others: {}, confirmed: false, state: new Map(), shelf: new Set(),
+  mine: blank(), saved: {}, others: {}, confirmed: false, state: new Map(), shelf: new Set(), busy: null,
 });
 let rs = fresh(), cur = null, redraw = () => {}, chain = Promise.resolve(), pending = 0;
 
@@ -40,6 +41,9 @@ const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const toSend = recs => sendList(store.list(), recs.items, rs.mine.items, replyMem.get(rs.owner).skip);
 const stuck = st => [...st.state].filter(([, v]) => v === 'failed' || v === 'unsigned').map(([id]) => id);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const flying = v => v === 'sending' || v === 'resending';
+// Перша відповідь на відкритому списку: спершу людина має погодитись, що оцінки бачать усі.
+const needConsent = st => !!cur?.open && !st.confirmed && !Object.keys(st.saved).length;
 
 // ── розмітка ──────────────────────────────────────────────────────
 function scoreHtml(x) {
@@ -58,7 +62,7 @@ function noteHtml(x) {
 // Що з моєю оцінкою цього тайтла: надсилається, збережена чи ще не в хмарі.
 function stateHtml(id) {
   const st = rs.state.get(id);
-  if (st === 'sending') return `<span class="rst">${t('reply.st.sending')}</span>`;
+  if (flying(st)) return `<span class="rst">${t(st === 'sending' ? 'reply.st.sending' : 'reply.st.resending')}</span>`;
   if (st === 'saved') return `<span class="rst ok">${t('reply.st.saved')}${rs.shelf.has(id) ? ` · ${t('reply.st.shelf')}` : ''}</span>`;
   if (st === 'failed') return `<span class="rst bad">${t('reply.st.failed')}</span><button class="btn sm" data-act="reply-retry">${t('reply.retry')}</button>`;
   if (st === 'unsigned') return `<span class="rst bad">${t('reply.st.unsigned')}</span><button class="btn sm" data-act="reply-retry">${t('reply.sign')}</button>`;
@@ -151,8 +155,14 @@ function fetchReply() {
     // чужі оцінки — додаток: їхня відсутність не заважає оцінювати
     recs.open ? cloud.loadReplies(st.owner).catch(e => { console.warn('оцінки інших', e); return {}; }) : {},
   ]).then(([mine, others]) => {
-    Object.assign(st, { loading: false, ready: true, failed: false, mine: mine || blank(), saved: structuredClone((mine || blank()).items), others });
-    if (st === rs) { trackOpen(); redraw(); }
+    const loaded = mine || blank();
+    // Завантажене — підтверджений стан; поверх нього те, що з цього пристрою ще не
+    // дійшло (оцінку поставили й одразу пішли зі сторінки, не було мережі чи підпису).
+    const box = own ? null : outbox.get(st.owner);
+    const left = box && (Object.keys(box.pending).length || Object.keys(box.sent).length || Object.keys(loaded.items).length)
+      ? outbox.change(st.owner, b => outboxSettle(b, loaded.items)).pending : {};
+    Object.assign(st, { loading: false, ready: true, failed: false, mine: { ...loaded, items: outboxMerge(loaded.items, left) }, saved: structuredClone(loaded.items), others });
+    if (st === rs) { trackOpen(); replay(st, Object.keys(left)); redraw(); }
   }).catch(e => {
     console.warn('мої оцінки', e);
     st.loading = false;
@@ -161,6 +171,29 @@ function fetchReply() {
     st.failed = true;
     redraw();
   });
+}
+// Те, що лишилось у черзі з минулого разу, досилаємо самі; коли спершу потрібна
+// людина (підпис, згода на відкритому списку) чи мережа — лишаємо на картці з кнопкою.
+function replay(st, ids) {
+  if (!ids.length) return;
+  if (!store.settings.name) return void ids.forEach(id => st.state.set(id, 'unsigned'));
+  if (needConsent(st) || navigator.onLine === false) return void ids.forEach(id => st.state.set(id, 'failed'));
+  send(st, ids, 'resending');
+}
+// Після запуску, входу, повернення мережі чи появи підпису: черги авторів, чий
+// список зараз не відкрито (відкритий досилає сам, щойно завантажить відповідь).
+const replaying = new Set();
+export function replayOutbox() {
+  const me = meUid();
+  if (!me || navigator.onLine === false || !store.settings.name) return;
+  for (const [owner, box] of Object.entries(outbox.all())) {
+    const patch = outboxPatch(box.pending);
+    if (owner === rs.owner || owner === me || replaying.has(owner) || !(Object.keys(patch.set).length || patch.del.length)) continue;
+    replaying.add(owner);
+    // Людина за цей час могла змінитись: тоді скриньку вже стерто, і писати в неї нічого.
+    cloud.sendReply(owner, patch).then(() => { if (meUid() === me) outbox.change(owner, b => outboxDone(b, patch)); })
+      .catch(e => console.warn('досилання оцінок', e)).finally(() => replaying.delete(owner));
+  }
 }
 const reload = () => { if (rs.ready) return; rs.tries = 0; rs.failed = false; redraw(); fetchReply(); };
 // Сторінка знову на видноті або минула хвилина: чи не з'явилось нових оцінок інших.
@@ -191,14 +224,17 @@ async function commit(ids) {
   const st = rs;
   if (!store.settings.name && (!await sign(st, ids) || st !== rs)) return false;
   ids = [...new Set([...ids, ...stuck(st)])];   // разом із тим, що чекало підпису чи мережі
-  if (cur?.open && !st.confirmed && !Object.keys(st.saved).length
-    && !await confirmBox({ title: t('reply.open.title'), text: t('reply.open.text'), ok: t('reply.open.ok') })) {
-    for (const id of ids) {
-      if (Object.hasOwn(st.saved, id)) st.mine.items[id] = structuredClone(st.saved[id]); else delete st.mine.items[id];
-      st.state.delete(id);
+  if (needConsent(st)) {
+    if (!await confirmBox({ title: t('reply.open.title'), text: t('reply.open.text'), ok: t('reply.open.ok') })) {
+      for (const id of ids) {
+        if (Object.hasOwn(st.saved, id)) st.mine.items[id] = structuredClone(st.saved[id]); else delete st.mine.items[id];
+        st.state.delete(id);
+      }
+      outbox.change(st.owner, b => outboxDrop(b, ids));   // відмова: у черзі цього теж не лишаємо
+      if (st === rs) redraw();
+      return false;
     }
-    if (st === rs) redraw();
-    return false;
+    outbox.change(st.owner, b => outboxRelease(b, Object.keys(b.pending)));
   }
   if (st !== rs) return false;   // поки висів діалог, людина могла піти зі сторінки
   st.confirmed = true;
@@ -212,36 +248,54 @@ async function commit(ids) {
   return send(st, ids);
 }
 
-// Елемент без оцінки й коментаря у відповіді не тримаємо.
+// Елемент без оцінки й коментаря у відповіді не тримаємо. Зміна одразу, синхронно,
+// лягає у скриньку на пристрої й лише тоді йде в хмару: вихід зі сторінки, поки
+// мережа не відповіла чи немає підпису, її вже не губить.
 function apply(st, id, s, n) {
-  if (s || n) st.mine.items[id] = replyItem(xOf(id), s, n, Date.now());
-  else delete st.mine.items[id];
+  const now = Date.now(), x = s || n ? replyItem(xOf(id), s, n, now) : null;
+  if (x) st.mine.items[id] = x; else delete st.mine.items[id];
+  outbox.change(st.owner, b => outboxPut(b, id, x, now, needConsent(st)));
 }
-// Запис іде одразу, без затримки; черга лише тримає порядок, щоб відповіді не
-// обганяли одна одну. Стан знімаємо тут, а не в черзі, і тримаємось свого st:
-// за цей час список чи акаунт могли змінитись, а оцінка має дійти туди, де її
-// поставили. Не вдалося — оцінка лишається на картці з позначкою «не збережено».
-function send(st, ids) {
-  ids.forEach(id => st.state.set(id, 'sending'));
-  pending++;
-  redraw();
-  const sent = structuredClone(st.mine.items);
-  chain = chain.then(async () => {
-    if (meUid() !== st.me) throw new Error(t('err.nocloud'));   // вийшли з акаунта — писати нікому
-    // Різницю рахуємо, коли дійшла черга: st.saved тоді вже містить усе, що
-    // підтвердили попередні записи (інакше «поставив і одразу зняв» не дійшло б як зняття).
-    const patch = replyPatch(st.saved, sent);
-    await cloud.sendReply(st.owner, patch);
-    st.saved = sent;
-    for (const id of new Set([...ids, ...Object.keys(patch.set), ...patch.del])) if (same(st.mine.items[id], sent[id])) st.state.set(id, 'saved');
+// Запис іде одразу, без затримки. Одночасно в дорозі лише один запис на стан: поки
+// хмара його підтверджує, нові кліки нічого не чекають у черзі — щойно підтвердження
+// прийшло, усе змінене за цей час іде одним наступним записом (раніше кожен клік
+// чекав підтвердження всіх попередніх, і «надсилається…» висіло секундами).
+// Тримаємось свого st: за цей час список чи акаунт могли змінитись, а оцінка має
+// дійти туди, де її поставили. Не вдалося — оцінка лишається на картці з позначкою
+// «не збережено» і в скриньці на пристрої.
+const settle = (st, bad) => {
+  for (const [id, v] of st.state) if (flying(v)) { if (same(st.mine.items[id], st.saved[id])) st.state.set(id, 'saved'); else if (bad) st.state.set(id, 'failed'); }
+};
+async function pump(st) {
+  try {
+    for (;;) {
+      if (meUid() !== st.me) throw new Error(t('err.nocloud'));   // вийшли з акаунта — писати нікому
+      // Різницю рахуємо з останнім підтвердженим станом саме перед записом.
+      const sent = structuredClone(st.mine.items), patch = replyPatch(st.saved, sent);
+      if (!Object.keys(patch.set).length && !patch.del.length) break;
+      await cloud.sendReply(st.owner, patch);
+      st.saved = sent;
+      outbox.change(st.owner, b => outboxDone(b, patch));
+      settle(st, false);
+      if (st === rs) redraw();
+    }
+    settle(st, false);
     return true;
-  }).catch(e => {
+  } catch (e) {
     console.warn('оцінка не збереглась', e);
-    for (const id of ids) if (st.state.get(id) === 'sending') st.state.set(id, same(st.mine.items[id], st.saved[id]) ? 'saved' : 'failed');
+    settle(st, true);
     if (st === rs) toast(t('toast.reply.fail', { e: e?.message || '' }), { ms: 5000 });
     return false;
-  }).then(ok => { pending--; if (st === rs) redraw(); return ok; });
-  return chain;
+  }
+}
+function send(st, ids, mark = 'sending') {
+  ids.forEach(id => st.state.set(id, mark));
+  redraw();
+  if (!st.busy) {
+    pending++;
+    st.busy = chain = pump(st).then(ok => { st.busy = null; pending--; if (st === rs) redraw(); return ok; });
+  }
+  return st.busy;
 }
 const resend = () => { const ids = stuck(rs); if (cur && rs.ready && ids.length) commit(ids); };
 export { resend as resendReplies };
@@ -418,6 +472,7 @@ function syncWatch() {
   unwatch?.(); unwatch = null; watching = uid; lastReplies = null;
   if (started) later();   // рядок про видимість оцінок на екрані «Друзі» залежить від входу
   if (uid) unwatch = cloud.watchReplies(map => { if (watching === uid) onReplies(map); });
+  if (uid) replayOutbox();   // оцінки чужих списків, що не встигли дійти минулого разу
   // Запит, початий при запуску (вхід ще не відновився), буде відкинуто: тягнемо наново.
   pullAll();
 }
@@ -458,6 +513,7 @@ export const social = {
     syncWatch();
     pullAll();
     addEventListener('online', pullAll);
+    addEventListener('online', replayOutbox);
     friends.onChange(() => { friendsChanged = true; later(); });
     prefs.onChange(() => { if (!markingSeen) later(); });
     listdefs.onChange(later);

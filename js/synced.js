@@ -4,7 +4,7 @@
 // даних і без DOM — тож працює й під Node. Хмара тут не імпортується:
 // вона сама підписується через onLocal і кличе applyRemote.
 
-import { cleanListDef, cleanPrefs, cleanFriend, friendTomb, cleanReply, cleanReplyMem, defId } from './social.js';
+import { cleanListDef, cleanPrefs, cleanFriend, friendTomb, cleanReply, cleanReplyMem, cleanOutbox, emptyBox, defId } from './social.js';
 import { cleanRecs, cleanCols } from './logic.js';
 
 function load(key) {
@@ -113,6 +113,23 @@ export const replyMem = {
     persist(MEM_KEY, cleanReplyMem(all));
   },
   clear() { try { localStorage.removeItem(MEM_KEY); } catch { /* нічого */ } },
+};
+
+// Вихідні оцінки чужих списків (cleanOutbox): зміна лягає сюди одразу, синхронно,
+// ще до запису в хмару — тож вихід зі сторінки її не губить. Лише цей пристрій;
+// при зміні власника пристрою cloud.js стирає її разом із пам'яттю оцінювача.
+const OUT_KEY = 'mws.outbox.v1';
+export const outbox = {
+  all: () => cleanOutbox(load(OUT_KEY)),
+  get(owner) { const all = outbox.all(); return Object.hasOwn(all, owner) ? all[owner] : emptyBox(); },
+  // fn — чиста зміна скриньки автора (outboxPut, outboxDone…); повертає нову скриньку
+  change(owner, fn) {
+    const all = outbox.all();
+    all[owner] = { ...fn(Object.hasOwn(all, owner) ? all[owner] : emptyBox()), at: Date.now() };
+    persist(OUT_KEY, cleanOutbox(all));
+    return all[owner];
+  },
+  clear() { try { localStorage.removeItem(OUT_KEY); } catch { /* нічого */ } },
 };
 
 export const friends = makeSynced('friends', cleanFriend, friendTomb);

@@ -231,7 +231,7 @@ const D = {
   'reply.open.ok': ['Continue', 'Продовжити'],
   'reply.others': ['Others’ scores', 'Оцінки інших'], 'quote': ['“{x}”', '„{x}“'],
   'reply.author': ['the author', 'автор'], 'reply.clear': ['Remove my score', 'Прибрати оцінку'],
-  'reply.st.sending': ['sending…', 'надсилається…'], 'reply.st.saved': ['saved ✓', 'збережено ✓'], 'reply.st.shelf': ['and on your shelf', 'і на твоїй полиці'],
+  'reply.st.sending': ['sending…', 'надсилається…'], 'reply.st.resending': ['not sent yet — sending…', 'не надіслано — надсилається…'], 'reply.st.saved': ['saved ✓', 'збережено ✓'], 'reply.st.shelf': ['and on your shelf', 'і на твоїй полиці'],
   'reply.st.failed': ['not saved', 'не збережено'], 'reply.retry': ['Retry', 'Повторити'],
   'reply.st.unsigned': ['A name is needed to send your score', 'Щоб надіслати оцінку, потрібен підпис'], 'reply.sign': ['Add a name', 'Вказати підпис'],
   'reply.name.title': ['Your name', 'Твій підпис'],

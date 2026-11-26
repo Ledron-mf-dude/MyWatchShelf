@@ -749,3 +749,90 @@ test('goneStep: список зник під час живого оновлен�
   assert.equal(goneStep(undefined, false), '');
   assert.equal(goneStep(null, true), '');
 });
+
+// ── вихідні оцінки: локальна скринька, що переживає вихід зі сторінки ──
+import { cleanOutbox, emptyBox, outboxPut, outboxDrop, outboxRelease, outboxMerge, outboxPatch, outboxDone, outboxSettle } from '../js/social.js';
+const oi = (s, at, n = '') => ({ s, n, at, t: 'T', k: 'movie', y: '2020' });
+test('outboxMerge: ще не підтверджене перекриває завантажене з хмари, зняття прибирає', () => {
+  const loaded = { tt0000001: oi(9, 200), tt0000002: oi(6, 50), tt0000003: oi(4, 50) };
+  let box = outboxPut(emptyBox(), 'tt0000001', oi(7, 100), 100);
+  box = outboxPut(box, 'tt0000002', null, 110);
+  box = outboxPut(box, 'tt0000004', oi(8, 120), 120);
+  const m = outboxMerge(loaded, box.pending);
+  // інший пристрій поставив 9 пізніше (at 200), але тут остання дія людини — 7: вона й лишається
+  assert.equal(m.tt0000001.s, 7);
+  assert.equal('tt0000002' in m, false);
+  assert.equal(m.tt0000003.s, 4);
+  assert.equal(m.tt0000004.s, 8);
+  assert.deepEqual(outboxMerge(loaded, {}), loaded);
+});
+test('outboxPatch: що надсилати — усе з черги, крім того, що чекає згоди', () => {
+  let box = outboxPut(emptyBox(), 'tt0000001', oi(7, 100), 100);
+  box = outboxPut(box, 'tt0000002', null, 110);
+  box = outboxPut(box, 'tt0000003', oi(5, 120), 120, true);
+  assert.deepEqual(outboxPatch(box.pending), { set: { tt0000001: oi(7, 100) }, del: ['tt0000002'] });
+  assert.deepEqual(outboxPatch(outboxRelease(box, ['tt0000003']).pending).set.tt0000003, oi(5, 120));
+  assert.deepEqual(outboxPatch({}), { set: {}, del: [] });
+});
+test('outboxDone: черга порожніє лише після підтвердження, і лише тим, що справді дійшло', () => {
+  let box = outboxPut(emptyBox(), 'tt0000001', oi(7, 100), 100);
+  box = outboxPut(box, 'tt0000002', null, 110);
+  box = { ...box, sent: { tt0000002: oi(6, 50) } };
+  const patch = outboxPatch(box.pending);
+  assert.deepEqual(Object.keys(box.pending).sort(), ['tt0000001', 'tt0000002']);   // надсилання саме нічого не знімає
+  // поки запис ішов, людина змінила оцінку ще раз: новіше лишається в черзі
+  const later = outboxPut(box, 'tt0000001', oi(8, 130), 130);
+  const half = outboxDone(later, patch);
+  assert.deepEqual(Object.keys(half.pending), ['tt0000001']);
+  assert.equal(half.pending.tt0000001.x.s, 8);
+  assert.equal(half.sent.tt0000001.s, 7);
+  assert.equal('tt0000002' in half.sent, false);
+  const done = outboxDone(box, patch);
+  assert.deepEqual(done.pending, {});
+  assert.deepEqual(done.sent, { tt0000001: oi(7, 100) });
+});
+test('outboxSettle: завантажена відповідь стає підтвердженим станом і знімає з черги те, що вже дійшло', () => {
+  let box = outboxPut(emptyBox(), 'tt0000001', oi(7, 100), 100);   // запис дійшов, а підтвердження сторінка не дочекалась
+  box = outboxPut(box, 'tt0000002', oi(5, 110), 110);              // не дійшов
+  box = outboxPut(box, 'tt0000003', null, 120);                    // зняття дійшло
+  const s = outboxSettle(box, { tt0000001: oi(7, 100), tt0000002: oi(9, 90) });
+  assert.deepEqual(Object.keys(s.pending), ['tt0000002']);
+  assert.deepEqual(s.sent, { tt0000001: oi(7, 100), tt0000002: oi(9, 90) });
+});
+test('outboxDrop: відмова від надсилання прибирає з черги', () => {
+  const box = outboxPut(outboxPut(emptyBox(), 'tt0000001', oi(7, 100), 100), 'tt0000002', oi(5, 110), 110);
+  assert.deepEqual(Object.keys(outboxDrop(box, ['tt0000001', 'tt9999999']).pending), ['tt0000002']);
+});
+test('cleanOutbox: справжні власники й id, межі, без службових ключів', () => {
+  const big = Object.fromEntries(Array.from({ length: 600 }, (_, i) => ['tt' + String(1000000 + i), { x: oi(5, i), at: i }]));
+  const c = cleanOutbox({
+    alice: { pending: { tt0000001: { x: oi(7, 100), at: 100 }, tt0000002: { x: null, at: 5, h: true }, bad: { x: oi(1, 1), at: 1 }, tt0000003: { x: { s: 0, n: '' }, at: 1 }, tt0000004: 'x' },
+      sent: { tt0000005: oi(9, 1), constructor: oi(1, 1), tt0000006: { s: 0 } }, at: 9 },
+    'bad/uid': { pending: {}, sent: {} }, constructor: { pending: {}, sent: {} }, bob: 'x', carl: { pending: big },
+  }, 1e6);
+  assert.deepEqual(Object.keys(c).sort(), ['alice', 'carl']);
+  assert.equal(Object.getPrototypeOf(c), null);
+  assert.deepEqual(c.alice.pending, { tt0000001: { x: oi(7, 100), at: 100 }, tt0000002: { x: null, at: 5, h: true } });
+  assert.deepEqual(c.alice.sent, { tt0000005: oi(9, 1) });
+  assert.equal(Object.keys(c.carl.pending).length, 500);
+  assert.ok('tt1000599' in c.carl.pending && !('tt1000000' in c.carl.pending));   // лишаються найсвіжіші
+  const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => ['u' + i, { pending: {}, sent: {}, at: i }]));
+  const kept = Object.keys(cleanOutbox(many));
+  assert.equal(kept.length, 50);
+  assert.ok(kept.includes('u59') && !kept.includes('u0'));
+  assert.deepEqual(Object.keys(cleanOutbox(null)), []);
+});
+test('outbox: запис лягає у сховище одразу й переживає перезавантаження сторінки', async () => {
+  const mem = {};
+  globalThis.localStorage = { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; }, removeItem: k => { delete mem[k]; } };
+  try {
+    const { outbox } = await import('../js/synced.js');
+    outbox.change('alice', b => outboxPut(b, 'tt0000001', oi(7, 100), 100));
+    assert.equal(JSON.parse(mem['mws.outbox.v1']).alice.pending.tt0000001.x.s, 7);   // уже на диску, без жодного await
+    assert.equal(outbox.get('alice').pending.tt0000001.x.s, 7);
+    assert.deepEqual(outbox.get('nobody'), emptyBox());
+    assert.deepEqual(Object.keys(outbox.all()), ['alice']);
+    outbox.clear();
+    assert.deepEqual(outbox.get('alice'), emptyBox());
+  } finally { delete globalThis.localStorage; }
+});

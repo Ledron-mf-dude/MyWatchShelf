@@ -507,7 +507,10 @@ test('cleanCols і colName: чужа мапа добірок', () => {
 test('returnHash пускає й посилання з ключем добірки', () => {
   assert.equal(returnHash('#u=abc&c=abc123xyz0'), '#u=abc&c=abc123xyz0');
   assert.equal(returnHash('#u=abc&c=ABC'), '');
-  assert.equal(returnHash('#u=abc&c=abc123xyz0&l=x'), '');
+  // ключ і назва разом: назва — запас на випадок, коли ключа немає в документі автора
+  assert.equal(returnHash('#u=abc&c=abc123xyz0&l=x'), '#u=abc&c=abc123xyz0&l=x');
+  assert.equal(returnHash('#u=abc&c=abc123xyz0&l=x&me=1'), '#u=abc&c=abc123xyz0&l=x&me=1');
+  assert.equal(returnHash('#u=abc&c=abc123xyz0&l=x&l=y'), '');
 });
 test('nameList: до шести назв, далі «+N»', () => {
   assert.equal(nameList(['А', 'Б']), 'А, Б');
@@ -624,9 +627,10 @@ test('friendTable: «прибрані» рекомендації зникают�
 test('friendLink: загальні рекомендації, добірка за ключем або за назвою', () => {
   assert.equal(friendLink('oleh'), '#u=oleh');
   assert.equal(friendLink('oleh', 'Нові & старі', {}), '#u=oleh&l=' + encodeURIComponent('Нові & старі'));
-  assert.equal(friendLink('oleh', 'Нові', { abc123def0: 'Нові', zzz999zzz9: 'Інші' }), '#u=oleh&c=abc123def0');
+  assert.equal(friendLink('oleh', 'Нові', { abc123def0: 'Нові', zzz999zzz9: 'Інші' }), '#u=oleh&c=abc123def0&l=' + encodeURIComponent('Нові'));
   assert.equal(friendLink('oleh', 'Нові', { zzz999zzz9: 'Інші' }), '#u=oleh&l=' + encodeURIComponent('Нові'));
-  assert.equal(returnHash(friendLink('oleh', 'Нові', { abc123def0: 'Нові' })), '#u=oleh&c=abc123def0');
+  const both = friendLink('oleh', 'Нові', { abc123def0: 'Нові' });
+  assert.equal(returnHash(both), both);
 });
 test('cutNote: початок коментаря для клітинки', () => {
   assert.equal(cutNote('коротко'), 'коротко');
@@ -674,4 +678,27 @@ test('manualNote: додане й зняте з картки лягає в plus/
   let m = manualNote({}, 'tt0000004', true, false);
   m = manualNote(m, 'tt0000003', false, true);
   assert.deepEqual(listDiff(shelf, 'Л', f, m), { add: [], drop: [], skip: [] });
+});
+
+// ── правки після перевірки всієї зміни ────────────────────────────
+import { listHash } from '../js/social.js';
+import { listView, recsHash } from '../js/logic.js';
+
+test('listHash: посилання на добірку несе і ключ, і назву', () => {
+  assert.equal(listHash('oleh'), '#u=oleh');
+  assert.equal(listHash('oleh', 'Нові & старі'), '#u=oleh&l=' + encodeURIComponent('Нові & старі'));
+  assert.equal(listHash('oleh', 'Нові', 'abc123def0'), '#u=oleh&c=abc123def0&l=' + encodeURIComponent('Нові'));
+  assert.deepEqual(recsHash(listHash('oleh', 'Нові & старі', 'abc123def0').slice(1)), { uid: 'oleh', key: 'abc123def0', list: 'Нові & старі', me: false });
+});
+test('listView: ключ важить більше за назву, а без нього в cols рятує назва', () => {
+  const items = [{ id: 'tt0000001', s: 9, l: ['Нова назва'] }, { id: 'tt0000002', s: 8, l: ['Стара'] }, { id: 'tt0000003', s: 7 }];
+  const withCols = { name: 'Аліса', items, cols: { abcdef12: 'Нова назва' } };
+  // добірку перейменували: ключ веде до неї, хоч у посиланні ще стара назва
+  assert.deepEqual(listView(withCols, 'abcdef12', 'Стара'), { name: 'Аліса', title: 'Нова назва', open: false, items: [items[0]] });
+  // документ опублікував старий клієнт без cols: ключа немає — шукаємо за назвою
+  assert.deepEqual(listView({ name: 'Аліса', items }, 'abcdef12', 'Стара').items.map(x => x.id), ['tt0000002']);
+  assert.deepEqual(listView({ name: 'Аліса', items, cols: { zzzzzz99: 'Інша' } }, 'abcdef12', 'Стара').title, 'Стара');
+  // ні ключа, ні назви в автора немає — «такої добірки немає»
+  assert.deepEqual(listView({ name: 'Аліса', items }, 'abcdef12', 'Нема'), { missing: true, name: 'Аліса' });
+  assert.deepEqual(listView({ name: 'Аліса', items }, 'abcdef12', ''), { missing: true, name: 'Аліса' });
 });

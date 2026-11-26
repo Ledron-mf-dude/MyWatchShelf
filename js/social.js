@@ -186,7 +186,7 @@ export function shelfScores(entries, items) {
 
 // Куди повернути людину після входу: лише адреса чужого списку (#u=…).
 // Значення лежить у localStorage, тож перевіряємо і при записі, і при читанні.
-export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&l=[^#&]{1,400}|&c=[a-z0-9]{6,16})?(&me=1)?$/.test(h) ? h : '');
+export const returnHash = h => (typeof h === 'string' && /^#u=[\w-]{1,128}(&c=[a-z0-9]{6,16})?(&l=[^#&]{1,400})?(&me=1)?$/.test(h) ? h : '');
 
 // «Надіслати мої оцінки»: тайтли списку, які я оцінив на полиці, а тут ще ні.
 // skip — id, з яких я навмисно зняв оцінку на списках цього автора: їх не пропонуємо.
@@ -291,13 +291,14 @@ export const wantsRecs = f => !!f && !f.deleted && f.kind === 'live' && !!f.foll
 export const needsKeep = (friend, listName) =>
   !friend || (friend.kind === 'live' && (listName ? !friend.lists.includes(listName) : !friend.kept));
 
-// Посилання на запам'ятане в друга: загальні рекомендації або добірка — за сталим
-// ключем, коли публічний документ друга його дає (cols: ключ → назва), інакше за назвою.
-export function friendLink(uid, name = '', cols = {}) {
-  if (!name) return `#u=${uid}`;
-  const key = Object.keys(cols || {}).find(k => cols[k] === name);
-  return `#u=${uid}${key ? '&c=' + key : '&l=' + encodeURIComponent(name)}`;
-}
+// Адреса живого списку: загальні рекомендації або добірка. Добірка несе і сталий
+// ключ (переживає перейменування), і назву: ключа може не бути в публічному
+// документі (його переписав старий клієнт без cols, добірок понад 60) — тоді рятує назва.
+export const listHash = (uid, name = '', key = '') =>
+  `#u=${uid}${name ? (key ? '&c=' + key : '') + '&l=' + encodeURIComponent(name) : ''}`;
+// Посилання на запам'ятане в друга: ключ — із його публічного документа (cols: ключ → назва).
+export const friendLink = (uid, name = '', cols = {}) =>
+  listHash(uid, name, Object.keys(cols || {}).find(k => cols[k] === name));
 // Початок коментаря для клітинки таблиці; повний текст — у підказці й по кліку.
 export const cutNote = (n, max = 40) => (n.length > max ? n.slice(0, max).trimEnd() + '…' : n);
 // Скільки людей і оцінок стане видно, якщо відкрити оцінки друзів усім.

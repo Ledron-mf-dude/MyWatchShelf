@@ -9,7 +9,7 @@ import * as catalog from './meta.js';
 import { store } from './store.js';
 import { listdefs, defId } from './synced.js';
 import {
-  cleanListFilter, isEmptyFilter, listDiff, listMatch, manualPick, tickManual, manualNote, nameTaken, listKey, nameList, listPlan, publicOver, canWrite, PUBLIC_MAX,
+  cleanListFilter, isEmptyFilter, listDiff, listMatch, manualPick, tickManual, manualNote, nameTaken, listKey, nameList, listPlan, publicOver, canWrite, PUBLIC_MAX, listHash,
 } from './social.js';
 import { cloud } from './cloud.js';
 import { $, layer, icon, ph, toast, ui, showOverlay, closeOverlay, remember, recall, confirmBox, promptBox } from './ui.js';
@@ -479,7 +479,7 @@ const mayKey = () => canWrite(!!cloud.user, cloud.synced('listdefs'));
 // Сталий ключ добірки для посилання: створюється один раз і не змінюється з назвою.
 // Добірка, створена раніше чи міткою з картки, отримує його тут, коли знадобилось
 // посилання. З входом — лише після стану з хмари: інакше два пристрої вигадали б
-// різні ключі й одне з посилань зламалось би. Немає ключа — посилання за назвою.
+// різні ключі й одне з посилань зламалось би. Назва в посиланні є завжди — як запас.
 export function ensureKey(name) {
   const def = listdefs.get(defId(name));
   if (def?.key) return def.key;
@@ -497,7 +497,7 @@ export async function shareLink(list = '') {
       // ключ мусить бути в публічному документі раніше, ніж посилання піде до людей
       const key = list ? ensureKey(list) : '';
       await cloud.publishNow();
-      link = `${base}#u=${cloud.user.uid}${list ? (key ? '&c=' + key : '&l=' + encodeURIComponent(list)) : ''}`; live = true;
+      link = base + listHash(cloud.user.uid, list, key); live = true;
     } catch { /* нижче — знімок */ }
   }
   link ??= `${base}#r=${await encodeRecs(S.name, items, list)}`;

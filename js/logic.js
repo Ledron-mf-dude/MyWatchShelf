@@ -323,7 +323,7 @@ export function cleanRecs(data) {
   return out;
 }
 
-// Адреса чужого списку: #u=<uid>[&c=<ключ>|&l=<назва>][&me=1] або #r=<знімок>[&me=1].
+// Адреса чужого списку: #u=<uid>[&c=<ключ>][&l=<назва>][&me=1] або #r=<знімок>[&me=1].
 // me — власник відкрив своє посилання кнопкою «Як бачить гість» (міняє лише вигляд).
 // Негодящий uid стає порожнім: у шлях Firestore він не піде.
 export function recsHash(raw) {
@@ -335,11 +335,12 @@ export function recsHash(raw) {
   return { uid: /^[\w-]{1,128}$/.test(uid) ? uid : '', key: q.get('c') || '', list: (q.get('l') || '').slice(0, 40), me: q.get('me') === '1' };
 }
 // Що показати за живим посиланням: data — очищений публічний документ (або null),
-// key — сталий ключ добірки, name — її назва зі старого посилання. Добірки немає
-// (невідомий ключ, порожня чи видалена) — { missing }, щоб сказати про це по-людськи.
+// key — сталий ключ добірки, name — її назва з посилання. Ключ важить більше (добірку
+// могли перейменувати); коли його немає в cols автора — шукаємо за назвою. Добірки
+// немає (ні ключа, ні назви; порожня чи видалена) — { missing }, щоб сказати по-людськи.
 export function listView(data, key, name) {
   if (!data) return null;
-  const title = key ? colName(data.cols, key) : name;
+  const title = (key && colName(data.cols, key)) || name;
   const items = data.items.filter(x => (title ? (x.l || []).includes(title) : x.p !== 0));
   if ((key || name) && (!title || !items.length)) return { missing: true, name: data.name };
   return { name: data.name, title, open: !!data.open, items };

@@ -1,199 +1,319 @@
 // Оцінки друга на сторінці чужого списку (#u=…): ряд балів і коментар на
-// кожній картці, «Надіслати мої оцінки» і оцінки інших друзів. Сторінка
-// передає сюди свій стан аргументами (recs): views.js і app.js імпортують
-// цей модуль, тож він не може імпортувати їх у відповідь (цикл).
+// кожній картці, «Надіслати мої оцінки» і оцінки інших. Сторінка передає сюди
+// свій стан аргументами (recs): views.js і app.js імпортують цей модуль, тож
+// він не може імпортувати їх у відповідь (цикл). Розмітку віддаємо шматками
+// (replyParts), а views.js міняє на сторінці лише ті шматки, що змінились.
 import { esc, fmtScore, kindLabel, KIND_IDS } from './logic.js';
-import { replyItem, replyMode, replyPatch, shelfScores, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, recsFor, needsKeep, addList, FRIENDS_MAX } from './social.js';
+import { replyItem, replyMode, replyPatch, sendList, scoreLines, openNotice, ownView, snapId, friendTable, newReplyAuthors, unseenCount, seenStamp, seenAtOf, canWrite, recsMissing, recsFor, needsKeep, addList, FRIENDS_MAX } from './social.js';
 import { t, tn } from './i18n.js';
 import { store } from './store.js';
-import { friends, listdefs, prefs, socialCache } from './synced.js';
+import { friends, listdefs, prefs, socialCache, replyMem } from './synced.js';
 import { cloud } from './cloud.js';
 import { setCardExtra } from './panel.js';
 import { $, app, layer, ui, icon, ph, remember, showOverlay, toast, promptBox, confirmBox } from './ui.js';
 
 const blank = () => ({ name: '', items: {} });
-// key — чия відповідь і на чиєму списку: коли змінюється (інший список, вхід,
-// вихід), стан скидається. ready — власну відповідь уже завантажено; поки ні,
+// Стан — окремий об'єкт на пару «чий список | хто оцінює»: коли пара змінюється
+// (інший список, вхід, вихід), створюємо новий, а записи, що вже стоять у черзі,
+// доходять зі своїм старим. ready — власну відповідь завантажено; поки ні,
 // оцінювати не можна: не знаємо, що вже стоїть. saved — останній підтверджений
-// хмарою стан цієї вкладки: у хмару йде лише різниця з ним.
-const rs = { key: '', owner: '', ready: false, mine: blank(), saved: {}, others: {}, confirmed: false };
-let cur = null, redraw = () => {}, wasKey = null, chain = Promise.resolve();
-const timers = new Map();   // id тайтла → таймер збереження коментаря
+// хмарою стан: у хмару йде лише різниця з ним. state — що зараз з оцінкою
+// тайтла: 'sending' | 'saved' | 'failed' | 'unsigned' (чекає підпису);
+// shelf — оцінку поставлено й на власній полиці.
+const fresh = (key = '', owner = '', me = '') => ({
+  key, owner, me, ready: false, loading: false, failed: false, tries: 0,
+  mine: blank(), saved: {}, others: {}, confirmed: false, state: new Map(), shelf: new Set(),
+});
+let rs = fresh(), cur = null, redraw = () => {}, chain = Promise.resolve(), pending = 0;
 
 const meUid = () => cloud.user?.uid || '';
 const modeOf = recs => replyMode({ ownerUid: recs?.uid || '', meUid: meUid(), signedIn: !!cloud.user });
 const xOf = id => cur?.items.find(x => x.id === id);
-const missing = recs => Object.keys(shelfScores(store.list(), recs.items)).filter(id => !rs.mine.items[id]?.s);
+const idOf = el => el.closest('[data-id]')?.dataset.id;
+const ownSigned = recs => !!recs?.uid && recs.uid === meUid();
+// Власник на власному посиланні: з входом — за uid, інакше за позначкою «Як бачить гість».
+const isOwn = recs => (recs.uid && meUid() ? recs.uid === meUid()
+  : !!recs.me && ownView({ uid: recs.uid, meUid: meUid(), me: true, items: recs.items, shelfIds: store.list().map(e => e.id) }));
+// Ім'я автора в реченні стоїть підметом, тож відмінювати його не треба.
+const ownerName = recs => recs?.name || t('reply.author');
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const toSend = recs => sendList(store.list(), recs.items, rs.mine.items, replyMem.get(rs.owner).skip);
+const stuck = st => [...st.state].filter(([, v]) => v === 'failed' || v === 'unsigned').map(([id]) => id);
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // ── розмітка ──────────────────────────────────────────────────────
-// Обгортка з власною дією-«пустушкою»: клік у полі не відкриває перегляд картки.
-export function replyBox(x, recs) {
-  const mode = modeOf(recs);
-  if (mode === 'none') return '';
-  if (mode === 'signin') return `<div class="reply" data-act="reply-box"><button class="btn" data-act="rate-signin">${icon('user')}${t('reply.signin')}</button></div>`;
-  const it = rs.mine.items[x.id], s = it?.s || 0, dis = rs.ready ? '' : 'disabled';
-  return `<div class="reply" data-act="reply-box">
-    <h4>${t('reply.label')} <small>${s ? fmtScore(s) : ''}</small></h4>
+function scoreHtml(x) {
+  const s = rs.mine.items[x.id]?.s || 0, dis = rs.ready ? '' : 'disabled';
+  return `<h4>${t('reply.label')} <small>${s ? fmtScore(s) : ''}</small>${s ? `<button class="rb" data-act="rate-clear" aria-label="${t('reply.clear')}" title="${t('reply.clear')}" ${dis}>${icon('close')}</button>` : ''}</h4>
     <div class="scores">${Array.from({ length: 10 }, (_, i) =>
       `<button data-act="rate" data-v="${i + 1}" class="${s >= i + 1 ? 'fill' : ''} ${Math.floor(s) === i + 1 ? 'on' : ''}" aria-pressed="${Math.floor(s) === i + 1}" ${dis}>${i + 1}</button>`).join('')}
-      <button data-act="rate-half" class="half ${s % 1 ? 'on' : ''}" aria-pressed="${!!(s % 1)}" aria-label="${t('score.half')}" title="${t('score.half')}" ${rs.ready && s >= 1 && s < 10 ? '' : 'disabled'}>+½</button></div>
-    <input class="inp" type="text" data-reply-note maxlength="500" placeholder="${t('reply.note.ph')}" value="${esc(it?.n || '')}" ${dis}>
-  </div>`;
+      <button data-act="rate-half" class="half ${s % 1 ? 'on' : ''}" aria-pressed="${!!(s % 1)}" aria-label="${t('score.half')}" title="${t('score.half')}" ${rs.ready && s >= 1 && s < 10 ? '' : 'disabled'}>+½</button></div>`;
 }
-
-// Оцінки інших друзів — лише коли автор відкрив список.
-export function othersLine(id, recs) {
-  if (!recs?.open || modeOf(recs) !== 'rate' || !rs.ready) return '';
+// Поле коментаря росте разом із текстом; лічильник з'являється ближче до межі.
+function noteHtml(x) {
+  const dis = rs.ready ? '' : 'disabled';
+  return `<textarea class="inp" rows="2" data-reply-note maxlength="500" placeholder="${t('reply.note.ph')}" aria-label="${t('reply.note.ph')}" ${dis}>${esc(rs.mine.items[x.id]?.n || '')}</textarea>
+    <div class="reply-f"><small class="muted" data-reply-count hidden></small><button class="btn sm" data-act="note-save" ${dis}>${t('save')}</button></div>`;
+}
+// Що з моєю оцінкою цього тайтла: надсилається, збережена чи ще не в хмарі.
+function stateHtml(id) {
+  const st = rs.state.get(id);
+  if (st === 'sending') return `<span class="rst">${t('reply.st.sending')}</span>`;
+  if (st === 'saved') return `<span class="rst ok">${t('reply.st.saved')}${rs.shelf.has(id) ? ` · ${t('reply.st.shelf')}` : ''}</span>`;
+  if (st === 'failed') return `<span class="rst bad">${t('reply.st.failed')}</span><button class="btn sm" data-act="reply-retry">${t('reply.retry')}</button>`;
+  if (st === 'unsigned') return `<span class="rst bad">${t('reply.st.unsigned')}</span><button class="btn sm" data-act="reply-retry">${t('reply.sign')}</button>`;
+  return '';
+}
+// Оцінки інших — лише коли автор відкрив список. Це не обов'язково мої друзі.
+function othersHtml(id) {
   const rows = Object.entries(rs.others).filter(([uid, r]) => uid !== meUid() && r.items[id]).slice(0, 10);
   if (!rows.length) return '';
   return `<div class="others"><h4>${t('reply.others')}</h4>${rows.map(([, r]) => {
     const it = r.items[id];
-    return `<p><b>${esc(r.name || t('reply.anon'))}</b>${it.s ? ` <span class="sc">${fmtScore(it.s)}</span>` : ''}${it.n ? ` <span class="muted">${esc(it.n)}</span>` : ''}</p>`;
+    return `<p><b>${esc(r.name || t('fr.unsigned'))}</b>${it.s ? ` · <span class="sc">${fmtScore(it.s)}</span>` : ''}${it.n ? ` — <span class="muted">${t('quote', { x: esc(it.n) })}</span>` : ''}</p>`;
   }).join('')}</div>`;
 }
-
-// Контейнер лишається й порожнім: на нього опирається paintBar().
-export function replyBar(recs) {
-  if (modeOf(recs) !== 'rate') return '';
-  const n = rs.ready ? missing(recs).length : 0;
-  return `<div class="reply-bar">${n ? `<button class="btn primary" data-act="rate-all">${icon('upload')}${t('reply.all')}<small>${n}</small></button>` : ''}</div>`;
+// Рядок під шапкою живого списку: хто бачить мої оцінки. Коли автор відкрив список
+// уже після моїх оцінок — помітне повідомлення, яке треба закрити самому.
+function whoHtml(recs, mode) {
+  const owner = esc(ownerName(recs));
+  if (mode === 'signin') return `<p class="who-line">${recs.open ? t('who.signin') : cap(t('who.closed', { owner }))}</p>`;
+  if (recs.open && rs.ready && openNotice(true, Object.keys(rs.mine.items).length, replyMem.get(rs.owner).open)) {
+    return `<div class="who-box" role="status"><div><b>${t('who.changed')}</b><p>${cap(t('who.open', { owner }))}</p></div>
+      <button class="btn" data-act="who-ok">${t('who.ok')}</button></div>`;
+  }
+  return `<p class="who-line">${cap(t(recs.open ? 'who.open' : 'who.closed', { owner }))}</p>`;
+}
+function barHtml(recs) {
+  if (rs.failed) return `<p class="who-line bad">${t('reply.load.fail')} <button class="btn sm" data-act="reply-reload">${t('retry')}</button></p>`;
+  if (!rs.ready) return `<p class="who-line">${t('reply.loading')}</p>`;
+  const n = toSend(recs).length;
+  return n ? `<button class="btn primary" data-act="rate-all">${icon('upload')}${t('reply.all')}<small>${n}</small></button>` : '';
 }
 
-// Малюємо картку чи смугу на місці — без перемальовування сторінки, щоб не
-// збити фокус і прокрутку.
-const paint = id => {
-  const el = document.querySelector(`.rcard[data-id="${CSS.escape(id)}"] .reply`), x = xOf(id);
-  if (el && x) el.outerHTML = replyBox(x, cur);
-};
-const paintBar = () => { const el = document.querySelector('.reply-bar'); if (el && cur) el.outerHTML = replyBar(cur); };
+// Усе, що на сторінці списку залежить від оцінювання, — шматками за ключем:
+// 'banner', 'who', 'keep', 'bar' і на кожен тайтл 'o:' (оцінки інших), 'r:' (моя
+// оцінка), 'n:' (коментар), 't:' (стан збереження). my(id) — моя оцінка тут.
+export function replyParts(recs) {
+  const mode = modeOf(recs), own = isOwn(recs), rate = mode === 'rate' && !own;
+  // власник бачить оцінки інших так само, як друг, якому їх відкрито
+  const others = !!recs.open && rs.ready && (rate || ownSigned(recs));
+  const signin = mode === 'signin' && !own ? `<button class="btn" data-act="rate-signin">${icon('user')}${t('reply.signin')}</button>` : '';
+  const zones = new Map([
+    ['banner', own ? `<div class="own-banner">${icon('user')}<span>${t('recs.own')}</span></div>` : ''],
+    ['who', recs.uid && !own ? whoHtml(recs, mode) : ''],
+    ['keep', own ? '' : keepButton(recs)],
+    ['bar', rate ? barHtml(recs) : ''],
+  ]);
+  for (const x of recs.items) {
+    zones.set('o:' + x.id, others ? othersHtml(x.id) : '');
+    zones.set('r:' + x.id, rate ? scoreHtml(x) : signin);
+    zones.set('n:' + x.id, rate ? noteHtml(x) : '');
+    zones.set('t:' + x.id, rate ? stateHtml(x.id) : '');
+  }
+  return { own, zones, my: id => (rate && rs.ready ? rs.mine.items[id]?.s || 0 : 0) };
+}
+// Моя оцінка тайтла на відкритому зараз списку (0 — немає): з нею тайтл іде на полицю.
+export const takeScore = id => (cur && rs.ready && modeOf(cur) === 'rate' && !isOwn(cur) ? rs.mine.items[id]?.s || 0 : 0);
 
 // ── стан ──────────────────────────────────────────────────────────
+// Повертає true, коли стан почато наново (інший список чи інша людина): сторінку
+// тоді малює викликач.
 export function loadReplyState(recs, redrawFn) {
   cur = recs; redraw = redrawFn;
   const key = `${recs?.uid || ''}|${meUid()}`;
-  if (key === rs.key) return;
-  flushNotes();   // недописаний коментар піде ще у стару відповідь
-  const first = wasKey === null;
-  wasKey = key;
-  Object.assign(rs, { key, owner: recs?.uid || '', ready: false, mine: blank(), saved: {}, others: {}, confirmed: false });
-  if (!first) redraw();
+  if (key === rs.key) { trackOpen(); return false; }
+  rs = fresh(key, recs?.uid || '', meUid());
   fetchReply();
+  return true;
 }
-// Власна відповідь (а на відкритому списку й чужі). Не завантажилась — поля
-// лишаються вимкненими, а спробу повторюємо, коли повернеться мережа.
+// Запам'ятовуємо, яким оцінювач бачив перемикач автора: закритим чи відкритим.
+// Поки висить повідомлення «список відкрили», відкритим його не вважаємо.
+function trackOpen() {
+  if (!cur || !rs.ready || !rs.owner || modeOf(cur) !== 'rate') return;
+  const seen = replyMem.get(rs.owner).open;
+  if (!cur.open) { if (seen !== false) replyMem.set(rs.owner, { open: false }); }
+  else if (seen !== true && !openNotice(true, Object.keys(rs.mine.items).length, seen)) replyMem.set(rs.owner, { open: true });
+}
+// Власна відповідь (а на відкритому списку й чужі). Одразу після входу запит
+// може не пройти, тож двічі повторюємо самі; далі — кнопка «спробувати ще» і
+// повернення мережі. Поки не завантажилось, шкала видна, але вимкнена.
 function fetchReply() {
-  const key = rs.key, recs = cur;
-  if (!recs || rs.ready || modeOf(recs) !== 'rate') return;
+  const st = rs, recs = cur, own = ownSigned(recs);
+  if (!recs || st.ready || st.loading || (modeOf(recs) !== 'rate' && !own)) return;
+  st.loading = true;
   Promise.all([
-    cloud.loadReply(rs.owner, meUid()),
+    own ? null : cloud.loadReply(st.owner, st.me),
     // чужі оцінки — додаток: їхня відсутність не заважає оцінювати
-    recs.open ? cloud.loadReplies(rs.owner).catch(e => { console.warn('оцінки друзів', e); return {}; }) : {},
+    recs.open ? cloud.loadReplies(st.owner).catch(e => { console.warn('оцінки інших', e); return {}; }) : {},
   ]).then(([mine, others]) => {
-    if (rs.key !== key || rs.ready) return;   // повторна спроба могла впоратись першою
-    Object.assign(rs, { ready: true, mine: mine || blank(), saved: structuredClone((mine || blank()).items), others });
+    Object.assign(st, { loading: false, ready: true, failed: false, mine: mine || blank(), saved: structuredClone((mine || blank()).items), others });
+    if (st === rs) { trackOpen(); redraw(); }
+  }).catch(e => {
+    console.warn('мої оцінки', e);
+    st.loading = false;
+    if (st !== rs) return;
+    if (++st.tries < 3) return void setTimeout(() => { if (st === rs) fetchReply(); }, 1200 * st.tries);
+    st.failed = true;
     redraw();
-  }).catch(e => { if (rs.key === key && !rs.ready) toast(t('toast.reply.load', { e: e?.message || '' }), { ms: 5000 }); });
+  });
 }
-addEventListener('online', fetchReply);
+const reload = () => { if (rs.ready) return; rs.tries = 0; rs.failed = false; redraw(); fetchReply(); };
+// Сторінка знову на видноті або минула хвилина: чи не з'явилось нових оцінок інших.
+export function refreshReplies() {
+  const st = rs, recs = cur;
+  if (!recs || !st.ready || !(modeOf(recs) === 'rate' || ownSigned(recs))) return;
+  if (!recs.open) { if (Object.keys(st.others).length) { st.others = {}; redraw(); } return; }
+  cloud.loadReplies(st.owner).then(others => { if (st === rs && !same(others, st.others)) { st.others = others; redraw(); } })
+    .catch(e => console.warn('оцінки інших', e));
+}
 
-// Перша відповідь: потрібен підпис, а на відкритому списку ще й згода, що
-// оцінки бачать усі друзі автора. Відмова — нічого не зберігаємо.
-const needsAsk = () => !store.settings.name || (cur?.open && !rs.confirmed && !Object.keys(rs.mine.items).length);
-async function mayReply() {
-  const key = rs.key;
-  if (!rs.ready) return false;
-  if (!store.settings.name) {
-    const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: store.settings.name || '', placeholder: t('name.ph') });
-    if (!v) return false;
-    store.setSetting('name', v.slice(0, 80));
-    cloud.publishNow().catch(() => {});
+// Підпис: без нього оцінку не надсилаємо, але й не викидаємо — вона лишається на
+// картці як «не надіслано», з кнопкою вказати підпис.
+async function sign(st, ids) {
+  ids.forEach(id => st.state.set(id, 'unsigned'));
+  redraw();
+  const v = await promptBox({ title: t('reply.name.title'), text: t('reply.name.text', { owner: cap(ownerName(cur)) }), placeholder: t('name.ph') });
+  if (!v) return false;
+  store.setSetting('name', v.slice(0, 80));
+  cloud.publishNow().catch(() => {});
+  return true;
+}
+// Надсилання вже внесених у st.mine змін: спершу підпис, на відкритому списку —
+// згода, що оцінки бачать усі (відмова повертає як було), далі — у чергу.
+// Коли питати нічого, до черги доходимо без жодного await: запис, початий перед
+// самим виходом зі сторінки, уже порахований у pending.
+async function commit(ids) {
+  const st = rs;
+  if (!store.settings.name && (!await sign(st, ids) || st !== rs)) return false;
+  ids = [...new Set([...ids, ...stuck(st)])];   // разом із тим, що чекало підпису чи мережі
+  if (cur?.open && !st.confirmed && !Object.keys(st.saved).length
+    && !await confirmBox({ title: t('reply.open.title'), text: t('reply.open.text'), ok: t('reply.open.ok') })) {
+    for (const id of ids) {
+      if (Object.hasOwn(st.saved, id)) st.mine.items[id] = structuredClone(st.saved[id]); else delete st.mine.items[id];
+      st.state.delete(id);
+    }
+    if (st === rs) redraw();
+    return false;
   }
-  if (cur?.open && !rs.confirmed && !Object.keys(rs.mine.items).length
-    && !await confirmBox({ title: t('reply.open.title'), text: t('reply.open.text'), ok: t('reply.open.ok') })) return false;
-  rs.confirmed = true;
-  return rs.key === key;   // поки висів діалог, людина могла піти зі сторінки
+  if (st !== rs) return false;   // поки висів діалог, людина могла піти зі сторінки
+  st.confirmed = true;
+  // Без мережі запис завис би в черзі: кажемо чесно, що оцінка ще не в хмарі.
+  if (navigator.onLine === false) {
+    ids.forEach(id => st.state.set(id, 'failed'));
+    redraw();
+    toast(t('toast.reply.offline'), { ms: 5000 });
+    return false;
+  }
+  return send(st, ids);
 }
 
 // Елемент без оцінки й коментаря у відповіді не тримаємо.
-function apply(id, s, n) {
-  const prev = rs.mine.items[id];
-  if (s || n) rs.mine.items[id] = replyItem(xOf(id), s, n, Date.now());
-  else delete rs.mine.items[id];
-  return prev;
+function apply(st, id, s, n) {
+  if (s || n) st.mine.items[id] = replyItem(xOf(id), s, n, Date.now());
+  else delete st.mine.items[id];
 }
-// Без мережі не надсилаємо взагалі: запис завис би в черзі, а на екрані
-// висіла б оцінка, якої в хмарі немає. Стан при цьому не міняємо.
-const offline = () => {
-  if (navigator.onLine !== false) return false;
-  toast(t('toast.reply.offline'), { ms: 5000 });
-  return true;
-};
-// Надсилаємо чергою, щоб відповіді не обганяли одна одну. rs.saved — останній
-// підтверджений хмарою стан: не вдалося — повертаємо його і перемальовуємо все,
-// тож на екрані не лишається оцінка, якої немає в хмарі (які б збої не йшли підряд).
-function send() {
-  // Стан знімаємо тут, а не в черзі: за цей час список чи акаунт могли змінитись,
-  // і тоді нова чи порожня відповідь пішла б у документ старого власника.
-  const key = rs.key, owner = rs.owner, sent = structuredClone(rs.mine.items);
-  chain = chain.then(() => {
-    if (rs.key !== key) return false;
-    // Різницю рахуємо, коли дійшла черга: rs.saved тоді вже містить усе, що
+// Запис іде одразу, без затримки; черга лише тримає порядок, щоб відповіді не
+// обганяли одна одну. Стан знімаємо тут, а не в черзі, і тримаємось свого st:
+// за цей час список чи акаунт могли змінитись, а оцінка має дійти туди, де її
+// поставили. Не вдалося — оцінка лишається на картці з позначкою «не збережено».
+function send(st, ids) {
+  ids.forEach(id => st.state.set(id, 'sending'));
+  pending++;
+  redraw();
+  const sent = structuredClone(st.mine.items);
+  chain = chain.then(async () => {
+    if (meUid() !== st.me) throw new Error(t('err.nocloud'));   // вийшли з акаунта — писати нікому
+    // Різницю рахуємо, коли дійшла черга: st.saved тоді вже містить усе, що
     // підтвердили попередні записи (інакше «поставив і одразу зняв» не дійшло б як зняття).
-    return cloud.sendReply(owner, replyPatch(rs.saved, sent)).then(() => { if (rs.key === key) rs.saved = sent; return true; });
+    const patch = replyPatch(st.saved, sent);
+    await cloud.sendReply(st.owner, patch);
+    st.saved = sent;
+    for (const id of new Set([...ids, ...Object.keys(patch.set), ...patch.del])) if (same(st.mine.items[id], sent[id])) st.state.set(id, 'saved');
+    return true;
   }).catch(e => {
-    if (rs.key === key) {
-      rs.mine.items = structuredClone(rs.saved);
-      document.querySelectorAll('.rcard[data-id]').forEach(el => paint(el.dataset.id));
-      paintBar();
-    }
-    toast(t('toast.reply.fail', { e: e?.message || '' }), { ms: 5000 });
+    console.warn('оцінка не збереглась', e);
+    for (const id of ids) if (st.state.get(id) === 'sending') st.state.set(id, same(st.mine.items[id], st.saved[id]) ? 'saved' : 'failed');
+    if (st === rs) toast(t('toast.reply.fail', { e: e?.message || '' }), { ms: 5000 });
     return false;
-  });
+  }).then(ok => { pending--; if (st === rs) redraw(); return ok; });
   return chain;
 }
+const resend = () => { const ids = stuck(rs); if (cur && rs.ready && ids.length) commit(ids); };
+export { resend as resendReplies };
 
-async function setScore(el, pick) {
-  const id = el.closest('[data-id]')?.dataset.id;
-  if (!cur || !xOf(id) || !rs.ready) return;
-  const key = rs.key, input = el.closest('.reply').querySelector('[data-reply-note]');
-  const n = input ? input.value.trim() : rs.mine.items[id]?.n || '';
-  clearTimeout(timers.get(id)); timers.delete(id);
-  if (!await mayReply() || rs.key !== key || offline()) return;
-  const s = pick(rs.mine.items[id]?.s || 0);
-  apply(id, s, n);
-  paint(id); paintBar();
-  if (!await send()) return;
-  // На полиці оцінку міняємо лише там, де тайтл уже є, і лише ставимо: знята
-  // тут оцінка не стирає власну оцінку з полиці. Нових записів не створюємо.
-  if (s > 0 && store.get(id)) { flushNotes(); store.save(id, { score: s }); }
+function setScore(el, pick) {
+  const id = idOf(el), st = rs;
+  if (!cur || !xOf(id) || !st.ready) return;
+  const was = st.mine.items[id], s = pick(was?.s || 0), box = el.closest('.reply')?.querySelector('[data-reply-note]');
+  const n = box ? box.value.trim().slice(0, 500) : was?.n || '';
+  if (s === (was?.s || 0) && n === (was?.n || '')) return;
+  apply(st, id, s, n);
+  // Зняв оцінку сам — «Надіслати мої оцінки» її більше не пропонує, доки не оціню тут знову.
+  const skip = replyMem.get(st.owner).skip, had = skip.includes(id);
+  if (!s && was?.s && !had) replyMem.set(st.owner, { skip: [...skip, id].slice(-500) });
+  else if (s && had) replyMem.set(st.owner, { skip: skip.filter(v => v !== id) });
+  redraw();
+  commit([id]).then(ok => {
+    // На полиці оцінку міняємо лише там, де тайтл уже є, і лише ставимо: знята
+    // тут оцінка не стирає власну оцінку з полиці. Нових записів не створюємо.
+    if (ok && s > 0 && store.get(id) && st.mine.items[id]?.s === s) { st.shelf.add(id); store.save(id, { score: s }); }
+  });
+}
+function saveNote(id, text) {
+  const st = rs;
+  if (!cur || !xOf(id) || !st.ready) return;
+  const was = st.mine.items[id], n = text.trim().slice(0, 500);
+  if ((was?.n || '') === n) return;
+  apply(st, id, was?.s || 0, n);
+  redraw();
+  commit([id]);
+}
+// Недописане в полях коментарів — у чергу (перед виходом зі сторінки чи переходом).
+// Діалогів тут не показуємо: коли потрібен підпис чи згода, чекаємо кнопки «Зберегти».
+export function flushReplies() {
+  if (!cur || !rs.ready || !store.settings.name || (cur.open && !rs.confirmed && !Object.keys(rs.saved).length)) return;
+  document.querySelectorAll('.rcard [data-reply-note]').forEach(el => saveNote(idOf(el), el.value));
 }
 
-async function saveNote(id, text) {
-  if (!cur || !xOf(id) || !rs.ready) return;
-  const key = rs.key, n = text.trim().slice(0, 500);
-  if ((rs.mine.items[id]?.n || '') === n) return;
-  if (!await mayReply() || rs.key !== key || offline()) return;
-  apply(id, rs.mine.items[id]?.s || 0, n);
-  send();
-}
-function flushNote(id) {
-  clearTimeout(timers.get(id)); timers.delete(id);
-  const inp = document.querySelector(`.rcard[data-id="${CSS.escape(id)}"] [data-reply-note]`);
-  if (inp) saveNote(id, inp.value);
-}
-const flushNotes = () => [...timers.keys()].forEach(flushNote);
-
-// Коментар зберігається за 500 мс після набору (як pending у panel.js) і при
-// виході з поля. Питання про підпис чи згоду посеред набору не вискакує:
-// тоді чекаємо виходу з поля.
-const noteId = ev => (ev.target.matches?.('[data-reply-note]') ? ev.target.closest('[data-id]')?.dataset.id : '');
+// Коментар зберігається кнопкою «Зберегти», клавішею Enter (Shift+Enter — новий
+// рядок) і при виході з поля — одразу, без відкладання.
+const noteEl = ev => (ev.target.matches?.('[data-reply-note]') ? ev.target : null);
 document.addEventListener('input', ev => {
-  const id = noteId(ev);
-  if (!id) return;
-  clearTimeout(timers.get(id));
-  if (!needsAsk()) timers.set(id, setTimeout(() => flushNote(id), 500));
+  const el = noteEl(ev);
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight + 2, 220) + 'px';
+  const c = el.closest('.reply')?.querySelector('[data-reply-count]');
+  if (c) { c.hidden = el.value.length < 450; c.textContent = `${el.value.length}/500`; }
 });
-document.addEventListener('change', ev => { const id = noteId(ev); if (id) flushNote(id); });
+document.addEventListener('change', ev => { const el = noteEl(ev); if (el) saveNote(idOf(el), el.value); });
+document.addEventListener('keydown', ev => {
+  const el = noteEl(ev);
+  if (el && ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); saveNote(idOf(el), el.value); }
+});
+
+// Поки записи в дорозі, сторінку не можна губити: браузер перепитає перед
+// закриттям, а власне посилання, що перезавантажує сторінку («Мій список»),
+// спершу дає черзі дописати. Згортання вкладки запис не скасовує.
+addEventListener('beforeunload', ev => {
+  flushReplies();
+  if (pending > 0) { ev.preventDefault(); ev.returnValue = ''; }
+});
+addEventListener('pagehide', flushReplies);
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushReplies(); });
+document.addEventListener('click', ev => {
+  const a = ev.target.closest?.('a[href]');
+  if (!a || a.target === '_blank' || ev.button || ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
+  const url = new URL(a.href, location.href);
+  if (url.origin !== location.origin || url.hash) return;   // зміна лише хеша сторінку не вивантажує
+  flushReplies();
+  if (!pending) return;
+  ev.preventDefault();
+  toast(t('reply.st.sending'));
+  Promise.race([chain, new Promise(done => setTimeout(done, 4000))]).then(() => location.assign(url.href));
+}, true);
+addEventListener('online', () => { reload(); resend(); });
 
 // ── запам'ятати друга ─────────────────────────────────────────────
 // Живе посилання — за uid, знімок — за відбитком підпису й тайтлів. Видалений
@@ -203,7 +323,7 @@ document.addEventListener('change', ev => { const id = noteId(ev); if (id) flush
 const nameOf = recs => (recs.name || '').slice(0, 80);
 const friendId = recs => (recs.uid || snapId(nameOf(recs), recs.items));
 const listOf = recs => (recs.uid ? (recs.title || '').slice(0, 40) : '');   // назва добірки на живому посиланні
-const mayKeep = recs => !!recs && !(recs.uid && recs.uid === meUid()) && needsKeep(friends.get(friendId(recs)), listOf(recs));
+const mayKeep = recs => !!recs && !isOwn(recs) && needsKeep(friends.get(friendId(recs)), listOf(recs));
 export function keepButton(recs) {
   if (!mayKeep(recs)) return '';
   return `<button class="btn lg" data-act="friend-keep">${icon('user')}${t('fr.keep')}</button>`;
@@ -334,15 +454,24 @@ export const replyActions = {
   rate: (v, el) => setScore(el, s => (s === +v ? 0 : +v)),
   'rate-half': (v, el) => setScore(el, s => (s >= 1 && s < 10 ? (s % 1 ? Math.floor(s) : s + 0.5) : s)),
   'rate-signin': () => { try { cloud.signIn(); } catch (err) { toast(t('toast.signin.fail', { e: err.message }), { ms: 5000 }); } },
-  // Мої оцінки з полиці для тайтлів списку, яких ще немає у відповіді — одним записом.
+  'rate-clear': (v, el) => setScore(el, () => 0),
+  'note-save': (v, el) => { const box = el.closest('.reply')?.querySelector('[data-reply-note]'); if (box) saveNote(idOf(el), box.value); },
+  // «повторити» й «вказати підпис»: усе, що ще не в хмарі, — однією спробою
+  'reply-retry': resend,
+  'reply-reload': reload,
+  'who-ok': () => { if (rs.owner) replyMem.set(rs.owner, { open: true }); redraw(); },
+  // Мої оцінки з полиці для тайтлів списку, яких ще немає у відповіді — одним
+  // записом; спершу показуємо, що саме піде авторові.
   'rate-all': async () => {
-    if (!cur || !rs.ready) return;
-    const key = rs.key, ids = missing(cur);
-    if (!ids.length || !await mayReply() || rs.key !== key || offline()) return;
-    const sc = shelfScores(store.list(), cur.items);
-    for (const id of ids) apply(id, sc[id], rs.mine.items[id]?.n || '');
-    ids.forEach(paint); paintBar();
-    if (await send()) toast(t('toast.reply.sent', { n: ids.length }));
+    const st = rs;
+    if (!cur || !st.ready) return;
+    const rows = toSend(cur);
+    if (!rows.length) return;
+    const text = `${t('reply.all.text', { owner: cap(ownerName(cur)) })}\n${scoreLines(rows.map(r => ({ t: r.t, s: fmtScore(r.s) })))}`;
+    if (!await confirmBox({ title: t('reply.all.title', { n: rows.length }), text, ok: t('reply.all.ok') }) || st !== rs) return;
+    for (const r of rows) apply(st, r.id, r.s, st.mine.items[r.id]?.n || '');
+    redraw();
+    if (await commit(rows.map(r => r.id))) toast(t('toast.reply.sent', { n: rows.length }));
   },
 };
 

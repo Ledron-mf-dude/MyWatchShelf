@@ -282,10 +282,11 @@ export async function openPreview(id) {
     } catch { if (ui.overlay?.abort === ac) draw({}, false); }
   }
 }
-export function addFromPreview(status) {
+// score — моя оцінка цього тайтла на списку друга: на полицю він іде вже з нею.
+export function addFromPreview(status, score = 0) {
   const x = recall(ui.overlay.id);
   if (!x) return;
-  const patch = { status };
+  const patch = { status, ...(score ? { score } : {}) };
   if (status === 'done' && x.meta?.seasons) {
     const last = Math.max(0, ...Object.keys(x.meta.seasons).map(Number));
     if (last) { patch.season = last; patch.episode = x.meta.seasons[last]; }
@@ -490,7 +491,7 @@ export async function openShare(list = '') {
           ${navigator.share ? `<button class="btn" data-act="native-share">${icon('share')}${t('send')}</button>` : ''}
           ${list ? `<button class="btn" data-act="list-edit" data-v="${esc(list)}">${icon('filter')}${t('edit')}</button>` : ''}
           ${cond ? `<button class="btn" data-act="list-rebuild" data-v="${esc(list)}">${icon('refresh')}${t('rebuild.btn')}</button>` : ''}
-          <a class="btn" href="${esc(link)}" target="_blank" rel="noopener">${icon('external')}${t('share.preview')}</a>
+          <a class="btn" href="${esc(link + '&me=1')}" target="_blank" rel="noopener">${icon('external')}${t('share.preview')}</a>
         </div>
         <p class="muted small">${t('share.privacy')}${S.name ? ' ' + t('share.signed', { name: esc(S.name) }) : ''}</p>
       </div>

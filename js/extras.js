@@ -2,7 +2,7 @@
 // сьогодні», збіг смаків із автором рекомендацій і картка-підсумок.
 import {
   KIND_IDS, esc, safeUrl, fmtRating, fmtScore, fmtRuntime, genreName, kindLabel, insights, agenda, dayDiff,
-  pickCandidates, tasteMatch, matchTag,
+  pickCandidates, tasteMatch, matchTag, TASTE_MIN,
 } from './logic.js';
 import { t, tn, getLang } from './i18n.js';
 import * as catalog from './meta.js';
@@ -127,21 +127,25 @@ export const pickActions = {
 
 // ── збіг смаків ───────────────────────────────────────────────────
 // Повертає панель для сторінки рекомендацій і підпис для кожного тайтла.
-export function taste(items) {
-  const m = tasteMatch(store.list(), items);
+// replyScores — мої оцінки на цьому списку ({ id: оцінка }): «моя оцінка» тут —
+// з полиці, а коли там немає, то поставлена на списку. Відсоток показуємо лише
+// зі спільних оцінок від TASTE_MIN: за одним тайтлом він нічого не каже.
+export function taste(items, replyScores = {}) {
+  const m = tasteMatch(store.list(), items, replyScores);
   const tags = new Map(m.rows.map(r => [r.x.id, { tag: matchTag(r), mine: r.mine }]));
-  if (!store.list().length || !items.length) return { panel: '', tags };
+  if ((!store.list().length && !m.scored) || !items.length) return { panel: '', tags };
+  const enough = m.scored >= TASTE_MIN;
   const panel = `<section class="taste">
-    ${m.pct !== null ? `<div class="taste-pct"><b>${m.pct}%</b><small>${t('taste.match')}</small></div>` : ''}
-    <div><b>${m.pct === null ? t('taste.none') : m.pct >= 75 ? t('taste.high') : m.pct >= 50 ? t('taste.mid') : t('taste.low')}</b>
-      <p>${t('taste.line', { a: m.common, b: m.unseen })}${m.scored ? ' ' + t('taste.scored', { n: m.scored }) : ''}</p></div></section>`;
+    ${enough ? `<div class="taste-pct"><b>${m.pct}%</b><small>${t('taste.match')}</small></div>` : ''}
+    <div><b>${!m.scored ? t('taste.none') : !enough ? t('taste.few') : m.pct >= 75 ? t('taste.high') : m.pct >= 50 ? t('taste.mid') : t('taste.low')}</b>
+      <p>${t('taste.line', { a: m.common, b: m.unseen })}${m.scored ? ' ' + t('taste.scored', { n: `${m.scored} ${tn('title', m.scored)}` }) : ''}</p></div></section>`;
   return { panel, tags };
 }
 export const tasteBadge = info => {
   if (!info) return '';
-  const label = { match: t('taste.tag.match'), differ: t('taste.tag.differ'), new: t('taste.tag.new'), have: '' }[info.tag];
+  const label = { match: t('taste.tag.match'), close: t('taste.tag.close'), differ: t('taste.tag.differ'), new: t('taste.tag.new'), have: '' }[info.tag];
   if (!label) return '';
-  return `<span class="badge static ${{ match: 'ok', differ: 'warn', new: 'add' }[info.tag]}">${label}${info.mine ? ` · ${t('taste.mine', { n: info.mine })}` : ''}</span>`;
+  return `<span class="badge static ${{ match: 'ok', close: '', differ: 'warn', new: 'add' }[info.tag]}">${label}${info.mine ? ` · ${t('taste.mine', { n: fmtScore(info.mine) })}` : ''}</span>`;
 };
 
 // ── картка-підсумок ───────────────────────────────────────────────

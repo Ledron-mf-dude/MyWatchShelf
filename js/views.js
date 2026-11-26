@@ -8,7 +8,7 @@ import { t, tn } from './i18n.js';
 import * as catalog from './meta.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
-import { replyBox, othersLine, replyBar, keepButton } from './friends.js';
+import { replyParts } from './friends.js';
 import { $, app, icon, ph, remember, dropdown, selects } from './ui.js';
 
 const S = store.settings;
@@ -16,8 +16,9 @@ export const view = {
   route: 'home',
   f: { q: '', kind: 'all', status: 'all', genres: [], list: '', from: '', to: '', min: '', mine: '' },
   disc: { type: 'series', genre: '', from: '', to: '', min: '', sort: 'pop', items: [], feeds: [], pool: null, live: false, loading: false, more: true, error: '', key: '' },
-  recs: null,
-  home: null,   // добірки каталогу для головної, щоб не тягнути їх щоразу
+  recs: null,   // відкритий чужий список; fail — чому він не відкрився ({ kind, name, uid })
+  fail: null,
+  home: null,  // добірки каталогу для головної, щоб не тягнути їх щоразу
 };
 const SORTS = ['updated', 'added', 'score', 'imdb', 'progress', 'title', 'year'];
 const canPlus = e => e.type === 'series' && e.status !== 'done' && e.status !== 'dropped';
@@ -398,32 +399,79 @@ export function renderStats() {
 }
 
 // ── чужі рекомендації ─────────────────────────────────────────────
+// Сторінка — це незмінний каркас (шапка, постери, назви) і шматки, що залежать
+// від полиці, входу й оцінок. Після зміни даних міняємо лише шматки (updateRecs):
+// постери не блимають, прокрутка й поле коментаря лишаються на місці.
+const zoneHtml = new Map();
+function recParts(recs) {
+  const { own, zones, my } = replyParts(recs), { items } = recs;
+  // «моя оцінка» для збігу смаків — з полиці, а коли там немає, то поставлена тут
+  const tm = taste(items, Object.fromEntries(items.map(x => [x.id, my(x.id)]).filter(([, s]) => s)));
+  zones.set('taste', own ? '' : tm.panel);
+  for (const x of items) {
+    const have = store.get(x.id);
+    // власникові ні «збіг», ні «Уже в тебе» ні до чого
+    zones.set('a:' + x.id, own ? '' : `${tasteBadge(tm.tags.get(x.id))}<button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : my(x.id) ? t('take.scored') : t('take')}</button>`);
+  }
+  return zones;
+}
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+// Список не відкрився: без тексту помилки з глибини, лише що сталося й що робити.
+function renderRecsFail() {
+  const f = view.fail;
+  app.innerHTML = !f ? `<div class="empty"><b>${t('recs.loading')}</b></div>`   // ще вантажиться
+    : f.kind === 'nolist'
+    ? `<div class="empty">${icon('folder')}<b>${t('recs.nolist.title')}</b><p>${cap(t('recs.nolist.text', { owner: esc(f.name || t('reply.author')) }))}</p>
+        <a class="btn primary" href="#u=${esc(f.uid)}">${t('recs.nolist.go')}</a></div>`
+    : f.kind === 'net'
+      ? `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.net.text')}</p><button class="btn primary" data-act="recs-retry">${icon('refresh')}${t('retry')}</button></div>`
+      : `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.bad.text')}</p></div>`;
+}
 export function renderRecs() {
-  const { name, items, title } = view.recs;
-  const tm = taste(items);
+  if (!view.recs) return renderRecsFail();
+  const { name, items, title } = view.recs, parts = recParts(view.recs);
+  zoneHtml.clear();
+  const z = (key, cls = '') => {
+    const html = parts.get(key) || '';
+    zoneHtml.set(key, html);
+    return `<div class="z ${cls}" data-z="${key}">${html}</div>`;
+  };
   items.forEach(x => remember({ id: x.id, type: x.k === 'movie' ? 'movie' : 'series', kind: x.k, title: x.t, year: x.y, rec: x }));
   const lead = items[0];
   app.innerHTML = `
+  ${z('banner')}
   <section class="hero recs-hero" data-img>
     ${lead ? `<img class="hero-bg" alt="" src="${backdrop(lead.id)}">` : ''}
     <div class="hero-in"><span class="kicker">${title ? (name ? t('recs.list.by', { name: esc(name) }) : t('recs.list')) : t('recs.kicker')}</span>
       <h1>${title ? esc(title) : name ? t('recs.title.by', { name: esc(name) }) : t('recs.title')}</h1>
       <p class="hero-plot">${t('recs.text', { n: count('title', items.length) })}</p>
-      <div class="hero-act"><a class="btn lg" href="./">${icon('library')}${t('my.shelf')}</a>${keepButton(view.recs)}</div></div>
+      ${z('keep', 'hero-act')}</div>
   </section>
-  ${tm.panel}
-  ${replyBar(view.recs)}
-  <ul class="rec-list">${items.map((x, i) => {
-    const have = store.get(x.id);
-    return `<li class="rcard" data-id="${x.id}" data-act="preview" tabindex="0">
+  ${z('who')}${z('taste')}${z('bar', 'reply-bar')}
+  <ul class="rec-list">${items.map((x, i) => `<li class="rcard" data-id="${x.id}" data-act="preview" tabindex="0">
       <span class="rec-n">${i + 1}</span>${ph(x.id, x.t, 'medium')}
-      <div class="rec-main"><h3>${esc(x.t)}</h3>
+      <div class="rec-main"><h3>${esc(x.t)}${x.s ? `<b class="rec-sm" title="${t('author.score')}">${icon('starFill')}${fmtScore(x.s)}</b>` : ''}</h3>
         <p class="row-sub">${esc([kindLabel(x.k), x.y].filter(Boolean).join(' · '))}${x.r ? ` · IMDb ${fmtRating(x.r)}` : ''}</p>
         ${x.n ? `<blockquote>${esc(x.n)}</blockquote>` : ''}
-        ${tasteBadge(tm.tags.get(x.id))}
-        <button class="btn ${have ? '' : 'primary'}" data-act="take" ${have ? 'disabled' : ''}>${icon(have ? 'check' : 'plus')}${have ? t('have.already') : t('take')}</button>
-        ${othersLine(x.id, view.recs)}${replyBox(x, view.recs)}</div>
+        ${z('a:' + x.id, 'rec-acts')}${z('o:' + x.id)}
+        <div class="reply" data-act="reply-box">${z('r:' + x.id)}${z('n:' + x.id)}${z('t:' + x.id, 'reply-st')}</div></div>
       ${x.s ? `<div class="rec-score"><b>${fmtScore(x.s)}</b><small>${t('author.score')}</small></div>` : ''}
-    </li>`;
-  }).join('') || `<li class="empty">${icon('star')}<b>${t('recs.empty.title')}</b><p>${t('recs.empty.text')}</p></li>`}</ul>`;
+    </li>`).join('') || `<li class="empty">${icon('star')}<b>${t('recs.empty.title')}</b><p>${t('recs.empty.text')}</p></li>`}</ul>`;
+}
+// Оновлення на місці: лише шматки, що змінились. Поле, в якому саме набирають
+// коментар, не чіпаємо (оновиться наступного разу); натиснутій кнопці повертаємо фокус.
+export function updateRecs() {
+  if (!view.recs || !$('.rec-list', app)) return renderRecs();
+  const act = document.activeElement;
+  for (const [key, html] of recParts(view.recs)) {
+    if (zoneHtml.get(key) === html) continue;
+    const el = app.querySelector(`[data-z="${key}"]`);
+    if (!el) continue;
+    const mine = el.contains(act);
+    if (mine && act.matches('textarea')) continue;
+    const again = mine && act.dataset.act ? `[data-act="${act.dataset.act}"]${act.dataset.v ? `[data-v="${act.dataset.v}"]` : ''}` : '';
+    el.innerHTML = html;
+    zoneHtml.set(key, html);
+    if (again) el.querySelector(again)?.focus({ preventScroll: true });
+  }
 }

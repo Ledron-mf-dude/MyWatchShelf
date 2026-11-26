@@ -1,17 +1,17 @@
 // Каркас застосунку: шапка, навігація, маршрути, глобальні події.
-import { esc, decodeRecs, colName } from './logic.js';
+import { esc, decodeRecs, recsHash, listView, fmtScore } from './logic.js';
 import { t, tn, setLang, getLang, LANGS } from './i18n.js';
 import { store } from './store.js';
 import { cloud } from './cloud.js';
 import { $, $$, app, layer, icon, toast, ui, actions, on, closeOverlay, recall, promptBox, confirmBox, selects } from './ui.js';
 import * as catalog from './meta.js';
-import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs } from './views.js';
+import { view, renderHome, renderLibrary, updateLibrary, renderDiscover, resetDiscover, loadDiscover, drawDiscover, renderStats, renderRecs, updateRecs } from './views.js';
 import {
   openCard, openPreview, openPalette, openShare, drawCard, plus, addItem, addFromPreview, pickResult, dropUrl, palKind,
   cardActions, buildActions, loadDemo, flushCard,
 } from './panel.js';
 import { renderCalendar, pickActions, wrapActions } from './extras.js';
-import { replyActions, friendActions, loadReplyState, social, renderFriends } from './friends.js';
+import { replyActions, friendActions, loadReplyState, refreshReplies, flushReplies, resendReplies, takeScore, social, renderFriends } from './friends.js';
 import { renderShare, shareActions } from './shared.js';
 
 const S = store.settings;
@@ -50,12 +50,12 @@ function drawChrome() {
     ${recs ? '<span class="grow"></span>' : `<nav class="nav" aria-label="${t('sections')}">${NAV.map(([r]) => `<a class="${here(r)}" href="${href(r)}">${t('nav.' + r)}</a>`).join('')}</nav>
     <button class="searchbtn" data-act="add" aria-label="${t('search.btn')}">${icon('search')}<span>${t('search.btn')}</span><kbd>/</kbd></button>`}
     ${recs ? `<a class="btn" href="./">${icon('library')}${t('my.shelf')}</a>` : `
-    <button class="btn primary addbtn" data-act="add">${icon('plus')}<span>${t('add')}</span></button>
+    <button class="btn primary addbtn" data-act="add">${icon('plus')}<span>${t('add')}</span></button>`}
     <div class="dd">
       <button class="acct st-${cloud.available ? cloud.state : 'local'}" data-act="menu" aria-haspopup="true" aria-label="${t('account.aria')}" title="${esc(stateText())}">
         ${u ? `<span class="avatar">${initial(u)}</span>` : icon('user')}<i class="state"></i></button>
       <div class="pop menu" id="menu" hidden></div>
-    </div>`}`;
+    </div>`;
   tabs.hidden = recs;
   paintDot();
   const tab = ([r, ic]) => `<a class="tab ${here(r)}" href="${href(r)}">${icon(ic)}<span>${t('nav.' + r)}</span></a>`;
@@ -68,25 +68,26 @@ function toggleMenu(force) {
   if (!menu) return;
   const open = force ?? menu.hidden;
   if (open) {
-    const u = cloud.user, nShare = store.list().filter(e => e.rec || e.lists?.length).length;
+    // на сторінці чужого списку меню коротке: вхід, підпис, мова, тема
+    const u = cloud.user, nShare = store.list().filter(e => e.rec || e.lists?.length).length, recs = view.route === 'recs';
     menu.innerHTML = `
       ${cloud.available ? (u
         ? `<div class="who"><span class="avatar lg">${initial(u)}</span><div><b>${esc(u.name || t('menu.google'))}</b><small>${esc(u.email)}</small><em class="st-${cloud.state}"><i class="state"></i>${stateText()}</em></div></div>`
         : `<div class="who signin"><p>${t('menu.signin.text')}</p><button class="btn primary" data-act="signin">${icon('user')}${t('menu.signin')}</button></div>`)
         : `<div class="who"><p>${t('menu.local.text')}</p></div>`}
-      <hr>
+      <hr>${recs ? '' : `
       <button data-act="go" data-v="calendar">${icon('calendar')}${t('nav.calendar')}</button>
       <button data-act="go" data-v="friends" class="${social.unseen() ? 'fnew' : ''}">${icon('user')}${t('nav.friends')}</button>
       <button data-act="go" data-v="share">${icon('share')}${t('nav.share')}<small>${nShare}</small></button>
       <button data-act="tonight">${icon('dice')}${t('pick.title')}</button>
-      <hr>
+      <hr>`}
       <button data-act="name">${icon('user')}${t('menu.name')}<small>${esc(S.name || t('not.set'))}</small></button>
       <hr>
       <button data-act="lang">${icon('globe')}${t('menu.lang')}<small>${LANGS.find(l => l[0] === getLang())[1]}</small></button>
-      <button data-act="theme">${icon('sun')}${t('menu.theme')}<small>${t('theme.' + S.theme)}</small></button>
+      <button data-act="theme">${icon('sun')}${t('menu.theme')}<small>${t('theme.' + S.theme)}</small></button>${recs ? '' : `
       <button data-act="demo">${icon('sparkle')}${t('demo')}</button>
       <button data-act="export">${icon('download')}${t('menu.export')}</button>
-      <button data-act="import">${icon('upload')}${t('menu.import')}</button>
+      <button data-act="import">${icon('upload')}${t('menu.import')}</button>`}
       ${u ? `<hr><button data-act="signout">${icon('logout')}${t('menu.signout')}</button>` : ''}`;
   }
   menu.hidden = !open;
@@ -102,46 +103,73 @@ function paintDot() {
 }
 function setTitle() {
   document.title = view.route === 'recs'
-    ? `${view.recs?.title || (view.recs?.name ? t('title.recs.by', { name: view.recs.name }) : t('title.recs'))} · ${t('brand')}`
+    ? `${view.fail ? t('recs.fail.title') : view.recs?.title || (view.recs?.name ? t('title.recs.by', { name: view.recs.name }) : t('title.recs'))} · ${t('brand')}`
     : view.route === 'home' ? `${t('brand')} — ${t('brand.long')}` : `${t('nav.' + view.route)} · ${t('brand')}`;
 }
+// Чужий список за адресою (recsHash): { recs } або { fail } — чому його не показати.
+// #u=<uid> — загальні рекомендації; #u=<uid>&c=<ключ> — добірка за сталим ключем
+// (назву дає мапа cols автора); #u=<uid>&l=<назва> — старі посилання за назвою;
+// #r=<знімок> — список у самому посиланні. uid і open потрібні оцінюванню: чий це
+// список і чи бачать оцінки всі; у знімка їх немає — оцінювати нікому.
+async function loadRecs(raw) {
+  const h = recsHash(raw);
+  if ('snap' in h) {
+    let r = null;
+    try { r = await decodeRecs(h.snap); } catch (err) { console.warn('знімок', err); }
+    return r ? { recs: { ...r, uid: '', open: false, me: h.me } } : { fail: { kind: 'bad' } };
+  }
+  if (!h.uid) return { fail: { kind: 'bad' } };   // порожній чи негодящий uid до хмари не доходить
+  const v = listView(await cloud.loadPublic(h.uid), h.key, h.list);
+  if (!v) return { fail: { kind: 'bad' } };
+  return v.missing ? { fail: { kind: 'nolist', name: v.name, uid: h.uid } } : { recs: { ...v, uid: h.uid, me: h.me } };
+}
+// Живий список оновлюється сам: коли вкладка знову на видноті й раз на хвилину.
+// Змінився — перемальовуємо, але не тоді, коли саме набирають коментар.
+let refreshing = false;
+async function refreshRecs() {
+  const was = view.recs, raw = location.hash.slice(1);
+  if (view.route !== 'recs' || !was?.uid || document.hidden || refreshing) return;
+  refreshing = true;
+  try {
+    const { recs } = await loadRecs(raw);
+    if (!recs || view.recs !== was || location.hash.slice(1) !== raw) return;
+    if (JSON.stringify(recs) !== JSON.stringify(was)) {
+      if (document.activeElement?.matches?.('[data-reply-note]')) return;
+      // змінився лише перемикач «оцінки бачать усі» — досить оновити шматки
+      const full = JSON.stringify({ ...recs, open: 0 }) !== JSON.stringify({ ...was, open: 0 });
+      view.recs = recs;
+      setTitle();
+      loadReplyState(recs, recsRedraw);
+      refresh(full ? renderRecs : updateRecs);
+    }
+    refreshReplies();
+  } catch (err) { console.warn('оновлення списку', err); } finally { refreshing = false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRecs(); });
+setInterval(refreshRecs, 60000);
+
 async function route() {
+  flushReplies();   // недописаний коментар на списку, з якого йдемо
   closeOverlay();
   const raw = location.hash.slice(1);
   if (raw.startsWith('u=') || raw.startsWith('r=')) {
-    view.route = 'recs';
-    drawChrome();
-    app.innerHTML = `<div class="empty"><b>${t('recs.loading')}</b></div>`;
-    try {
-      if (raw.startsWith('u=')) {
-        // #u=<uid> — загальні рекомендації; #u=<uid>&c=<ключ> — одна добірка за сталим
-        // ключем (назву дає мапа cols автора); #u=<uid>&l=<назва> — старі посилання за назвою
-        const q = new URLSearchParams(raw), key = q.get('c') || '';
-        const uid = (q.get('u') || '').replace(/[^\w-]/g, '').slice(0, 128);
-        const data = await cloud.loadPublic(uid);
-        const list = key ? colName(data?.cols, key) : (q.get('l') || '').slice(0, 40);
-        // uid і open потрібні оцінюванню: чий це список і чи бачать друзі оцінки одне одного
-        view.recs = data && (!key || list) ? { name: data.name, title: list, uid, open: !!data.open,
-          items: data.items.filter(x => (list ? (x.l || []).includes(list) : x.p !== 0)) } : null;
-        if (view.recs && list && !view.recs.items.length) view.recs = null;
-      } else {
-        view.recs = await decodeRecs(raw.slice(2));
-        if (view.recs) Object.assign(view.recs, { uid: '', open: false });   // знімок: оцінювати нікому
-      }
-      if (!view.recs) throw new Error(t('recs.missing'));
-      setTitle();
-      renderRecs();
-      loadReplyState(view.recs, refresh);
-    } catch (err) {
-      app.innerHTML = `<div class="empty">${icon('link')}<b>${t('recs.fail.title')}</b><p>${t('recs.fail.text', { e: esc(err.message || '') })}</p><a class="btn primary" href="./">${t('my.shelf')}</a></div>`;
-    }
+    Object.assign(view, { route: 'recs', recs: null, fail: null });
+    setTitle(); drawChrome();
+    renderRecs();   // «завантажую…»
+    let res;
+    try { res = await loadRecs(raw); } catch (err) { console.warn('список', err); res = { fail: { kind: 'net' } }; }
+    if (location.hash.slice(1) !== raw) return;   // поки вантажилось, людина пішла далі
+    Object.assign(view, { recs: res.recs || null, fail: res.fail || null });
+    setTitle();
+    if (view.recs) loadReplyState(view.recs, recsRedraw);
+    renderRecs();
     return;
   }
   // #/discover/anime — каталог одразу на потрібній вкладці
   const [r, sub] = raw.replace(/^\//, '').split('/');
   if (r === 'discover' && ['series', 'anime', 'movie'].includes(sub) && view.disc.type !== sub) Object.assign(view.disc, { type: sub, genre: '', from: '', to: '', min: '', sort: 'pop' });
   view.route = RENDER[r] && r !== 'recs' ? r : 'home';
-  view.recs = null;
+  view.recs = view.fail = null;
   setTitle(); drawChrome(); draw();
   scrollTo(0, 0);
 }
@@ -202,7 +230,9 @@ on({
   name: async () => {
     const v = await promptBox({ title: t('menu.name'), text: t('name.text'), value: S.name || '', placeholder: t('name.ph') });
     if (v !== null) { store.setSetting('name', v.slice(0, 80)); cloud.publishNow().catch(() => {}); toast(t('toast.name.saved')); }
+    if (v && view.route === 'recs') resendReplies();   // оцінки, що чекали підпису
   },
+  'recs-retry': route,
   share: () => openShare(),
   demo: loadDemo,
   export: exportFile,
@@ -218,11 +248,15 @@ on({
   },
   take: (v, el) => {
     const x = recall(idOf(el));
-    if (!x || !addItem(x)) return;
-    toast(t('toast.taken', { title: x.title }));
+    if (!x) return;
+    // Оцінив цей тайтл на списку друга — на полицю він іде вже переглянутим, з тією ж
+    // оцінкою (коментар лишається лише на списку друга).
+    const s = view.route === 'recs' ? takeScore(x.id) : 0;
+    if (!addItem(x, s ? { status: 'done', score: s } : {})) return;
+    toast(s ? t('toast.taken.score', { title: x.title, n: fmtScore(s) }) : t('toast.taken', { title: x.title }));
     if (ui.overlay) closeOverlay();
   },
-  'add-as': v => addFromPreview(v),
+  'add-as': v => addFromPreview(v, view.route === 'recs' ? takeScore(ui.overlay.id) : 0),
   rail: (v, el) => { const tr = $('.rail-track', el.closest('.rail')); tr.scrollBy({ left: +v * tr.clientWidth * 0.85, behavior: 'smooth' }); },
   // бібліотека
   kind: v => { view.f.kind = v; updateLibrary(); },
@@ -285,16 +319,21 @@ document.addEventListener('keydown', ev => {
 // Перемальовування після зміни даних не має зсувати людину з місця: вміст
 // замінюється цілком, сторінка на мить коротшає, і браузер скидає
 // прокрутку на початок. Тому запам'ятовуємо її й повертаємо.
-function refresh() {
+function refresh(paint = redraw) {
   const y = scrollY;
   app.style.minHeight = app.offsetHeight + 'px';
-  redraw();
+  paint();
   app.style.minHeight = '';
   if (Math.abs(scrollY - y) > 1) scrollTo({ top: y, behavior: 'instant' });
 }
+// Оцінювання просить оновити сторінку списку й тоді, коли людина з неї вже пішла
+// (запис дійшов пізніше): інших екранів це не стосується.
+function recsRedraw() { if (view.route === 'recs') updateRecs(); }
 function redraw() {
   if (view.route === 'library') updateLibrary();
   else if (view.route === 'discover') drawDiscover();
+  // чужий список оновлюємо шматками: оцінка чи закрита картка не блимають постерами
+  else if (view.route === 'recs') updateRecs();
   else if (view.route === 'home') {
     // ряди після перемальовування лишаються там, де їх прогорнули
     const pos = new Map($$('.rail').map(r => [r.dataset.rail, $('.rail-track', r).scrollLeft]));
@@ -320,8 +359,9 @@ let greeted = false;
 cloud.onChange(() => {
   drawChrome();
   if (view.route === 'home' && !ui.overlay) draw();
-  // увійшли чи вийшли на чужому списку — оцінки друга завантажуємо наново
-  if (view.route === 'recs' && view.recs) loadReplyState(view.recs, refresh);
+  // увійшли чи вийшли на чужому списку — оцінки завантажуємо наново, а шкала
+  // з'являється одразу, щойно відомо, хто це
+  if (view.route === 'recs' && view.recs && loadReplyState(view.recs, recsRedraw)) updateRecs();
   if (cloud.lastError) { toast(t('toast.signin.fail', { e: cloud.lastError }), { ms: 5000 }); cloud.lastError = ''; }
   if (cloud.justSignedIn && cloud.state === 'synced' && !greeted) { greeted = true; toast(t('toast.signedin')); }
 });

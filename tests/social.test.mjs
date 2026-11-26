@@ -154,7 +154,7 @@ test('canWrite: без входу — завжди, з входом — лише
 
 const F = (id, o = {}) => cleanFriend({ id, uid: id, name: id, kind: 'live', follow: false, added: 1, updated: 1, ...o });
 const R = (name, items) => cleanReply({ name, updated: 10, items });
-test('friendTable: відповідь має перевагу, ★ — з рекомендацій, одна людина — один стовпець', () => {
+test('friendTable: оцінка мого списку й рекомендація — окремо; одна людина — один стовпець', () => {
   const tb = friendTable({
     entries: [E('tt0000001', { score: 10 })],
     friends: [F('oleh', { follow: true }), F('ira', { added: 2 })],
@@ -163,11 +163,13 @@ test('friendTable: відповідь має перевагу, ★ — з рек
   });
   assert.deepEqual(tb.cols.map(c => c.name), ['Олег', 'Іра']);
   const a = tb.rows.find(r => r.id === 'tt0000001'), b = tb.rows.find(r => r.id === 'tt0000002');
-  assert.deepEqual(a.cells.oleh, { s: 8, n: '', rec: true });
-  assert.equal(a.avg, 8.8); assert.equal(a.mine, 10); assert.equal(a.have, true);
-  assert.deepEqual(b.cells.oleh, { s: 9, n: '', rec: true });
+  assert.deepEqual(a.cells.oleh, { s: 8, n: '', rec: true, rs: 6, rn: '' });
+  assert.equal(a.avg, 8.8); assert.equal(a.mine, 10); assert.equal(a.have, true); assert.equal(a.only, false);
+  assert.deepEqual(b.cells.oleh, { s: 0, n: '', rec: true, rs: 9, rn: '' });
   assert.equal(b.have, false); assert.equal(b.cells.ira, undefined);
-  assert.deepEqual(tb.rows.map(r => r.id), ['tt0000002', 'tt0000001']);
+  assert.equal(b.avg, 9); assert.equal(b.only, true);
+  // свої тайтли — першими, рядки лише з рекомендацій — після них
+  assert.deepEqual(tb.rows.map(r => r.id), ['tt0000001', 'tt0000002']);
 });
 test('видалений друг не повертається, коли відповідає знову', () => {
   const friends = [{ id: 'oleh', deleted: true, updated: 5 }];
@@ -293,10 +295,14 @@ test('recsFor: загальні рекомендації й лише ті доб
   const items = [{ id: 'tt0000001' }, { id: 'tt0000002', p: 0, l: ['Нові'] }, { id: 'tt0000003', p: 0, l: ['Чужа'] },
     { id: 'tt0000004', l: ['Чужа'] }, { id: 'tt0000005', p: 0 }];
   const ids = f => recsFor(f, items).map(x => x.id);
-  assert.deepEqual(ids(F('oleh')), ['tt0000001', 'tt0000004']);
-  assert.deepEqual(ids(F('oleh', { lists: ['Нові'] })), ['tt0000001', 'tt0000002', 'tt0000004']);
-  assert.deepEqual(ids({ id: 'без-lists' }), ['tt0000001', 'tt0000004']);
-  assert.deepEqual(ids(null), ['tt0000001', 'tt0000004']);
+  assert.deepEqual(ids(F('oleh', { kept: true })), ['tt0000001', 'tt0000004']);
+  assert.deepEqual(ids(F('oleh', { kept: true, lists: ['Нові'] })), ['tt0000001', 'tt0000002', 'tt0000004']);
+  // загальних рекомендацій не запам'ятовували — лише запам'ятана добірка
+  assert.deepEqual(ids(F('oleh', { lists: ['Нові'] })), ['tt0000002']);
+  assert.deepEqual(ids(F('oleh')), []);
+  assert.deepEqual(ids({ id: 'без-lists' }), []);
+  assert.deepEqual(ids(null), ['tt0000001', 'tt0000004']);                      // ще не збережений друг
+  assert.deepEqual(ids(cleanFriend({ id: 's00000001', kind: 'snap', items: [] })), ['tt0000001', 'tt0000004']);
   assert.deepEqual(recsFor(F('oleh'), undefined), []);
 });
 test('friendTable: тайтл лише з чужої добірки не показується як «радив»', () => {
@@ -312,6 +318,12 @@ test('needsKeep: коли на сторінці друга потрібна кн
   assert.equal(needsKeep(F('oleh', { follow: true }), 'Нові'), true);           // цієї добірки ще не запам'ятали
   assert.equal(needsKeep(F('oleh', { follow: true, lists: ['Нові'] }), 'Нові'), false);
   assert.equal(needsKeep(cleanFriend({ id: 's00000001', kind: 'snap', items: [] }), 'Нові'), false);
+  // запам'ятали лише добірку: на загальному посиланні кнопка ще потрібна, на цій добірці — ні
+  const one = F('oleh', { follow: true, kept: false, lists: ['Нові'] });
+  assert.equal(needsKeep(one, ''), true);
+  assert.equal(needsKeep(one, 'Нові'), false);
+  // рекомендації вимкнено, але запам'ятане лишилось — кнопки немає
+  assert.equal(needsKeep(F('oleh', { follow: false, kept: true }), ''), false);
 });
 test('friendTable: id «constructor» і «toString» не ламають зведення', () => {
   const snap = cleanFriend({ id: 'toString', kind: 'snap', name: 'Знімок', follow: true, added: 2, items: [{ id: 'tt0000003', t: 'C', k: 'movie', s: 7 }] });
@@ -323,7 +335,7 @@ test('friendTable: id «constructor» і «toString» не ламають зве
   });
   assert.deepEqual(tb.cols.map(c => c.name), ['Свій', 'Знімок']);
   assert.equal(tb.rows.length, 1);
-  assert.deepEqual(tb.rows[0].cells.toString, { s: 7, n: '', rec: true });
+  assert.deepEqual(tb.rows[0].cells.toString, { s: 0, n: '', rec: true, rs: 7, rn: '' });
   const tb2 = friendTable({
     entries: [], friends: [F('constructor', { follow: true, name: 'Свій' }), F('valueOf', { name: 'Інший' })],
     replies: { valueOf: R('Ім', { tt0000001: { s: 6, t: 'A' } }) },
@@ -344,14 +356,15 @@ test('friendTable: однаковий added розрізняє id; чужа ві
 test('friendTable: знімок і відповідь лише з коментарем', () => {
   const snap = cleanFriend({ id: 's00000001', kind: 'snap', name: 'Знімок', items: [{ id: 'tt0000005', t: 'E', k: 'anime', s: 9 }] });
   const tb = friendTable({ entries: [], friends: [snap], replies: {}, recs: {} });
-  assert.deepEqual(tb.rows[0].cells.s00000001, { s: 9, n: '', rec: true });
-  // відповідь без оцінки, але з текстом: оцінка — з рекомендації, коментар лишається
+  assert.deepEqual(tb.rows[0].cells.s00000001, { s: 0, n: '', rec: true, rs: 9, rn: '' });
+  // відповідь без оцінки, але з текстом: у середню йде оцінка з рекомендації, обидва коментарі на місці
   const c = friendTable({
     entries: [], friends: [F('oleh', { follow: true })],
     replies: { oleh: R('Олег', { tt0000001: { s: 0, n: 'текст', t: 'A' } }) },
-    recs: { oleh: [{ id: 'tt0000001', t: 'A', k: 'series', s: 6 }] },
+    recs: { oleh: [{ id: 'tt0000001', t: 'A', k: 'series', s: 6, n: 'раджу' }] },
   });
-  assert.deepEqual(c.rows[0].cells.oleh, { s: 6, n: 'текст', rec: true });
+  assert.deepEqual(c.rows[0].cells.oleh, { s: 0, n: 'текст', rec: true, rs: 6, rn: 'раджу' });
+  assert.equal(c.rows[0].avg, 6); assert.equal(c.rows[0].only, false);
 });
 test('synced: id __proto__ відкидається скрізь', () => {
   const s = makeSynced('t3', r => (typeof r?.id === 'string' ? r : null));
@@ -380,7 +393,7 @@ test('socialCache: читання очищає, set замінює лише св
     assert.deepEqual(Object.keys(d.replies), ['u2']);   // секція замінена цілком
     assert.deepEqual(d.recs.f1.map(x => x.id), ['tt0000002']);   // інша секція вціліла
     socialCache.clear();
-    assert.deepEqual(socialCache.get(), { replies: {}, recs: {} });
+    assert.deepEqual(socialCache.get(), { replies: {}, recs: {}, cols: {} });
   } finally { delete globalThis.localStorage; }
 });
 
@@ -573,4 +586,66 @@ test('returnHash пускає й позначку перегляду власн�
   assert.equal(returnHash('#u=abc&me=1'), '#u=abc&me=1');
   assert.equal(returnHash('#u=abc&c=abcdef12&me=1'), '#u=abc&c=abcdef12&me=1');
   assert.equal(returnHash('#u=abc&me=2'), '');
+});
+
+// ── екран «Друзі» й «Керувати друзями» (пакет 3 після тесту друзів) ──
+import { hasKept, wantsRecs, friendLink, cutNote, replyStats } from '../js/social.js';
+
+test('cleanFriend: kept — запам’ятані загальні рекомендації; старі записи з follow вважаємо запам’ятаними', () => {
+  assert.equal(cleanFriend({ id: 'oleh' }).kept, false);
+  assert.equal(cleanFriend({ id: 'oleh', follow: true }).kept, true);                 // старий запис без поля
+  assert.equal(cleanFriend({ id: 'oleh', follow: true, kept: false }).kept, false);   // запам'ятали лише добірку
+  assert.equal(cleanFriend({ id: 'oleh', follow: false, kept: true }).kept, true);
+  assert.equal(cleanFriend({ id: 'oleh', kept: 'так' }).kept, false);
+  assert.equal(cleanFriend({ id: 's00000001', kind: 'snap', items: [] }).kept, true);
+});
+test('wantsRecs: рекомендації читаємо лише в того, кого запам’ятали й не вимкнули', () => {
+  assert.equal(wantsRecs(F('oleh', { follow: true })), true);
+  assert.equal(wantsRecs(F('oleh', { follow: true, kept: false, lists: ['Нові'] })), true);
+  assert.equal(wantsRecs(F('oleh', { follow: true, kept: false })), false);   // лише оцінив мій список
+  assert.equal(wantsRecs(F('oleh', { follow: false, kept: true })), false);
+  assert.equal(wantsRecs({ id: 'oleh', deleted: true }), false);
+  assert.equal(wantsRecs(null), false);
+  assert.equal(hasKept(F('oleh')), false);
+  assert.equal(hasKept(F('oleh', { lists: ['Нові'] })), true);
+  assert.deepEqual(recsMissing([F('oleh', { follow: true, kept: false })], {}), []);
+});
+test('friendTable: «прибрані» рекомендації зникають, оцінки мого списку лишаються', () => {
+  const data = {
+    entries: [], replies: { oleh: R('Олег', { tt0000001: { s: 8, t: 'A' } }) },
+    recs: { oleh: [{ id: 'tt0000002', t: 'B', k: 'anime', s: 9 }] },
+  };
+  const ids = f => friendTable({ ...data, friends: [f] }).rows.map(r => r.id);
+  assert.deepEqual(ids(F('oleh', { follow: true })), ['tt0000001', 'tt0000002']);
+  assert.deepEqual(ids(F('oleh', { follow: false, kept: false, lists: [] })), ['tt0000001']);
+  // оцінка мого списку для тайтла, якого в мене вже немає, — не «лише рекомендація»
+  assert.equal(friendTable({ ...data, friends: [F('oleh')] }).rows[0].only, false);
+});
+test('friendLink: загальні рекомендації, добірка за ключем або за назвою', () => {
+  assert.equal(friendLink('oleh'), '#u=oleh');
+  assert.equal(friendLink('oleh', 'Нові & старі', {}), '#u=oleh&l=' + encodeURIComponent('Нові & старі'));
+  assert.equal(friendLink('oleh', 'Нові', { abc123def0: 'Нові', zzz999zzz9: 'Інші' }), '#u=oleh&c=abc123def0');
+  assert.equal(friendLink('oleh', 'Нові', { zzz999zzz9: 'Інші' }), '#u=oleh&l=' + encodeURIComponent('Нові'));
+  assert.equal(returnHash(friendLink('oleh', 'Нові', { abc123def0: 'Нові' })), '#u=oleh&c=abc123def0');
+});
+test('cutNote: початок коментаря для клітинки', () => {
+  assert.equal(cutNote('коротко'), 'коротко');
+  assert.equal(cutNote('а'.repeat(40)), 'а'.repeat(40));
+  assert.equal(cutNote('слово '.repeat(10)), 'слово слово слово слово слово слово слов…');
+});
+test('replyStats: скільки людей і оцінок відкриє перемикач', () => {
+  const replies = { a: R('А', { tt0000001: { s: 8 }, tt0000002: { n: 'текст' } }), b: R('Б', {}), constructor: R('В', { tt0000003: { s: 5 } }) };
+  assert.deepEqual(replyStats(replies), { people: 2, scores: 3 });
+  assert.deepEqual(replyStats({}), { people: 0, scores: 0 });
+});
+test('socialCache: мапи добірок друзів (cols) чистяться як у публічному документі', async () => {
+  const mem = {};
+  globalThis.localStorage = { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; }, removeItem: k => { delete mem[k]; } };
+  try {
+    const { socialCache } = await import('../js/synced.js');
+    mem['mws.social.cache.v1'] = '{"cols":{"__proto__":{"abc123def0":"Зло"},"oleh":{"abc123def0":" Нові ","constructor":"X","BAD":"Y"}}}';
+    assert.deepEqual(socialCache.get().cols, { oleh: { abc123def0: 'Нові' } });
+    socialCache.set({ recs: {} });
+    assert.deepEqual(socialCache.get().cols, { oleh: { abc123def0: 'Нові' } });   // інша секція вціліла
+  } finally { delete globalThis.localStorage; }
 });

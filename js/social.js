@@ -241,8 +241,10 @@ export const publishOpen = (prefsSynced, socialRec) => !!prefsSynced && socialRe
 // Запис сховища friends: живий друг (kind 'live', id === uid) або знімок
 // чужого списку з посилання (kind 'snap', items — очищений масив). lists —
 // назви добірок друга, посилання на які власник відкрив і запам'ятав: лише їх
-// (і загальні рекомендації) показуємо як «радив». Мітки видалення ідуть повз
-// очищення (synced.js).
+// (і загальні рекомендації, коли їх запам'ятали — kept) показуємо як «радив».
+// kept — власник натиснув «Запам'ятати» на загальному посиланні цієї людини; у
+// старих записах поля немає, і тоді запам'ятаним вважаємо того, за ким стежили.
+// Мітки видалення ідуть повз очищення (synced.js).
 export function cleanFriend(r) {
   // uid Firebase і id знімка вкладаються в цей шаблон; службові слова не
   // ловимо поіменно, а читаємо мапи лише через own-перевірку (own нижче).
@@ -252,7 +254,7 @@ export function cleanFriend(r) {
   const num = v => (Number.isFinite(v) ? v : 0);
   const out = {
     id, uid: snap ? '' : id, name: str(r.name, 80).trim(), kind: snap ? 'snap' : 'live',
-    follow: !!r.follow, added: num(r.added), updated: num(r.updated),
+    follow: !!r.follow, kept: snap || (typeof r.kept === 'boolean' ? r.kept : !!r.follow), added: num(r.added), updated: num(r.updated),
     lists: [...new Set((Array.isArray(r.lists) ? r.lists : []).map(v => str(v, 40)).filter(Boolean))].slice(0, LISTS_MAX),
   };
   if (snap) out.items = cleanRecs({ items: r.items }).items;
@@ -263,16 +265,37 @@ export function cleanFriend(r) {
 export const addList = (lists, name) => [...new Set([...(lists || []), ...(name ? [name] : [])])].slice(-LISTS_MAX);
 
 // Що з публічного документа друга справді радили мені: загальні рекомендації
-// (p !== 0) і тайтли з добірок, які я запам'ятав. Решта — добірки для інших.
+// (p !== 0) — лише коли я їх запам'ятав (kept; знімок і ще не збережений друг —
+// завжди), і тайтли з добірок, які я запам'ятав. Решта — добірки для інших.
 export const recsFor = (friend, items) => {
-  const mine = friend?.lists || [];
-  return (items || []).filter(x => x.p !== 0 || (x.l || []).some(n => mine.includes(n)));
+  const mine = friend?.lists || [], general = !friend || friend.kind === 'snap' || !!friend.kept;
+  return (items || []).filter(x => (general && x.p !== 0) || (x.l || []).some(n => mine.includes(n)));
 };
+// Чи є що показувати з рекомендацій живого друга й чи це ввімкнено. Людина, яка
+// лише оцінила мій список, свого посилання не давала: її рекомендацій не читаємо.
+export const hasKept = f => !!f && (!!f.kept || f.lists?.length > 0);
+export const wantsRecs = f => !!f && !f.deleted && f.kind === 'live' && !!f.follow && hasKept(f);
 
-// Чи показувати «Запам'ятати» на сторінці друга: його ще немає; він додався сам,
-// бо відповів (follow вимкнено); або це добірка, якої ще не запам'ятали.
+// Чи показувати «Запам'ятати» на сторінці друга: його ще немає; на загальному
+// посиланні — коли загальних рекомендацій ще не запам'ятали (додався сам, бо
+// відповів); на добірці — коли саме цієї добірки ще не брали.
 export const needsKeep = (friend, listName) =>
-  !friend || (friend.kind === 'live' && (!friend.follow || (!!listName && !friend.lists.includes(listName))));
+  !friend || (friend.kind === 'live' && (listName ? !friend.lists.includes(listName) : !friend.kept));
+
+// Посилання на запам'ятане в друга: загальні рекомендації або добірка — за сталим
+// ключем, коли публічний документ друга його дає (cols: ключ → назва), інакше за назвою.
+export function friendLink(uid, name = '', cols = {}) {
+  if (!name) return `#u=${uid}`;
+  const key = Object.keys(cols || {}).find(k => cols[k] === name);
+  return `#u=${uid}${key ? '&c=' + key : '&l=' + encodeURIComponent(name)}`;
+}
+// Початок коментаря для клітинки таблиці; повний текст — у підказці й по кліку.
+export const cutNote = (n, max = 40) => (n.length > max ? n.slice(0, max).trimEnd() + '…' : n);
+// Скільки людей і оцінок стане видно, якщо відкрити оцінки друзів усім.
+export const replyStats = replies => {
+  const rows = Object.keys(replies).map(k => Object.keys(own(replies, k)?.items || {}).length).filter(n => n > 0);
+  return { people: rows.length, scores: rows.reduce((a, n) => a + n, 0) };
+};
 
 // Стабільний id знімка: FNV-1a від підпису й відсортованих id тайтлів, тож
 // той самий список із того самого посилання не дублюється.
@@ -292,8 +315,12 @@ const liveFriends = friends => friends.filter(f => !f.deleted).sort((a, b) => a.
 // «toString» не повинні читатися з прототипа.
 const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
 
-// Таблиця «тайтл × друзі». Оцінка з відповіді друга важить більше за його
-// рекомендацію; рекомендації читаємо лише в тих, за ким стежимо (або зі знімка).
+// Таблиця «тайтл × друзі». У клітинці два окремі факти: оцінка мого списку
+// (s, n — з відповіді друга) і його власна рекомендація (rec; rs, rn — оцінка й
+// коментар автора). У середню йде оцінка мого списку, а коли її немає — оцінка
+// з рекомендації. Рекомендації читаємо лише в тих, за ким стежимо (або зі знімка).
+// only — рядок існує лише завдяки рекомендаціям і тайтла в мене немає: такі
+// йдуть після моїх, окремою групою «Радять друзі».
 export function friendTable({ entries, friends, replies, recs }) {
   const all = liveFriends(friends), shown = all.slice(0, FRIENDS_MAX);
   const mine = new Map(entries.map(e => [e.id, e]));
@@ -301,23 +328,22 @@ export function friendTable({ entries, friends, replies, recs }) {
   const rows = new Map();
   for (const f of shown) {
     const reply = f.kind === 'live' ? own(replies, f.uid)?.items || {} : {};
-    const rec = new Map(f.follow || f.kind === 'snap' ? recsFor(f, own(recs, f.id) ?? f.items ?? []).map(x => [x.id, x]) : []);
+    const rec = new Map(f.kind === 'snap' || wantsRecs(f) ? recsFor(f, own(recs, f.id) ?? f.items ?? []).map(x => [x.id, x]) : []);
     for (const id of new Set([...Object.keys(reply), ...rec.keys()])) {
       const a = reply[id], b = rec.get(id), e = mine.get(id), src = a || b;
-      const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || 0, have: !!e, cells: new Map(), avg: 0, n: 0 };
-      const cells = row.cells;
-      // Відповідь без оцінки, але з текстом: оцінка — з рекомендації, коментар лишається (так задумано).
-      cells.set(f.id, { s: a?.s || b?.s || 0, n: a?.n || b?.n || '', rec: !!b });
+      const row = rows.get(id) || { id, t: e?.title || src.t || id, k: e?.kind || src.k, y: e?.year || src.y || '', mine: e?.score || 0, have: !!e, only: !e, cells: new Map(), avg: 0, n: 0 };
+      if (a) row.only = false;
+      row.cells.set(f.id, { s: a?.s || 0, n: a?.n || '', rec: !!b, rs: b?.s || 0, rn: b?.n || '' });
       rows.set(id, row);
     }
   }
   for (const r of rows.values()) {
-    const sc = [...r.cells.values()].map(c => c.s).filter(s => s > 0);
+    const sc = [...r.cells.values()].map(c => c.s || c.rs).filter(s => s > 0);
     r.cells = Object.fromEntries(r.cells);   // для виклику — звичайний об'єкт; ключ «__proto__» відсіяв cleanFriend
     r.n = sc.length;
     r.avg = sc.length ? Math.round(sc.reduce((a, s) => a + s, 0) / sc.length * 10) / 10 : 0;
   }
-  return { cols, hidden: all.length - shown.length, rows: [...rows.values()].sort((a, b) => b.avg - a.avg || a.t.localeCompare(b.t)) };
+  return { cols, hidden: all.length - shown.length, rows: [...rows.values()].sort((a, b) => a.only - b.only || b.avg - a.avg || a.t.localeCompare(b.t)) };
 }
 
 // Автори відповідей, яких у сховищі ще не було: мітка видалення теж «є»,
@@ -329,8 +355,7 @@ export function newReplyAuthors(friends, replies) {
 
 // Друзі, чиї рекомендації треба дочитати: стежимо, а копії в кеші ще немає
 // (друга запам'ятали на іншому пристрої). `friends` — raw() сховища.
-export const recsMissing = (friends, recs) =>
-  friends.filter(f => !f.deleted && f.kind === 'live' && f.follow && !Object.hasOwn(recs, f.id));
+export const recsMissing = (friends, recs) => friends.filter(f => wantsRecs(f) && !Object.hasOwn(recs, f.id));
 
 // Скільки видимих друзів відповіли після останнього перегляду таблиці.
 export const unseenCount = (table, replies, seenAt) =>

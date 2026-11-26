@@ -5,7 +5,7 @@
 // вона сама підписується через onLocal і кличе applyRemote.
 
 import { cleanListDef, cleanPrefs, cleanFriend, cleanReply, cleanReplyMem, defId } from './social.js';
-import { cleanRecs } from './logic.js';
+import { cleanRecs, cleanCols } from './logic.js';
 
 function load(key) {
   try { return JSON.parse(localStorage.getItem(key)) ?? {}; } catch { return {}; }
@@ -78,21 +78,23 @@ export function makeSynced(name, clean) {
 export { defId };
 
 // Локальний кеш для екрана друзів без мережі: відповіді на мій список
-// ({ uid → відповідь }) і рекомендації друзів ({ id друга → тайтли }). У хмару
+// ({ uid → відповідь }), рекомендації друзів ({ id друга → тайтли }) і ключі
+// їхніх добірок для посилань ({ id друга → { ключ → назва } }). У хмару
 // не йде, тож це не makeSynced; живе тут, щоб cloud.js міг стерти його при
 // зміні власника пристрою без циклу імпорту. Читання проходить очищення.
 const CACHE_KEY = 'mws.social.cache.v1';
 export const socialCache = {
   get() {
-    const raw = load(CACHE_KEY), replies = {}, recs = {};
+    const raw = load(CACHE_KEY), replies = {}, recs = {}, cols = {};
     // «__proto__» як ключ задав би прототип секції замість запису — пропускаємо;
     // решту службових слів читачі беруть лише через own-перевірку.
     const part = v => Object.entries(v && typeof v === 'object' ? v : {}).filter(([k]) => k !== '__proto__');
     for (const [k, v] of part(raw.replies)) replies[k] = cleanReply(v);
     for (const [k, v] of part(raw.recs)) recs[k] = cleanRecs({ items: v }).items;
-    return { replies, recs };
+    for (const [k, v] of part(raw.cols)) { const c = cleanCols(v); if (Object.keys(c).length) cols[k] = c; }
+    return { replies, recs, cols };
   },
-  // patch ({ replies } і/або { recs }) замінює відповідну частину цілком
+  // patch ({ replies }, { recs } і/або { cols }) замінює відповідну частину цілком
   set(patch) { persist(CACHE_KEY, { ...socialCache.get(), ...patch }); },
   clear() { try { localStorage.removeItem(CACHE_KEY); } catch { /* нічого */ } },
 };

@@ -391,7 +391,9 @@ blockquote{padding:8px 14px; border-left:3px solid var(--accent); border-radius:
 .modal-wrap .scrim{z-index:0}
 .modal{position:relative; z-index:1; width:min(440px,100%); display:grid; gap:12px; padding:24px; background:var(--surface); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); animation:pop .16s ease-out}
 .modal h2{font-size:19px; font-weight:800} .modal p{color:var(--muted); font-size:14.5px; white-space:pre-line; max-height:50vh; overflow-y:auto}
-.modal-act{display:flex; justify-content:flex-end; gap:8px; margin-top:6px}
+.modal-act{display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:6px}
+.modal-check{display:flex; align-items:flex-start; gap:10px; font-size:14px; cursor:pointer}
+.modal-check input{flex:none; width:18px; height:18px; margin:1px 0 0; accent-color:var(--red)}
 
 #toast{position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom)); transform:translate(-50%,24px); z-index:70; display:flex; align-items:center; gap:14px;
   max-width:calc(100% - 32px); padding:12px 18px; border-radius:14px; background:var(--text); color:var(--bg); font-size:14px; font-weight:700;
@@ -442,10 +444,12 @@ button.more .ic{width:16px; height:16px}
 @media (hover:none){ .pc-acts{opacity:1; transform:none} .pc:hover .pc-img{transform:none; box-shadow:0 0 0 1px var(--line2)} }
 @media (max-width:1000px){
   .nav{display:none}
-  .tabs:not([hidden]){display:grid; grid-template-columns:repeat(5,1fr); position:fixed; left:0; right:0; bottom:0; z-index:20; padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+  .tabs:not([hidden]){display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); position:fixed; left:0; right:0; bottom:0; z-index:20; padding:6px 4px calc(6px + env(safe-area-inset-bottom));
     background:var(--glass); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-top:1px solid var(--line2)}
-  .tab{display:grid; justify-items:center; gap:2px; padding:6px 0; border:0; background:none; text-decoration:none; color:var(--faint); font-size:10.5px; font-weight:800}
+  .tab{display:grid; justify-items:center; gap:2px; min-width:0; padding:6px 0; border:0; background:none; text-decoration:none; color:var(--faint); font-size:10px; font-weight:800}
   .tab .ic{width:22px; height:22px} .tab.on{color:var(--accent)}
+  .tab span{max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tab.fnew::after{top:3px; left:calc(50% + 8px)}
   .tab.add{align-self:center; justify-self:center; width:48px; height:48px; border-radius:50%; background:var(--accent); color:var(--accent-ink); place-items:center}
   .addbtn{display:none}
   #toast{bottom:calc(88px + env(safe-area-inset-bottom))}
@@ -537,18 +541,21 @@ button.more .ic{width:16px; height:16px}
 .fnew{position:relative}
 .fnew::after{content:""; position:absolute; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--bg)}
 .nav a.fnew::after{top:6px; right:6px}
-.menu button.fnew::after{right:12px; top:50%; margin-top:-4px; box-shadow:0 0 0 2px var(--surface)}
-.acct.fnew::after{display:none; top:-1px; right:-1px}
 .fr-chips{padding-top:4px}
-.fr-wrap{overflow-x:auto; margin-top:14px; border:1px solid var(--line2); border-radius:var(--r); background:var(--bg)}
+.fr-vis{display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; margin:-6px 0 14px; color:var(--muted); font-size:14px}
+.fr-vis .ic{flex:none; width:16px; height:16px} .fr-vis.open{color:var(--amber)} .fr-vis span{min-width:0}
+/* таблиця гортається у власній рамці: інакше рядок заголовків не втримати на місці */
+.fr-wrap{overflow:auto; max-height:calc(100dvh - var(--top-h) - 16px); margin-top:14px; border:1px solid var(--line2); border-radius:var(--r); background:var(--bg)}
 .fr-table{border-collapse:separate; border-spacing:0; width:100%}
 .fr-table th,.fr-table td{padding:10px 12px; border-top:1px solid var(--line2); text-align:center; vertical-align:middle; background:var(--bg)}
-.fr-table thead th{border-top:0; font-size:12px; font-weight:800; letter-spacing:.04em; color:var(--faint); background:var(--surface)}
+.fr-table thead th{position:sticky; top:0; z-index:2; border-top:0; font-size:12px; font-weight:800; letter-spacing:.04em; color:var(--faint); background:var(--surface); box-shadow:0 1px 0 var(--line2)}
+.fr-table thead .fr-t{z-index:3} .fr-table thead abbr{text-decoration:underline dotted; cursor:help}
 .fr-table thead th span{display:block; max-width:110px; margin:0 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .fr-table tbody th{font-weight:400}
 .fr-c{min-width:76px}
 .fr-t{position:sticky; left:0; z-index:1; min-width:230px; max-width:320px; text-align:left !important; box-shadow:1px 0 0 var(--line2)}
 .fr-t>div{display:flex; align-items:center; gap:12px}
+.fr-t>.fr-stack{display:none}
 .fr-t .ph{width:36px; flex:none}
 .fr-t>div>span{flex:1; min-width:0}
 .fr-t b{display:block; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -556,12 +563,29 @@ button.more .ic{width:16px; height:16px}
 .fr-t .rb{flex:none; min-width:30px; height:30px}
 .fr-row{cursor:pointer}
 .fr-row:hover th,.fr-row:hover td{background:var(--surface)}
+.fr-row th,.fr-row td{transition:background .5s}
+.fr-row.flash th,.fr-row.flash td{background:var(--accent-soft)}
+.fr-sub th{position:sticky; left:0; padding:14px 12px 8px; text-align:left; font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--faint); background:var(--surface)}
 .fr-s{font-weight:800; font-size:16px; font-variant-numeric:tabular-nums}
 .fr-c.me .fr-s{color:var(--accent)} .fr-c.avg .fr-s{color:var(--amber)}
-.fr-rec{display:inline-block; margin-left:4px; vertical-align:middle; color:var(--amber)} .fr-rec .ic{width:13px; height:13px}
-.fr-card p{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; margin:0 0 6px}
+.fr-rec{display:inline-block; vertical-align:middle; color:var(--amber)} .fr-rec .ic{width:13px; height:13px}
+/* у клітинці два окремі рядки: оцінка мого списку й власна рекомендація друга */
+.fr-l{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center; gap:2px 6px}
+.fr-l+.fr-l{margin-top:6px}
+.fr-l>i{font-style:normal; font-size:11px; font-weight:700; color:var(--faint)}
+.fr-n{display:flex; align-items:flex-start; justify-content:center; gap:4px; flex-basis:100%; max-width:190px; margin:0 auto; padding:0; border:0; background:none; font:inherit; font-size:11.5px; font-weight:500; line-height:1.3; color:var(--muted); text-align:left; overflow-wrap:anywhere; cursor:pointer}
+.fr-n .ic{flex:none; width:12px; height:12px; margin-top:2px}
+.fr-n .full,.fr-n.open .cut{display:none} .fr-n.open .full{display:inline}
+.fr-card p{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; margin:0 0 8px}
+.fr-card .fr-l,.fr-stack .fr-l{justify-content:flex-start} .fr-card .fr-l+.fr-l,.fr-stack .fr-l+.fr-l{margin-top:0}
+.fr-card .fr-n,.fr-stack .fr-n{flex-basis:auto; max-width:100%; margin:0; justify-content:flex-start; font-size:12.5px}
 .fr-card .more{margin-top:4px}
-.fr-n{display:none; margin-top:2px; font-size:11.5px; font-weight:500; line-height:1.3; color:var(--muted); overflow-wrap:anywhere}
+.fr-kepts{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:8px}
+.fr-kept{display:inline-flex; align-items:center; gap:2px; max-width:100%; padding:1px 3px 1px 10px; border:1px solid var(--line); border-radius:99px; font-size:13px}
+.fr-kept.plain{padding:4px 10px}
+.fr-kept a{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:inherit}
+.fr-kept a:hover{color:var(--accent)}
+.fr-kept .rb{flex:none; min-width:26px; height:26px} .fr-kept .rb .ic{width:12px; height:12px}
 .fr-manage{display:grid; gap:10px; align-content:start; padding:14px 18px 18px}
 .fr-manage h4{padding:10px 0 0}
 .fr-man{padding:12px 14px; border:1px solid var(--line); border-radius:var(--r); background:var(--surface)}
@@ -570,14 +594,18 @@ button.more .ic{width:16px; height:16px}
 .fr-man-a{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
 .fr-man .chip{height:30px; padding:0 12px; font-size:13px; flex:none}
 .chip.danger{color:var(--red)} .chip.danger:hover{border-color:var(--red)}
-@media (max-width:1000px){ .acct.fnew::after{display:block} }
 @media (max-width:720px){
-  .fr-wrap{margin:14px -16px 0; border-radius:0; border-left:0; border-right:0}
-  .fr-table th,.fr-table td{padding:8px 8px}
-  .fr-t{min-width:150px; max-width:170px} .fr-t>div{gap:8px} .fr-t .ph{width:28px}
+  /* на телефоні стовпців друзів немає: оцінки йдуть рядками під назвою, вбік нічого не гортається */
+  .fr-wrap{overflow:visible; max-height:none; margin:14px -16px 0; border-radius:0; border-left:0; border-right:0}
+  .fr-table thead,.fr-table .fr-c{display:none}
+  .fr-table th,.fr-table td{padding:10px 16px}
+  .fr-t{position:static; min-width:0; max-width:none; box-shadow:none} .fr-t>div{gap:10px} .fr-t .ph{width:32px}
   .fr-t b{white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical} .fr-t small{font-size:11.5px}
-  .fr-c{min-width:84px; max-width:120px}
-  .fr-n{display:block}
+  .fr-t>.fr-stack{display:block; padding:6px 0 0 42px}
+  .fr-stack p{display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 8px; margin:4px 0 0; font-size:13px}
+  .fr-stack strong{font-weight:700} .fr-stack .fr-s{font-size:14px} .fr-stack .fr-s.me{color:var(--accent)} .fr-stack .fr-s.avg{color:var(--amber)}
+  .fr-own{color:var(--muted)} .fr-own>span+span::before{content:"· "}
+  .fr-sub th{position:static; padding:16px 16px 8px}
 }
 
 /* розділ «Рекомендації» */

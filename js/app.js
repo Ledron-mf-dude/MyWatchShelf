@@ -16,8 +16,9 @@ import { renderShare, shareActions } from './shared.js';
 
 const S = store.settings;
 const NAV = [['home', 'home'], ['library', 'library'], ['calendar', 'calendar'], ['friends', 'user'], ['share', 'share'], ['discover', 'compass'], ['stats', 'chart']];
-// на телефоні внизу лишається чотири розділи й «+»; календар, друзі й рекомендації — з меню акаунта
-const TABS = NAV.filter(n => !['calendar', 'friends', 'share'].includes(n[0]));
+// на телефоні внизу лишається чотири розділи й «+»: головна, бібліотека, друзі,
+// рекомендації; календар, каталог і статистика — з меню акаунта
+const TABS = NAV.filter(n => ['home', 'library', 'friends', 'share'].includes(n[0]));
 const top = $('#top'), tabs = $('#tabs');
 // Знак: кадр кіноплівки з кнопкою відтворення.
 const LOGO = `<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
@@ -57,10 +58,10 @@ function drawChrome() {
       <div class="pop menu" id="menu" hidden></div>
     </div>`;
   tabs.hidden = recs;
-  paintDot();
   const tab = ([r, ic]) => `<a class="tab ${here(r)}" href="${href(r)}">${icon(ic)}<span>${t('nav.' + r)}</span></a>`;
   tabs.innerHTML = recs ? '' : TABS.slice(0, 2).map(tab).join('')
     + `<button class="tab add" data-act="add" aria-label="${t('add')}">${icon('plus')}</button>` + TABS.slice(2).map(tab).join('');
+  paintDot();
 }
 
 function toggleMenu(force) {
@@ -69,7 +70,7 @@ function toggleMenu(force) {
   const open = force ?? menu.hidden;
   if (open) {
     // на сторінці чужого списку меню коротке: вхід, підпис, мова, тема
-    const u = cloud.user, nShare = store.list().filter(e => e.rec || e.lists?.length).length, recs = view.route === 'recs';
+    const u = cloud.user, recs = view.route === 'recs';
     menu.innerHTML = `
       ${cloud.available ? (u
         ? `<div class="who"><span class="avatar lg">${initial(u)}</span><div><b>${esc(u.name || t('menu.google'))}</b><small>${esc(u.email)}</small><em class="st-${cloud.state}"><i class="state"></i>${stateText()}</em></div></div>`
@@ -77,8 +78,8 @@ function toggleMenu(force) {
         : `<div class="who"><p>${t('menu.local.text')}</p></div>`}
       <hr>${recs ? '' : `
       <button data-act="go" data-v="calendar">${icon('calendar')}${t('nav.calendar')}</button>
-      <button data-act="go" data-v="friends" class="${social.unseen() ? 'fnew' : ''}">${icon('user')}${t('nav.friends')}</button>
-      <button data-act="go" data-v="share">${icon('share')}${t('nav.share')}<small>${nShare}</small></button>
+      <button data-act="go" data-v="discover">${icon('compass')}${t('nav.discover')}</button>
+      <button data-act="go" data-v="stats">${icon('chart')}${t('nav.stats')}</button>
       <button data-act="tonight">${icon('dice')}${t('pick.title')}</button>
       <hr>`}
       <button data-act="name">${icon('user')}${t('menu.name')}<small>${esc(S.name || t('not.set'))}</small></button>
@@ -96,10 +97,10 @@ function toggleMenu(force) {
 // ── маршрути ──────────────────────────────────────────────────────
 const RENDER = { home: renderHome, library: renderLibrary, calendar: renderCalendar, friends: renderFriends, share: renderShare, discover: renderDiscover, stats: renderStats, recs: renderRecs };
 function draw() { RENDER[view.route](); paintDot(); }
-// Крапка «нове» на пункті «Друзі» й на кнопці акаунта (на телефоні пункт лише в меню).
+// Крапка «нове» на пункті «Друзі»: у шапці й на нижній вкладці телефона.
 function paintDot() {
   const n = social.unseen() > 0;
-  $$('.nav a[href="#/friends"], .acct, #menu [data-v="friends"]').forEach(el => el.classList.toggle('fnew', n));
+  $$('.nav a[href="#/friends"], .tab[href="#/friends"]').forEach(el => el.classList.toggle('fnew', n));
 }
 function setTitle() {
   document.title = view.route === 'recs'
@@ -375,7 +376,8 @@ social.start(() => {
   paintDot();
   // На чужому списку даних друзів немає, а перемальовування стерло б коментар, який саме набирають.
   if (view.route === 'recs') return;
-  if (!ui.overlay) return refresh();
+  // «Керувати друзями» лежить поверх таблиці: вона має оновитись одразу, а не після закриття
+  if (!ui.overlay || (ui.overlay.type === 'friends' && view.route === 'friends')) return refresh();
   ui.dirty = true;
   // відкрита картка показує оцінки друзів — оновлюємо її, не вириваючи поле з-під пальців
   if (ui.overlay.type === 'card' && !(document.activeElement && layer.contains(document.activeElement) && document.activeElement.matches('input,textarea'))) { flushCard(); drawCard(); }

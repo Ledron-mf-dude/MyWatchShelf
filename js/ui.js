@@ -46,6 +46,7 @@ const I = {
   dice: '<rect x="4" y="4" width="16" height="16" rx="3.500"/><circle cx="9" cy="9" r="1.100" fill="currentColor"/><circle cx="15" cy="15" r="1.100" fill="currentColor"/><circle cx="15" cy="9" r="1.100" fill="currentColor"/><circle cx="9" cy="15" r="1.100" fill="currentColor"/>',
   image: '<rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.500"/><path d="m5 17 4.500-4 3.500 3 2.500-2 3.500 3"/>',
   folder: '<path d="M4 7.500a1.500 1.500 0 0 1 1.500-1.500h4l2 2h7a1.500 1.500 0 0 1 1.500 1.500v8a1.500 1.500 0 0 1-1.500 1.500h-13a1.500 1.500 0 0 1-1.500-1.500z"/>',
+  chat: '<path d="M5 5.500h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-7l-4.500 3.500v-3.500H5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/>',
   sparkle: '<path d="M12 4l1.800 5.200L19 11l-5.200 1.800L12 18l-1.800-5.200L5 11l5.200-1.800z"/>',
 };
 export const icon = (name, cls = '') =>
@@ -133,13 +134,25 @@ function modal(html, resolveWith) {
       else if (e.target.classList.contains('scrim')) done(resolveWith(box, false));
       e.stopPropagation();
     });
-    (box.querySelector('input') || box.querySelector('[data-ok]')).focus();
+    // галочка в підтвердженні міняє підпис головної кнопки
+    box.addEventListener('change', e => {
+      if (!e.target.matches('[data-check]')) return;
+      const ok = box.querySelector('[data-ok]'), on = e.target.checked;
+      ok.textContent = on ? e.target.dataset.on : e.target.dataset.off;
+      if ('danger' in e.target.dataset) { ok.classList.toggle('danger-fill', on); ok.classList.toggle('primary', !on); }
+    });
+    (box.querySelector('input:not([type=checkbox])') || box.querySelector('[data-ok]')).focus();
   });
 }
-export const confirmBox = ({ title, text = '', ok = 'OK', danger = false }) => modal(`
+// check — необов'язкова галочка { label, ok, danger }: ok — підпис кнопки, коли її
+// позначено; danger — позначена галочка робить кнопку «небезпечною».
+// З нею діалог повертає не true, а { checked }, щоб викликач знав, що саме обрано.
+export const confirmBox = ({ title, text = '', ok = 'OK', danger = false, check = null }) => modal(`
   <h2>${esc(title)}</h2>${text ? `<p>${esc(text)}</p>` : ''}
+  ${check ? `<label class="modal-check"><input type="checkbox" data-check data-on="${esc(check.ok || ok)}" data-off="${esc(ok)}"${check.danger ? ' data-danger' : ''}><span>${esc(check.label)}</span></label>` : ''}
   <div class="modal-act"><button class="btn" data-cancel>${t('cancel')}</button>
-  <button class="btn ${danger ? 'danger-fill' : 'primary'}" data-ok>${esc(ok)}</button></div>`, (_, yes) => yes);
+  <button class="btn ${danger ? 'danger-fill' : 'primary'}" data-ok>${esc(ok)}</button></div>`,
+  (box, yes) => (yes && check ? { checked: box.querySelector('[data-check]').checked } : yes));
 export const promptBox = ({ title, text = '', value = '', placeholder = '', ok = t('save') }) => modal(`
   <h2>${esc(title)}</h2>${text ? `<p>${esc(text)}</p>` : ''}
   <input class="inp" maxlength="80" value="${esc(value)}" placeholder="${esc(placeholder)}">

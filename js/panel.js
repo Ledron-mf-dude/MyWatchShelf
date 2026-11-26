@@ -264,6 +264,7 @@ export async function openPreview(id) {
       <div class="card-body">
         ${r?.s ? `<section class="author"><div class="rec-score"><b>${fmtScore(r.s)}</b><small>${t('author.score')}</small></div>${r.n ? `<blockquote>${esc(r.n)}</blockquote>` : ''}</section>`
           : r?.n ? `<section><blockquote>${esc(r.n)}</blockquote></section>` : ''}
+        ${ui.cardExtra?.(x.id) || ''}
         <section><h3>${t('card.about')}</h3>${aboutHtml(m).trim() || `<p class="muted">${loading ? t('loading.plot') : t('no.plot')}</p>`}
           ${ns ? `<p class="muted small">${ns} ${tn('season', ns)} · ${Object.values(m.seasons).reduce((a, b) => a + b, 0)} ${tn('episode', Object.values(m.seasons).reduce((a, b) => a + b, 0))}</p>` : ''}</section>
       </div>
